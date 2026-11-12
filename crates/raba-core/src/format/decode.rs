@@ -52,6 +52,13 @@ pub enum DecodeError {
     CellOutOfRange { op: u32, cell: u32, cells: u32 },
     /// An op's codepoint is not a character — a surrogate, or beyond U+10FFFF.
     BadCodepoint { op: u32, value: u32 },
+    /// An op's colour index does not exist in the declared palette: an index above
+    /// 15 in a 16-colour movie.
+    ///
+    /// Rejected rather than clamped. A renderer handed index 200 in a 16-colour
+    /// palette has no correct move — masking and clamping are both inventions — so
+    /// the choice is made here, once, where it can be reported.
+    ColourOutOfPalette { op: u32, value: u8, max: u8 },
 }
 
 impl fmt::Display for DecodeError {
@@ -76,6 +83,9 @@ impl fmt::Display for DecodeError {
                 write!(f, "{got} frames, over the {} limit", limits::MAX_FRAMES)
             }
             Self::BadPalette { got } => write!(f, "unknown palette {got}"),
+            Self::ColourOutOfPalette { op, value, max } => {
+                write!(f, "op {op}: colour index {value} is above the palette maximum {max}")
+            }
             Self::ReservedNotZero { offset } => {
                 write!(f, "reserved field at offset {offset} is not zero")
             }
@@ -269,6 +279,11 @@ pub fn decode(bytes: &[u8]) -> Result<Movie, DecodeError> {
         }
         let ch =
             char::from_u32(codepoint).ok_or(DecodeError::BadCodepoint { op, value: codepoint })?;
+        let max = palette.max_index();
+        if fg > max || bg > max {
+            let value = if fg > max { fg } else { bg };
+            return Err(DecodeError::ColourOutOfPalette { op, value, max });
+        }
 
         ops.push(Op { cell, ch, fg, bg });
     }

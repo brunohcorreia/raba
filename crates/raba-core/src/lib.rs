@@ -9,5 +9,9 @@
 //! enough to review line by line.
 
 pub mod format;
+pub mod render;
+pub mod surface;
 
 pub use format::{decode, encode, DecodeError, Frame, Movie, Op, Palette};
+pub use render::{to_ansi, to_ansi_into, Cell, Grid};
+pub use surface::{Size, Surface};

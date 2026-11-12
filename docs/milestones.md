@@ -19,29 +19,41 @@ no root, no VM — plain text in, animation on a screen out.
 | 2 | `raba-core`: encoder, `Movie` → bytes | done |
 | 3 | `raba-core`: decoder with bounded validation, bytes → `Movie` | done |
 | 4 | **The failure table** — every malformed input, exit 0, no panic | done |
-| 5 | `raba-core`: `Surface` trait and `BufferSurface` for tests | |
-| 6 | `raba-core`: grid → ANSI encoder, redraw minimisation, **one write per frame** |
-| 7 | `raba-core`: glyph validator against the console-safe set |
-| 8 | `raba-gen`: load fastfetch-style text art with `$1`..`$9` colour markers |
-| 9 | `raba-gen`: compose logo + spinner, least-common-multiple frame count |
-| 10 | `raba`: `--preview`, rendering to stdout |
-| 11 | First theme, and the verdict on the premise |
+| 5 | `raba-core`: `Surface` trait and `BufferSurface` for tests | done |
+| 6 | `raba-core`: grid → ANSI encoder, redraw minimisation, **one write per frame** | done |
+| 7 | `raba-core`: glyph validator against the console-safe set | |
+| 8 | `raba-gen`: load fastfetch-style text art with `$1`..`$9` colour markers | |
+| 9 | `raba-gen`: compose logo + spinner, least-common-multiple frame count | |
+| 10 | `raba`: `--preview`, rendering to stdout | |
+| 11 | First theme, and the verdict on the premise | |
 
 **Done when** `raba --preview themes/cachyos.raba` animates a logo in a terminal, and we
 have looked at it and decided it is worth continuing.
 
 ### Progress
 
-The format is implemented and frozen at version 1. `docs/format.md` describes what was
-built rather than what was sketched.
+The format is implemented and frozen at version 1, and the renderer turns a grid into
+terminal bytes. `docs/format.md` describes what was built rather than what was sketched.
 
-- 41 tests pass; `clippy` is clean under `-D warnings` with the workspace deny lints
-- the failure table covers 24 shapes of malformed input, each asserting a specific error
+- 65 tests pass; `clippy` is clean under `-D warnings` with the workspace deny lints
+- the failure table covers 25 shapes of malformed input, each asserting a specific error
 - property tests cover round-trip, determinism, truncation and "arbitrary bytes never
   panic"
 - a `cargo-fuzz` target asserts internal consistency and round-trip, not merely absence
   of panics
 - `raba` release binary: 281 KB against a 512 KB gate
+
+The renderer is checked against a model of a terminal rather than against golden bytes,
+so the property from [development.md](development.md) is stated directly: applying
+`to_ansi(grid, prev)` to `prev` yields `grid`, for arbitrary pairs of grids. The model
+panics on anything outside the renderer's permitted alphabet, which makes "no escape
+sequence ever leaks through a glyph" an assertion about the whole output rather than
+about the cases a test thought to check.
+
+That property immediately found something the format work had missed: nothing validated
+a colour index against the declared palette, so a 16-colour movie could carry index 200
+and the renderer would silently show a different colour. The decoder now rejects it —
+see [format.md](format.md) on why rejection rather than clamping.
 
 ---
 

@@ -11,8 +11,16 @@ repository.workspace = true
 # into the boot binary. See docs/maintenance.md.
 [dependencies]
 
+# `testing` gates BufferSurface, a test double that must never reach the boot
+# binary. The self-dependency below enables it for this crate's own test targets,
+# so `cargo test` works with no extra flags while `raba` still links a core that
+# does not contain it.
+[features]
+testing = []
+
 [dev-dependencies]
 proptest = "1"
+raba-core = { path = ".", features = ["testing"] }
 
 [lints]
 workspace = true

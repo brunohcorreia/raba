@@ -104,15 +104,25 @@ The order is the design, not an implementation detail:
 4. canvas and frame count against their ceilings; reserved fields zero
 5. **the layout arithmetic** — do the declared counts add up to the declared size?
 6. CRC over the payload
-7. *only now* allocate, then check every frame's op range and every op's cell
+7. *only now* allocate, then check every frame's op range, and for every op: its cell
+   against the canvas, its codepoint against Unicode, and its colours against the
+   declared palette
 
 Steps 1–6 use 32 bytes and some arithmetic in `u64`. Nothing is allocated on a file that
 is going to be rejected, which is the property that makes the gzip-bomb class of failure
 inexpressible here.
 
-After decoding, every op's `cell` is inside the canvas and every frame's op range is
-inside the op array. The renderer relies on this and does not check again — a guarantee
-the fuzz target asserts on every input it accepts.
+After decoding, every op's `cell` is inside the canvas, every frame's op range is inside
+the op array, and every colour index exists in the palette. The renderer relies on all
+three and does not check again — a guarantee the fuzz target asserts on every input it
+accepts.
+
+The colour check is rejection, not clamping. A renderer handed index 200 in a 16-colour
+movie has no correct move: masking the high bits and clamping to the default are equally
+arbitrary inventions, and both show the wrong pixel without saying so. Deciding it once,
+here, where it can be reported with the offending op number, is the only version of this
+that a theme author can act on. The check is against the *declared* palette rather than
+a constant, so index 200 is malformed in one movie and ordinary in the next.
 
 Frame 0 carries a full canvas. Later frames carry only changed cells. `raba-gen` emits a
 periodic keyframe so a renderer can start mid-stream.

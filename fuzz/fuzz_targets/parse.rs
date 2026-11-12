@@ -20,8 +20,17 @@ fuzz_target!(|data: &[u8]| {
     // Every op addresses a cell inside the canvas. The renderer indexes with these
     // without checking again, so this must hold for every accepted input.
     let cells = movie.cell_count();
+    let max_colour = movie.palette.max_index();
     for op in &movie.ops {
         assert!(op.cell < cells, "decoded movie addresses cell {} of {cells}", op.cell);
+        // The renderer trusts this too: it maps an index straight to an SGR
+        // parameter without asking whether the palette has that colour.
+        assert!(
+            op.fg <= max_colour && op.bg <= max_colour,
+            "decoded movie uses colour outside its palette: fg {} bg {}, max {max_colour}",
+            op.fg,
+            op.bg
+        );
     }
 
     // Every frame's op range is inside the op array.

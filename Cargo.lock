@@ -261,6 +261,7 @@ name = "raba-core"
 version = "0.0.0"
 dependencies = [
  "proptest",
+ "raba-core",
 ]
 
 [[package]]

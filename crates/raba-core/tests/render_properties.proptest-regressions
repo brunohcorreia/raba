@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ca40f950817aa0109f9bdf01afc9b7bfeefa172fc65476381e6d2e9aea537d27 # shrinks to (before, after) = (Grid { columns: 1, lines: 1, palette: Ansi16, cells: [Cell { ch: ' ', fg: 0, bg: 0 }] }, Grid { columns: 1, lines: 1, palette: Ansi16, cells: [Cell { ch: ' ', fg: 0, bg: 16 }] })
+cc 67fb92723f1b4773e89ce9232a8d4f52f81bbf860f97e9c0c2ed08e0b98e8165 # shrinks to (_, after) = (Grid { columns: 1, lines: 1, palette: Ansi16, cells: [Cell { ch: ' ', fg: 0, bg: 0 }] }, Grid { columns: 1, lines: 1, palette: Ansi16, cells: [Cell { ch: '.', fg: 31, bg: 171 }] })

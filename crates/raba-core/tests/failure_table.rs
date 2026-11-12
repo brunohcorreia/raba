@@ -359,6 +359,35 @@ fn op_with_an_invalid_codepoint() {
 }
 
 #[test]
+fn op_with_a_colour_the_palette_does_not_have() {
+    let op_table = HEADER_SIZE + valid_movie().frames.len() * FRAME_SIZE;
+    // `valid_movie` is Ansi16, so anything above 15 is not a colour. Clamping would
+    // show the wrong pixel and say nothing; masking would show a different wrong
+    // pixel. The file is simply not well-formed.
+    for (offset, field) in [(8usize, "foreground"), (9, "background")] {
+        let mut bytes = valid_bytes();
+        bytes[op_table + offset] = 200;
+        refresh_crc(&mut bytes);
+        assert_eq!(
+            decode(&bytes),
+            Err(DecodeError::ColourOutOfPalette { op: 0, value: 200, max: 15 }),
+            "{field} 200 must be rejected in a 16-colour movie"
+        );
+    }
+}
+
+#[test]
+fn the_same_colour_is_fine_in_a_256_colour_movie() {
+    // The check is against the declared palette, not against a constant. Index 200
+    // is meaningless in one movie and ordinary in the next.
+    let mut movie = valid_movie();
+    movie.palette = Palette::Xterm256;
+    movie.ops[0].fg = 200;
+    let bytes = encode(&movie);
+    assert_eq!(decode(&bytes), Ok(movie));
+}
+
+#[test]
 fn reserved_op_bytes_must_be_zero() {
     let op_table = HEADER_SIZE + valid_movie().frames.len() * FRAME_SIZE;
     let mut bytes = valid_bytes();

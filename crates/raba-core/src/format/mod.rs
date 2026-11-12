@@ -93,6 +93,20 @@ pub enum Palette {
 }
 
 impl Palette {
+    /// Highest valid colour index.
+    ///
+    /// Decoding checks every `fg` and `bg` against this, so a renderer never has to
+    /// decide what an out-of-range index means. There is no good answer to that
+    /// question — masking the high bits and clamping to the default are equally
+    /// arbitrary — so the file is rejected instead of guessed at.
+    #[must_use]
+    pub fn max_index(self) -> u8 {
+        match self {
+            Palette::Ansi16 => 15,
+            Palette::Xterm256 => 255,
+        }
+    }
+
     fn from_byte(b: u8) -> Option<Self> {
         match b {
             0 => Some(Palette::Ansi16),
@@ -117,7 +131,8 @@ pub struct Op {
     pub cell: u32,
     /// The character to draw.
     pub ch: char,
-    /// Foreground colour index into the movie's [`Palette`].
+    /// Foreground colour index into the movie's [`Palette`]. Validated against
+    /// [`Palette::max_index`] at decode time.
     pub fg: u8,
     /// Background colour index.
     pub bg: u8,

@@ -24,9 +24,16 @@ fn arb_movie() -> impl Strategy<Value = Movie> {
         |(columns, lines, looping, wide_palette)| {
             let cells = u32::from(columns) * u32::from(lines);
             let palette = if wide_palette { Palette::Xterm256 } else { Palette::Ansi16 };
+            // Colours stay inside the declared palette: a 16-colour movie with
+            // index 200 is not a well-formed movie, and the decoder says so.
+            let top = palette.max_index();
             let ops = prop::collection::vec(
-                (0..cells, any::<char>(), any::<u8>(), any::<u8>())
-                    .prop_map(|(cell, ch, fg, bg)| Op { cell, ch, fg, bg }),
+                (0..cells, any::<char>(), 0..=top, 0..=top).prop_map(|(cell, ch, fg, bg)| Op {
+                    cell,
+                    ch,
+                    fg,
+                    bg,
+                }),
                 0..60,
             );
             ops.prop_flat_map(move |ops| {
