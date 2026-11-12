@@ -1,0 +1,79 @@
+# 48x23, 4 frames, loops, 16 colours
+
+## frame 0: characters
+..............                                  
+            ..,;:ccc,.                          
+          ......''';lxO.                        
+.....''''..........,:ld;                        
+           .';;;:::;,,.x,                       
+      ..'''.            0Xxoc:,.  ...           
+  ....                ,ONkc;,;cokOdc',.         
+ .                   OMo           ':ddo.       
+                    dMc               :OO;      
+                    0M.                 .:o.    
+                    ;Wd                         
+                     ;XO,                       
+                       ,d0Odlc;,..              
+                           ..',;:cdOOd::,.      
+                                    .:d;.':;.   
+                                       'd,  .'  
+                                         ;l   ..
+                                          .o    
+                                            c   
+                                            .'  
+                                             .  
+                                                
+                       |                        
+## frame 0: foreground
+cccccccccccccc7777777777777777777777777777777777
+cccccccccccccccccccccc77777777777777777777777777
+cccccccccccccccccccccccc777777777777777777777777
+cccccccccccccccccccccccc777777777777777777777777
+ccccccccccccccccccccccccc77777777777777777777777
+ccccccccccccccccccccccccccccccccccccc77777777777
+ccccccccccccccccccccccccccccccccccccccc777777777
+ccccccccccccccccccccccccccccccccccccc88cc7777777
+cccccccccccccccccccccccccccccccccccccccccc777777
+cccccccccccccccccccccccccccccccccccccccccccc7777
+ccccccccccccccccccccccc7777777777777777777777777
+ccccccccccccccccccccccccc77777777777777777777777
+cccccccccccccccccccccccccccccccccc77777777777777
+cccccccccccccccccccccccccccccccccccccccccc777777
+ccccccccccccccccccccccccccccccccccccccccccccc777
+cccccccccccccccccccccccccccccccccccccccccccccc77
+cccccccccccccccccccccccccccccccccccccccccccccccc
+cccccccccccccccccccccccccccccccccccccccccccc7777
+ccccccccccccccccccccccccccccccccccccccccccccc777
+cccccccccccccccccccccccccccccccccccccccccccccc77
+cccccccccccccccccccccccccccccccccccccccccccccc77
+777777777777777777777777777777777777777777777777
+77777777777777777777777c777777777777777777777777
+## frame 0: background
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+000000000000000000000000000000000000000000000000
+
+## later frames
+frame 1: (23,22) '/' fg=12 bg=0
+frame 2: (23,22) '-' fg=12 bg=0
+frame 3: (23,22) '\\' fg=12 bg=0

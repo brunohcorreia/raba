@@ -1,0 +1,79 @@
+# 44x23, 4 frames, loops, 16 colours
+
+## frame 0: characters
+                  :::::::::                 
+            :::::::::::::::::::             
+         :::::::::::::::::::::::::          
+       ::::::::cllcccccllllllll::::::       
+    :::::::::lc               dc:::::::     
+   ::::::::cl   clllccllll    oc:::::::::   
+  :::::::::o   lc::::::::co   oc::::::::::  
+ ::::::::::o    cccclc:::::clcc:::::::::::: 
+ :::::::::::lc        cclccclc::::::::::::: 
+::::::::::::::lcclcc          lc::::::::::::
+::::::::::cclcc:::::lccclc     oc:::::::::::
+::::::::::o    l::::::::::l    lc:::::::::::
+ :::::cll:o     clcllcccll     o::::::::::: 
+ :::::occ:o                  clc::::::::::: 
+  ::::ocl:ccslclccclclccclclc:::::::::::::  
+   :::oclcccccccccccccllllllllllllll:::::   
+    ::lcc1lcccccccccccccccccccccccco::::    
+      ::::::::::::::::::::::::::::::::      
+        ::::::::::::::::::::::::::::        
+           ::::::::::::::::::::::           
+                ::::::::::::                
+                                            
+                     |                      
+## frame 0: foreground
+ccccccccccccccccccccccccccc77777777777777777
+ccccccccccccccccccccccccccccccc7777777777777
+cccccccccccccccccccccccccccccccccc7777777777
+cccccccccccccccffffffffffffffffcccccc7777777
+cccccccccccccfffffffffffffffffffccccccc77777
+cccccccccccfffffffffffffffffffffccccccccc777
+cccccccccccffffffccccccccfffffffcccccccccc77
+cccccccccccfffffffffffcccccffffcccccccccccc7
+ccccccccccccffffffffffffffffffccccccccccccc7
+ccccccccccccccffffffffffffffffffcccccccccccc
+ccccccccccfffffcccccfffffffffffffccccccccccc
+ccccccccccffffffccccccccccfffffffccccccccccc
+ccccccfffcffffffffffffffffffffffccccccccccc7
+ccccccfffcffffffffffffffffffffffccccccccccc7
+ccccccfffcfffffffffffffffffffccccccccccccc77
+ccccccffffffffffffffffffffffffffffffccccc777
+ccccccffffffffffffffffffffffffffffffcccc7777
+cccccccccccccccccccccccccccccccccccccc777777
+cccccccccccccccccccccccccccccccccccc77777777
+ccccccccccccccccccccccccccccccccc77777777777
+cccccccccccccccccccccccccccc7777777777777777
+77777777777777777777777777777777777777777777
+777777777777777777777c7777777777777777777777
+## frame 0: background
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000
+
+## later frames
+frame 1: (21,22) '/' fg=12 bg=0
+frame 2: (21,22) '-' fg=12 bg=0
+frame 3: (21,22) '\\' fg=12 bg=0

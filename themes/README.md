@@ -77,6 +77,23 @@ that needs no Rust.
 This needs no Rust, and the tests in `crates/raba-gen/tests/themes.rs` read this
 directory at run time, so a new theme is covered the moment you add it.
 
+The quickest route is no art file at all. 545 fastfetch logos are vendored, so a
+recipe can name one and inherit its colours:
+
+```toml
+[logo]
+source = "fastfetch:Omarchy"
+```
+
+```sh
+raba-gen --list-logos omarchy          # check the name, and that a console can draw it
+raba-gen build themes/mine.toml --preview
+```
+
+Use the extractor below instead when you want the art in a file you can edit — which is
+what every theme here does, because several needed hand edits that a `fastfetch:` source
+cannot carry.
+
 ```sh
 scripts/fastfetch-logo.py arch themes/
 ./scripts/build-themes.sh
@@ -96,7 +113,22 @@ CachyOS logo into `bazzite.txt` and says nothing.
 If the art is tall enough that a spinner under it would overflow 25 lines, the recipe
 is written with `position = "right"` instead. Parrot is the example.
 
-Then look at it, because nothing above can.
+Then look at it, because nothing above can:
+
+```sh
+raba-gen build themes/mine.toml --preview
+```
+
+Finally record it, so that a later change to the renderer cannot alter your theme
+without somebody noticing:
+
+```sh
+RABA_BLESS=1 cargo test -p raba-gen --test golden
+```
+
+`themes/golden/` holds one file per theme: the characters, the foreground plane and the
+background plane, as a modelled terminal sees them after the real encoder has drawn
+them. Read the diff before committing a re-record.
 
 ## The part that catches people
 

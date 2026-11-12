@@ -1,0 +1,73 @@
+# 36x21, 4 frames, loops, 16 colours
+
+## frame 0: characters
+                 ..                 
+               .PLTJ.               
+              <><><><>              
+     KKSSV' 4KKK LJ KKKL.'VSSKK     
+     KKV' 4KKKKK LJ KKKKAL 'VKK     
+     V' ' 'VKKKK LJ KKKKV' ' 'V     
+     .4MA.' 'VKK LJ KKV' '.4Mb.     
+   . KKKKKA.' 'V LJ V' '.4KKKKK .   
+ .4D KKKKKKKA.'' LJ ''.4KKKKKKK FA. 
+<QDD ++++++++++++  ++++++++++++ GFD>
+ 'VD KKKKKKKK'.. LJ ..'KKKKKKKK FV  
+   ' VKKKKK'. .4 LJ K. .'KKKKKV '   
+      'VK'. .4KK LJ KKA. .'KV'      
+     A. . .4KKKK LJ KKKKA. . .4     
+     KKA. 'KKKKK LJ KKKKK' .4KK     
+     KKSSA. VKKK LJ KKKV .4SSKK     
+              <><><><>              
+               'MKKM'               
+                 ''                 
+                                    
+                 |                  
+## frame 0: foreground
+bbbbbbbbbbbbbbbbbbb77777777777777777
+bbbbbbbbbbbbbbbbbbbbb777777777777777
+bbbbbbbbbbbbbbbbbbbbbb77777777777777
+bbbbbaaaaaaaaaaaabbdddddddddddd77777
+dddddaaaaaaaaaaaabbdddddddddddd77777
+dddddaaaaaaaaaaaabbdddddddddddd77777
+dddddaaaaaaaaaaaabbdddddddddddd77777
+dddddaaaaaaaaaaaabbdddddddddddddc777
+cddddaaaaaaaaaaaabbdddddddddddddccc7
+dddddddddddddddddddccccccccccccccccc
+ccdddccccccccccccaaabbbbbbbbbbbbcc77
+cccddccccccccccccaaabbbbbbbbbbbbc777
+cccccccccccccccccaaabbbbbbbbbb777777
+bbbbbccccccccccccaaabbbbbbbbbbb77777
+bbbbbccccccccccccaaabbbbbbbbbbb77777
+bbbbbccccccccccccaaabbbbbbbbbbb77777
+bbbbbbbbbbbbbbaaaaaaaa77777777777777
+aaaaaaaaaaaaaaaaaaaaa777777777777777
+aaaaaaaaaaaaaaaaaaa77777777777777777
+777777777777777777777777777777777777
+77777777777777777b777777777777777777
+## frame 0: background
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+000000000000000000000000000000000000
+
+## later frames
+frame 1: (17,20) '/' fg=11 bg=0
+frame 2: (17,20) '-' fg=11 bg=0
+frame 3: (17,20) '\\' fg=11 bg=0

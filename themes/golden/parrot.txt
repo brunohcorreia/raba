@@ -1,0 +1,82 @@
+# 41x24, 4 frames, loops, 16 colours
+
+## frame 0: characters
+  `:oho/-`                               
+`mMMMMMMMMMMMNmmdhy-                     
+ dMMMMMMMMMMMMMMMMMMs`                   
+ +MMsohNMMMMMMMMMMMMMm/                  
+ .My   .+dMMMMMMMMMMMMMh.                
+  +       :NMMMMMMMMMMMMNo               
+           `yMMMMMMMMMMMMMm:             
+             /NMMMMMMMMMMMMMy`           
+              .hMMMMMMMMMMMMMN+          
+                  ``-NMMMMMMMMMd-        
+                     /MMMMMMMMMMMs`      
+                      mMMMMMMMsyNMN/    |
+                      +MMMMMMMo  :sNh.   
+                      `NMMMMMMm     -o/  
+                       oMMMMMMM.         
+                       `NMMMMMM+         
+                        +MMd/NMh         
+                         mMm -mN`        
+                         /MM  `h:        
+                          dM`   .        
+                          :M-            
+                           d:            
+                           -+            
+                            -            
+## frame 0: foreground
+eeeeeeeeee7777777777777777777777777777777
+eeeeeeeeeeeeeeeeeeee777777777777777777777
+eeeeeeeeeeeeeeeeeeeeee7777777777777777777
+eeeeeeeeeeeeeeeeeeeeeee777777777777777777
+eeeeeeeeeeeeeeeeeeeeeeeee7777777777777777
+eeeeeeeeeeeeeeeeeeeeeeeeee777777777777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeee7777777777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeee77777777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee7777777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee77777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee7777e
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee77
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee777777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee777777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee777777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee77777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee77777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee77777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeee777777777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeee777777777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeee777777777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeee777777777777
+## frame 0: background
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+00000000000000000000000000000000000000000
+
+## later frames
+frame 1: (40,11) '/' fg=14 bg=0
+frame 2: (40,11) '-' fg=14 bg=0
+frame 3: (40,11) '\\' fg=14 bg=0

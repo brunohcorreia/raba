@@ -129,3 +129,37 @@ pub fn clamp_background(index: u8) -> u8 {
         index
     }
 }
+
+/// Read an SGR foreground parameter the way fastfetch writes it.
+///
+/// fastfetch stores a logo's default colour per `$N` slot as the literal SGR
+/// parameters it would print: `"34"`, `"90"`, `"38;5;149"`, `"38;2;198;151;66"`.
+/// The first three forms have a palette index already; the RGB form does not, and
+/// is fitted to the console here because the `.raba` format carries no RGB.
+///
+/// A 256-colour index is returned unchanged rather than downsampled, so that a
+/// theme declaring `canvas.palette = 256` keeps it. `Recipe::normalise` does the
+/// downsampling when the target is sixteen colours, and reports it.
+///
+/// `39` is "default foreground", which on a console is grey — 7, not "no colour".
+/// Reading it as absent is what shipped MX and elementary in the wrong colour.
+pub fn from_sgr(params: &str) -> Option<u8> {
+    let mut parts = params.split(';');
+    let first: u16 = parts.next()?.trim().parse().ok()?;
+    match first {
+        30..=37 => u8::try_from(first.checked_sub(30)?).ok(),
+        39 => Some(7),
+        90..=97 => u8::try_from(first.checked_sub(90)?.checked_add(8)?).ok(),
+        38 => match parts.next()?.trim() {
+            "5" => parts.next()?.trim().parse::<u8>().ok(),
+            "2" => {
+                let red = parts.next()?.trim().parse::<u8>().ok()?;
+                let green = parts.next()?.trim().parse::<u8>().ok()?;
+                let blue = parts.next()?.trim().parse::<u8>().ok()?;
+                Some(nearest_console_colour((red, green, blue)))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}

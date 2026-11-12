@@ -7,7 +7,6 @@ yanked = "deny"
 # "GPL-3.0" and "GPL-3.0-or-later" are different SPDX identifiers, and ours is the
 # second one. Allowing only the first rejected our own crates.
 allow = [
-    "GPL-3.0",
     "GPL-3.0-or-later",
     "MIT",
     "Apache-2.0",

@@ -1,0 +1,67 @@
+# 27x19, 4 frames, loops, 16 colours
+
+## frame 0: characters
+        _,met$$$$$gg.      
+     ,g$$$$$$$$$$$$$$$P.   
+   ,g$$P""       """Y$$.". 
+  ,$$P'              `$$$. 
+',$$P       ,ggs.     `$$b:
+`d$$'     ,$P"'   .    $$$ 
+ $$P      d$'     ,    $$P 
+ $$:      $$.   -    ,d$$' 
+ $$;      Y$b._   _,d$P'   
+ Y$$.    `.`"Y$$$$P"'      
+ `$$b      "-.__           
+  `Y$$b                    
+   `Y$$.                   
+     `$$b.                 
+       `Y$$b.              
+         `"Y$b._           
+             `""""         
+                           
+             |             
+## frame 0: foreground
+99999999fffffffffffff777777
+ffffffffffffffffffffffff777
+ffffffffffffffffffffffffff7
+ffffffffffffffffffffffffff7
+fffffffffffffffffffffffffff
+ffffffffffffffffff9fffffff7
+ffffffffffffffffff9fffffff7
+ffffffffffffffff9fffffffff7
+ffffffffffffffffffffffff777
+fffffffff99ffffffffff777777
+fffffffffff9999977777777777
+99fffff77777777777777777777
+ffffffff7777777777777777777
+ffffffffff77777777777777777
+fffffffffffff77777777777777
+ffffffffffffffff77777777777
+ffffffffffffffffff777777777
+777777777777777777777777777
+777777777777797777777777777
+## frame 0: background
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+000000000000000000000000000
+
+## later frames
+frame 1: (13,18) '/' fg=9 bg=0
+frame 2: (13,18) '-' fg=9 bg=0
+frame 3: (13,18) '\\' fg=9 bg=0

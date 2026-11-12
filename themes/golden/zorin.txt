@@ -1,0 +1,67 @@
+# 40x19, 4 frames, loops, 16 colours
+
+## frame 0: characters
+        `osssssssssssssssssssso`        
+       .osssssssssssssssssssssso.       
+      .+oooooooooooooooooooooooo+.      
+                                        
+                                        
+  `::::::::::::::::::::::.         .:`  
+ `+ssssssssssssssssss+:.`     `.:+ssso` 
+.ossssssssssssssso/.       `-+ossssssso.
+ssssssssssssso/-`      `-/osssssssssssss
+.ossssssso/-`      .-/ossssssssssssssso.
+ `+sss+:.      `.:+ssssssssssssssssss+` 
+  `:.         .::::::::::::::::::::::`  
+                                        
+                                        
+      .+oooooooooooooooooooooooo+.      
+       -osssssssssssssssssssssso-       
+        `osssssssssssssssssssso`        
+                                        
+                   |                    
+## frame 0: foreground
+cccccccccccccccccccccccccccccccc77777777
+ccccccccccccccccccccccccccccccccc7777777
+cccccccccccccccccccccccccccccccccc777777
+7777777777777777777777777777777777777777
+7777777777777777777777777777777777777777
+cccccccccccccccccccccccccccccccccccccc77
+ccccccccccccccccccccccccccccccccccccccc7
+cccccccccccccccccccccccccccccccccccccccc
+cccccccccccccccccccccccccccccccccccccccc
+cccccccccccccccccccccccccccccccccccccccc
+ccccccccccccccccccccccccccccccccccccccc7
+cccccccccccccccccccccccccccccccccccccc77
+7777777777777777777777777777777777777777
+7777777777777777777777777777777777777777
+cccccccccccccccccccccccccccccccccc777777
+ccccccccccccccccccccccccccccccccc7777777
+cccccccccccccccccccccccccccccccc77777777
+7777777777777777777777777777777777777777
+7777777777777777777c77777777777777777777
+## frame 0: background
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+0000000000000000000000000000000000000000
+
+## later frames
+frame 1: (19,18) '/' fg=12 bg=0
+frame 2: (19,18) '-' fg=12 bg=0
+frame 3: (19,18) '\\' fg=12 bg=0

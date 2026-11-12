@@ -1,0 +1,61 @@
+# 32x17, 4 frames, loops, 16 colours
+
+## frame 0: characters
+   ..,,;;;::;,..                
+           `':ddd;:,.           
+                 `'dPPd:,.      
+                     `:b$$b`.   
+                        'P$$$d` 
+                         .$$$$$`
+                         ;$$$$$P
+                      .:P$$$$$$`
+                  .,:b$$$$$$$;' 
+             .,:dP$$$$$$$$b:'   
+      .,:;db$$$$$$$$$$Pd'`      
+ ,db$$$$$$$$$$$$$$b:'`          
+:$$$$$$$$$$$$b:'`               
+ `$$$$$bd:''`                   
+   `'''`                        
+                                
+               |                
+## frame 0: foreground
+dddddddddddddddd7777777777777777
+ddddddddddddddddddddd77777777777
+dddddddddddddddddddddddddd777777
+ddddddddddddddddddddddddddddd777
+ddddddddddddddddddddddddddddddd7
+dddddddddddddddddddddddddddddddd
+dddddddddddddddddddddddddddddddd
+dddddddddddddddddddddddddddddddd
+ddddddddddddddddddddddddddddddd7
+ddddddddddddddddddddddddddddd777
+dddddddddddddddddddddddddd777777
+dddddddddddddddddddddd7777777777
+ddddddddddddddddd777777777777777
+ddddddddddddd7777777777777777777
+dddddddd777777777777777777777777
+77777777777777777777777777777777
+777777777777777d7777777777777777
+## frame 0: background
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+00000000000000000000000000000000
+
+## later frames
+frame 1: (15,16) '/' fg=13 bg=0
+frame 2: (15,16) '-' fg=13 bg=0
+frame 3: (15,16) '\\' fg=13 bg=0

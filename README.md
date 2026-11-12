@@ -56,9 +56,20 @@ raba --preview themes/mine.raba --loops 0
 ```
 
 Art is plain text with `$1` to `$9` marking colour changes, the format fastfetch
-stores its logos in. `scripts/fastfetch-logo.py arch > themes/arch.txt` pulls one out
-of an installed fastfetch. `man 5 raba-theme` has the full schema; `raba-gen --check`
-tells you whether a console can actually draw what you made.
+stores its logos in. 545 of them are bundled, so a recipe can just name one:
+
+```sh
+raba-gen --list-logos 'void|artix'     # which ones exist, and which a console can draw
+```
+
+```toml
+[logo]
+source = "fastfetch:Omarchy"           # no art file needed; colours come with it
+```
+
+`man 5 raba-theme` has the full schema; `raba-gen --check` tells you whether a console
+can actually draw what you made, and `raba-gen build x.toml --preview` plays it here
+without writing a file.
 
 ---
 
@@ -223,7 +234,9 @@ or question marks. The generator fails the build and tells you which characters 
 problem, rather than letting you find out during a boot.
 
 Logo art is sourced from [fastfetch](https://github.com/fastfetch-cli/fastfetch) (MIT),
-which ships 534 distro logos.
+vendored at a pinned commit in `vendor/fastfetch-logos`. 545 logos; `--list-logos` says
+which of them a console can draw, since 30 are braille or sextants and need a terminal
+font.
 
 ## Documentation
 

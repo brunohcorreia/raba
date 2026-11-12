@@ -23,10 +23,15 @@ all of it is a pure transformation.
 └────────────────────────────────────────────────────────────┘
 ┌─ shell: thin, impure, behind a trait ─────────────────────┐
 │  trait Surface { fn size(); fn write(); fn restore(); }    │
-│    VtSurface      - real virtual terminal                  │
-│    StdoutSurface  - --preview                              │
-│    BufferSurface  - tests                                  │
+│    VtSurface      - real virtual terminal   (raba)         │
+│    StdoutSurface  - --preview               (raba-term)    │
+│    BufferSurface  - tests                   (raba-core)    │
 └────────────────────────────────────────────────────────────┘
+
+The trait and `BufferSurface` are in `raba-core` because neither does any I/O.
+`StdoutSurface` does, so it lives in `raba-term`, which both binaries link:
+`raba` to play a splash and `raba-gen` for `build --preview`. One copy of the
+frame timing, not two that drift.
 ```
 
 The rule: **if it can be a function from data to data, it is one.** The impure part

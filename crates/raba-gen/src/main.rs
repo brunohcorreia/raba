@@ -2,23 +2,30 @@
 //!
 //! The interface is `raba-gen`(1); the recipe schema is `raba-theme`(5).
 
-use raba_core::glyph::{audit, Safety};
+use raba_core::glyph::{self, audit, Safety};
 use raba_core::Movie;
 use raba_gen::build::{build, spinners, Recipe};
+use raba_gen::logos;
 use raba_gen::recipe::{self, ArtSource};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+
+/// How many times `--preview` runs the animation before giving the shell back.
+/// The same default as `raba --preview`, which is long enough to judge a spinner
+/// and short enough not to need an interrupt.
+const PREVIEW_LOOPS: u32 = 3;
 
 const USAGE: &str = "\
 raba-gen - build and convert .raba animations
 
 usage:
-    raba-gen build <recipe.toml> [-o <out.raba>]
+    raba-gen build <recipe.toml> [-o <out.raba>] [--preview]
     raba-gen --check <file.raba>
     raba-gen --list-logos [pattern]
 
 options:
     -o <path>              output file (default: the recipe's name with .raba)
+    --preview              play the result here instead of writing a file
     --allow-unsafe-glyphs  downgrade the glyph check from an error to a warning
     --version              print the version and the format version
     --help                 print this
@@ -63,11 +70,13 @@ fn build_command(args: &[String]) -> Result<(), String> {
     let mut input: Option<&str> = None;
     let mut output: Option<PathBuf> = None;
     let mut allow_unsafe = false;
+    let mut preview = false;
     let mut index = 0;
 
     while let Some(arg) = args.get(index) {
         index = index.saturating_add(1);
         match arg.as_str() {
+            "--preview" => preview = true,
             "-o" | "--out" => {
                 let value = args.get(index).ok_or("-o needs a path")?;
                 index = index.saturating_add(1);
@@ -90,33 +99,57 @@ fn build_command(args: &[String]) -> Result<(), String> {
         eprintln!("raba-gen: {input}: {note}");
     }
 
+    // A fastfetch logo brings its own slot colours. They are only used when the
+    // recipe gives none: an explicit logo.colors is the author's decision and is
+    // never second-guessed.
+    let mut inherited: Option<Vec<u8>> = None;
     let source = match theme.art_source(recipe_path).map_err(|e| format!("{input}: {e}"))? {
         ArtSource::Inline(art) => art,
         ArtSource::File(path) => {
             std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?
         }
         ArtSource::Fastfetch(name) => {
-            return Err(format!(
-                "{input}: logo.source = \"fastfetch:{name}\" needs the bundled logo art, \
-                 which is not vendored yet; use file: for now (see docs/milestones.md, M1)"
-            ))
+            let logo = logos::find(&name).ok_or_else(|| {
+                let hints = logos::suggest(&name);
+                let tail = if hints.is_empty() {
+                    "; try --list-logos".to_owned()
+                } else {
+                    format!("; did you mean {}?", hints.join(", "))
+                };
+                format!("{input}: no fastfetch logo called {name:?}{tail}")
+            })?;
+            if theme.logo.colors.is_empty() {
+                inherited = Some(logo.palette_colors());
+            }
+            logo.art_source()
         }
     };
 
     // Default output next to the recipe, named after it: themes/x.toml -> themes/x.raba.
     let output = output.unwrap_or_else(|| recipe_path.with_extension("raba"));
 
-    let built = build(&source, &Recipe::from(&theme)).map_err(|e| format!("{input}: {e}"))?;
+    let mut recipe = Recipe::from(&theme);
+    if let Some(colours) = inherited {
+        eprintln!(
+            "raba-gen: {input}: using the logo's own colours {colours:?}; \
+             set logo.colors to override"
+        );
+        recipe.colours = colours;
+    }
+    let built = build(&source, &recipe).map_err(|e| format!("{input}: {e}"))?;
 
     for adjustment in &built.adjustments {
         eprintln!("raba-gen: {adjustment}");
     }
+    // Against the colours actually used, not the recipe's: a fastfetch logo
+    // brings its own, and warning about a recipe that deliberately gives none
+    // would fire on every correct build.
     for slot in &built.slots_used {
-        if *slot != 0 && usize::from(*slot) > theme.logo.colors.len() {
+        if *slot != 0 && usize::from(*slot) > recipe.colours.len() {
             eprintln!(
-                "raba-gen: the art uses ${slot} and logo.colors gives {}; \
+                "raba-gen: the art uses ${slot} and only {} colour(s) are given; \
                  it will be drawn in logo.default_color",
-                theme.logo.colors.len()
+                recipe.colours.len()
             );
         }
     }
@@ -132,6 +165,25 @@ fn build_command(args: &[String]) -> Result<(), String> {
     }
 
     let bytes = raba_core::encode(&built.movie);
+
+    // --preview replaces the write rather than following it, as raba-gen(1) says:
+    // the point is to look at a theme without leaving an artifact behind.
+    if preview {
+        let mut surface = raba_term::StdoutSurface::new();
+        let _ = raba_term::clear(&mut surface);
+        let played = raba_term::play(&mut surface, &built.movie, PREVIEW_LOOPS);
+        let _ = <raba_term::StdoutSurface as raba_core::surface::Surface>::restore(&mut surface);
+        played.map_err(|e| format!("{input}: {e}"))?;
+        eprintln!(
+            "raba-gen: {}x{}, {} frames, {} bytes if written",
+            built.movie.columns,
+            built.movie.lines,
+            built.movie.frames.len(),
+            bytes.len()
+        );
+        return Ok(());
+    }
+
     std::fs::write(&output, &bytes).map_err(|e| format!("{}: {e}", output.display()))?;
     println!(
         "{}: {}x{}, {} frames, {} ops, {} bytes",
@@ -183,12 +235,67 @@ fn check_command(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// List the vendored logos, saying for each whether a console can draw it.
+///
+/// The safety column is the point. fastfetch renders in a terminal with the
+/// user's font, so a good number of its logos are braille, sextants or quadrant
+/// blocks; RABA draws before `setfont` runs. Reporting it here means finding out
+/// before the build instead of during a boot.
 fn list_logos(pattern: Option<&str>) -> Result<(), String> {
-    let _ = pattern;
-    Err("--list-logos needs the bundled fastfetch art, which is not vendored yet \
-         (see docs/milestones.md, M1). scripts/fastfetch-logo.py extracts one in the \
-         meantime"
-        .to_owned())
+    let matches = logos::search(pattern.unwrap_or(""));
+    if matches.is_empty() {
+        return Err(format!(
+            "no logo matches {:?} (of {} vendored)",
+            pattern.unwrap_or(""),
+            logos::LOGO_COUNT
+        ));
+    }
+
+    let mut usable = 0usize;
+    for logo in &matches {
+        let worst = logo
+            .art
+            .chars()
+            .filter(|ch| *ch != '\n')
+            .map(glyph::safety)
+            .max_by_key(|safety| match safety {
+                Safety::Safe => 0u8,
+                Safety::Unreliable => 1,
+                Safety::Unsafe => 2,
+            })
+            .unwrap_or(Safety::Safe);
+        let note = match worst {
+            Safety::Safe => {
+                usable = usable.saturating_add(1);
+                "console"
+            }
+            Safety::Unreliable => {
+                usable = usable.saturating_add(1);
+                "console*"
+            }
+            Safety::Unsafe => "terminal",
+        };
+        let aliases = if logo.aliases.is_empty() {
+            String::new()
+        } else {
+            format!("  ({})", logo.aliases.join(", "))
+        };
+        println!("{:<10} {}{}", note, logo.name, aliases);
+    }
+
+    println!();
+    println!(
+        "{} of {} shown draw on a console; the rest need a terminal font.",
+        usable,
+        matches.len()
+    );
+    println!("* also needs the glyph to survive setfont; see docs/glyphs.md.");
+    println!(
+        "art from fastfetch {} ({}), MIT; logos are trademarks of their projects.",
+        logos::FASTFETCH_TAG,
+        logos::FASTFETCH_COMMIT.get(..12).unwrap_or(logos::FASTFETCH_COMMIT)
+    );
+    Ok(())
 }
 
 /// Print the glyph audit and return how many characters are outright unsafe.

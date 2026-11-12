@@ -1,0 +1,76 @@
+# 39x22, 4 frames, loops, 16 colours
+
+## frame 0: characters
+             /////////////             
+         /////////////////////         
+      ///////*767////////////////      
+    //////7676767676*//////////////    
+   /////76767//7676767//////////////   
+  /////767676///*76767///////////////  
+ ///////767676///76767.///7676*/////// 
+/////////767676//76767///767676////////
+//////////76767676767////76767/////////
+///////////76767676//////7676//////////
+////////////,7676,///////767///////////
+/////////////*7676///////76////////////
+///////////////7676////////////////////
+ ///////////////7676///767//////////// 
+  //////////////////////'////////////  
+   //////.7676767676767676767,//////   
+    /////767676767676767676767/////    
+      ///////////////////////////      
+         /////////////////////         
+             /////////////             
+                                       
+                   |                   
+## frame 0: foreground
+eeeeeeeeeeeeeeeeeeeeeeeeee7777777777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeee777777777
+eeeeeeeeeeeeeffffeeeeeeeeeeeeeeee777777
+eeeeeeeeeefffffffffffeeeeeeeeeeeeee7777
+eeeeeeeefffffeefffffffeeeeeeeeeeeeee777
+eeeeeeeffffffeeeffffffeeeeeeeeeeeeeee77
+eeeeeeeeffffffeeefffffeeeefffffeeeeeee7
+eeeeeeeeeffffffeefffffeeeffffffeeeeeeee
+eeeeeeeeeefffffffffffeeeefffffeeeeeeeee
+eeeeeeeeeeeffffffffeeeeeeffffeeeeeeeeee
+eeeeeeeeeeeeeffffeeeeeeeefffeeeeeeeeeee
+eeeeeeeeeeeeeeffffeeeeeeeffeeeeeeeeeeee
+eeeeeeeeeeeeeeeffffeeeeeeeeeeeeeeeeeeee
+eeeeeeeeeeeeeeeeffffeeefffeeeeeeeeeeee7
+eeeeeeeeeeeeeeeeeeeeeeeefeeeeeeeeeeee77
+eeeeeeeeefffffffffffffffffffffeeeeee777
+eeeeeeeeefffffffffffffffffffffeeeee7777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee777777
+eeeeeeeeeeeeeeeeeeeeeeeeeeeeee777777777
+eeeeeeeeeeeeeeeeeeeeeeeeee7777777777777
+777777777777777777777777777777777777777
+7777777777777777777e7777777777777777777
+## frame 0: background
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+000000000000000000000000000000000000000
+
+## later frames
+frame 1: (19,21) '/' fg=14 bg=0
+frame 2: (19,21) '-' fg=14 bg=0
+frame 3: (19,21) '\\' fg=14 bg=0

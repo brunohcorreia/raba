@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/raba-core", "crates/raba", "crates/raba-gen"]
+members = ["crates/raba-core", "crates/raba-term", "crates/raba", "crates/raba-gen"]
 
 [workspace.package]
 version = "0.0.0"

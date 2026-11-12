@@ -254,6 +254,7 @@ name = "raba"
 version = "0.0.0"
 dependencies = [
  "raba-core",
+ "raba-term",
 ]
 
 [[package]]
@@ -269,8 +270,16 @@ name = "raba-gen"
 version = "0.0.0"
 dependencies = [
  "raba-core",
+ "raba-term",
  "serde",
  "toml",
+]
+
+[[package]]
+name = "raba-term"
+version = "0.0.0"
+dependencies = [
+ "raba-core",
 ]
 
 [[package]]

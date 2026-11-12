@@ -1,0 +1,73 @@
+# 24x21, 4 frames, loops, 16 colours
+
+## frame 0: characters
+        .oo.            
+         oo   .oo.      
+         .ooo. oo       
+         .   .          
+          ooo .ooo.     
+      .ooo.   '___'     
+     .'___'        .    
+   :dkxc;'.  ..,cxkd;   
+ .dkk. kkkkkkkkkk .kkd. 
+.dkk.  ';cloolc;.  .kkd 
+ckk.                .kk;
+xO:                  cOd
+xO:                  lOd
+lOO.                .OO:
+.k00.              .00x 
+ .k00;            ;00O. 
+  .lO0Kc;,,,,,,;c0KOc.  
+     ;d00KKKKKK00d;     
+        .,KKKK,.        
+                        
+           |            
+## frame 0: foreground
+eeeeeeeeeeee777777777777
+eeeeeeeeeeeeeeeeee777777
+eeeeeeeeeeeeeeeee7777777
+eeeeeeeeeeeeee7777777777
+eeeeeeeeeeeeeeeeeee77777
+eeeeeeeeeeeeeeeeeee77777
+ffffffeeeeeeeeeeffff7777
+fffffffffffffffffffff777
+fffffffffffffffffffffff7
+fffffffffffffffffffffff7
+ffffffffffffffffffffffff
+ffffffffffffffffffffffff
+ffffffffffffffffffffffff
+ffffffffffffffffffffffff
+fffffffffffffffffffffff7
+fffffffffffffffffffffff7
+ffffffffffffffffffffff77
+fffffffffffffffffff77777
+ffffffffffffffff77777777
+777777777777777777777777
+77777777777e777777777777
+## frame 0: background
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+000000000000000000000000
+
+## later frames
+frame 1: (11,20) '/' fg=14 bg=0
+frame 2: (11,20) '-' fg=14 bg=0
+frame 3: (11,20) '\\' fg=14 bg=0

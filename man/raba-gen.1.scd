@@ -12,7 +12,7 @@ raba-gen - build and convert .raba animations
 
 *raba-gen* convert _input_ [*-o* _out.raba_] (not implemented yet)
 
-*raba-gen* *--list-logos* [_pattern_] (not implemented yet)
+*raba-gen* *--list-logos* [_pattern_]
 
 # DESCRIPTION
 
@@ -35,17 +35,26 @@ whatever it likes while *raba*(8) depends on nothing.
 	Output file. Defaults to the recipe's name with a *.raba* extension.
 
 *--list-logos* [_pattern_]
-	List the bundled logo names, optionally filtered. Not implemented yet: it
-	needs the vendored fastfetch art. _scripts/fastfetch-logo.py_ extracts a logo
-	from an installed fastfetch in the meantime.
+	List the bundled logo names, optionally filtered. _pattern_ is matched as a
+	substring, case-insensitively; *|* separates alternatives.
+
+	Each line says whether a console can draw that logo. fastfetch renders in a
+	terminal with the user's font, so some of its logos are braille, sextants or
+	quadrant blocks and cannot be drawn before *setfont* runs; those are marked
+	*terminal*. A *console\** mark means the glyphs are in the kernel's built-in
+	font but not in every font that replaces it. See *docs/glyphs.md*.
+
+	The art is vendored from fastfetch at a pinned commit, reported in the
+	footer of the listing.
 
 *--check* _file.raba_
 	Validate an existing *.raba* without generating anything. Reports format version,
 	canvas size, frame count, and any glyph the console cannot render.
 
 *--preview*
-	Render the result in the current terminal instead of writing a file. Not
-	implemented yet; *raba --preview* _file.raba_ plays a built theme.
+	Play the result in the current terminal instead of writing a file, three
+	times through. Nothing is left on disk. *raba --preview* _file.raba_ plays a
+	theme that has already been built.
 
 *--also-dur* _path_
 	Additionally write a *.dur* alongside the *.raba*. Useful when something else — a

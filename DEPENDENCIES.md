@@ -13,6 +13,7 @@ crate here is code that can break a boot on someone else's release schedule.
 | crate | what for | why not `std` | removable? |
 |---|---|---|---|
 | `raba-core` | format, layout, rendering | ours | no — it is the program |
+| `raba-term` | stdout surface, frame timing | ours | no — it is the program |
 
 **Spent so far: none.** Through M0 the binary is `std` only, including `--preview`.
 The one allowance exists for `TIOCGWINSZ`, `VT_OPENQRY` and the rest of the VT ioctls,
@@ -32,7 +33,22 @@ Not here, deliberately:
 ## `raba-core` — the pure core
 
 **Budget: 0.** Pure data transformation, no I/O, no syscalls. If something here needs a
-dependency, it is probably not pure and belongs in `raba`.
+dependency, it is probably not pure and belongs in `raba-term`.
+
+## `raba-term` — terminal surfaces and playback
+
+**Budget: 0, and it inherits `raba`'s constraints.** This is the impure half of the
+renderer: the thing that owns a real terminal, writes a frame in one call and sleeps
+between them. It exists because both binaries need it — `raba` to play a splash and
+`raba-gen` to show an author what they just built — and `raba-core` is pure by rule, so
+it cannot live there.
+
+The alternative was a copy in each binary. The frame-timing and cursor-parking logic is
+exactly the kind that drifts silently when there are two of it, and a preview that no
+longer matches what boot does is worse than no preview.
+
+`raba` links this, so **anything added here lands in an initramfs**. Treat its budget as
+`raba`'s, not `raba-gen`'s.
 
 ## `raba-gen` — the build tool
 

@@ -1,0 +1,24 @@
+[package]
+name = "raba-term"
+description = "Terminal surfaces and playback. The impure half of the renderer, shared by both binaries."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "raba_term"
+path = "src/lib.rs"
+
+# Dependencies are charged to whoever links this. It is std-only on purpose: the
+# boot binary depends on it, so anything added here lands in the initramfs.
+# See docs/maintenance.md on the split budget.
+[dependencies]
+raba-core = { path = "../raba-core", version = "0.0.0" }
+
+[dev-dependencies]
+raba-core = { path = "../raba-core", version = "0.0.0", features = ["testing"] }
+
+[lints]
+workspace = true

@@ -82,9 +82,9 @@ Makes themes contributable by someone who does not write Rust.
 | 2 | 256 → 16 colour downsampling; clamp backgrounds to 0–7 | done |
 | 3 | Spinner styles: `ascii`, `dots`, `bar`, `arc`, `blocks`, `custom` | done |
 | 4 | `--check` | done |
-| 5 | Vendor fastfetch logo art at a pinned commit | |
-| 6 | `--list-logos`, `raba-gen --preview` | |
-| 7 | Golden render tests | |
+| 5 | Vendor fastfetch logo art at a pinned commit | done |
+| 6 | `--list-logos`, `raba-gen --preview` | done |
+| 7 | Golden render tests | done — 50 |
 | 8 | Themes for the most-used distributions | done — 50 |
 
 ### Progress
@@ -108,7 +108,7 @@ rather than quietly skipped:
   reported as not honoured.
 - The page's outro example says it plays once, and the page documented no key to say so.
   Added `canvas.repeat`.
-- `logo.source = "fastfetch:name"` needs vendored art, which is issue 5.
+- `logo.source = "fastfetch:name"` needed vendored art. It has it now; see below.
 
 Colour fitting is automatic rather than a flag, which is what the page promises: an
 index above 15 in a 16-colour theme is an xterm colour the author drew in, and the
@@ -250,3 +250,72 @@ sequence whose job is to get out of the way. Prototype with `--preview` before c
 frame does not need. Would nearly halve the cost of 3D rotation, where delta encoding
 contributes nothing. The trigger is 3D logos turning out to be wanted, not the idea being
 available.
+
+
+### Vendoring, and two things it caught
+
+`vendor/fastfetch-logos` holds 545 logos taken at fastfetch 2.71.0, commit
+`8c9d9c04`. fastfetch compiles its art into its binary rather than shipping it,
+so `scripts/vendor-fastfetch-logos.sh` pulls the repository at that commit and
+`scripts/fastfetch-manifest.py` parses the C declarations into a manifest: each
+logo's name, its aliases, its art file, and the default colour of each `$N` slot.
+`build.rs` turns that into a table. Updating is two constants and a diff.
+
+The manifest was validated against the installed fastfetch rather than trusted:
+648 names and aliases on both sides, zero difference. Getting there took two
+fixes. Parsing the entries by brace matching got lost in the nested `.colors`
+block and silently dropped Xenia; the entries are delimited by their `#ifdef`
+guards, which is the file's real structure. And the colour separator was `;`,
+which is ambiguous because an SGR value is itself semicolon-separated —
+`38;5;36;38;5;36` could be one colour or two.
+
+Two differences between fastfetch's dialect and ours, both found by building
+real logos rather than by reading:
+
+**fastfetch's `$` is lenient.** A `$` not followed by a digit or another `$` is
+just a dollar sign, and 26 logos depend on it — Debian is drawn out of dollar
+signs and contains `,$P"'`. RABA's parser is strict, because a stray `$a` in
+hand-written art is a typo worth catching. Both are right for their own input, so
+`Logo::art_source` converts at the boundary. Without it `--list-logos` would call
+Debian console-safe and `fastfetch:Debian` would fail to build.
+
+**fastfetch renders logos bold.** Verified against the real output —
+`ESC[1m ESC[31m`, not assumed. On a console bold turns the eight base colours
+bright, so upstream's declared `31` is index 9 on screen and `39` is 15. Taking
+the numbers at face value would have shipped every logo a shade dark. Debian's
+inherited colours now come out `[9, 15]`, which is exactly what the hand
+extraction had already produced independently.
+
+That independence is now a test: `the_shipped_art_matches_what_upstream_actually_has`
+compares each shipped theme against the vendored source, and the only permitted
+differences are the three recorded hand edits. A hand edit cannot be lost in a
+regeneration without a test going red.
+
+`--list-logos` reports, per logo, whether a console can draw it: 515 of 545 can,
+and the other 30 are braille, sextants or quadrant blocks that need a terminal
+font. That is the question an author actually has, and it is now answered before
+the build instead of during a boot.
+
+### A fourth crate
+
+`raba-gen build --preview` needed the stdout surface and the frame loop, which
+lived in the `raba` binary. `raba-core` is pure by rule, so they could not move
+there, and the alternative was a second copy — of frame timing and cursor
+parking, which is exactly the logic that drifts silently when there are two of
+it. `raba-term` now holds one copy and both binaries link it. It is std-only and
+must stay so: `raba` links it, so anything added lands in an initramfs.
+
+### Golden renders
+
+Every theme is built, drawn through the real ANSI encoder, read back with the
+terminal model, and the resulting grid recorded in `themes/golden/`. The grid is
+golden rather than the byte stream, so an optimisation that emits shorter escapes
+for the same picture does not churn fifty files, and the diff is characters and
+colour indices a person can read. `RABA_BLESS=1` re-records.
+
+The test was checked by breaking things on purpose, which is the only way to know
+a golden test works. Two perturbations changed nothing and were right not to:
+nudging the console palette's green by one does not move any nearest-colour
+decision, and `Cell::BLANK` never survives, because frame 0 writes every cell.
+Changing one spinner glyph was caught in all 50, each with the line of the first
+difference.

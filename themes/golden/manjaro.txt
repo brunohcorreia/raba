@@ -1,0 +1,58 @@
+# 28x16, 4 frames, loops, 16 colours
+
+## frame 0: characters
+██████████████████  ████████
+██████████████████  ████████
+██████████████████  ████████
+██████████████████  ████████
+████████            ████████
+████████  ████████  ████████
+████████  ████████  ████████
+████████  ████████  ████████
+████████  ████████  ████████
+████████  ████████  ████████
+████████  ████████  ████████
+████████  ████████  ████████
+████████  ████████  ████████
+████████  ████████  ████████
+                            
+             |              
+## frame 0: foreground
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaa
+7777777777777777777777777777
+7777777777777a77777777777777
+## frame 0: background
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+0000000000000000000000000000
+
+## later frames
+frame 1: (13,15) '/' fg=10 bg=0
+frame 2: (13,15) '-' fg=10 bg=0
+frame 3: (13,15) '\\' fg=10 bg=0

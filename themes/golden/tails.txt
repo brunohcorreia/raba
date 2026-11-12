@@ -1,0 +1,73 @@
+# 29x21, 4 frames, loops, 16 colours
+
+## frame 0: characters
+      ``                     
+  ./yhNh                     
+syy/Nshh         `:o/        
+N:dsNshh  █   `ohNMMd        
+N-/+Nshh      `yMMMMd        
+N-yhMshh       yMMMMd        
+N-s:hshh  █    yMMMMd so//.  
+N-oyNsyh       yMMMMd d  Mms.
+N:hohhhd:.     yMMMMd  syMMM+
+Nsyh+-..+y+-   yMMMMd   :mMM+
++hy-      -ss/`yMMMM     `+d+
+  :sy/.     ./yNMMMMm      ``
+    .+ys- `:+hNMMMMMMy/`     
+      `hNmmMMMMMMMMMMMMdo.   
+       dMMMMMMMMMMMMMMMMMNh: 
+       +hMMMMMMMMMMMMMMMMMmy.
+         -oNMMMMMMMMMMmy+.`  
+           `:yNMMMds/.`      
+              .//`           
+                             
+              |              
+## frame 0: foreground
+cccccccc777777777777777777777
+cccccccc777777777777777777777
+ccccccccccccccccccccc77777777
+ccccccccccccccccccccc77777777
+ccccccccccccccccccccc77777777
+ccccccccccccccccccccc77777777
+ccccccccccccccccccccccccccc77
+ccccccccccccccccccccccccccccc
+ccccccccccccccccccccccccccccc
+ccccccccccccccccccccccccccccc
+ccccccccccccccccccccccccccccc
+ccccccccccccccccccccccccccccc
+cccccccccccccccccccccccc77777
+cccccccccccccccccccccccccc777
+cccccccccccccccccccccccccccc7
+ccccccccccccccccccccccccccccc
+ccccccccccccccccccccccccccc77
+ccccccccccccccccccccccc777777
+cccccccccccccccccc77777777777
+77777777777777777777777777777
+77777777777777c77777777777777
+## frame 0: background
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+00000000000000000000000000000
+
+## later frames
+frame 1: (14,20) '/' fg=12 bg=0
+frame 2: (14,20) '-' fg=12 bg=0
+frame 3: (14,20) '\\' fg=12 bg=0

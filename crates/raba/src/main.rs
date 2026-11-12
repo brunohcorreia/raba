@@ -7,9 +7,6 @@
 //! to a splash is no splash, and the alternative to a boot is nothing at all. See
 //! `docs/security.md`.
 
-mod preview;
-mod surface;
-
 use raba_core::format::limits;
 use raba_core::glyph::{audit, Safety};
 use raba_core::surface::Surface;
@@ -94,7 +91,7 @@ fn preview(path: &str, loops: u32) -> Result<(), String> {
         eprintln!("raba: {:?} ({} cells) {level}; see docs/glyphs.md", finding.ch, finding.count);
     }
 
-    let mut surface = surface::StdoutSurface::new();
+    let mut surface = raba_term::StdoutSurface::new();
     let size = surface.size();
     if movie.columns > size.columns || movie.lines > size.lines {
         eprintln!(
@@ -103,8 +100,8 @@ fn preview(path: &str, loops: u32) -> Result<(), String> {
         );
     }
 
-    let _ = preview::clear(&mut surface);
-    let result = preview::play(&mut surface, &movie, loops);
+    let _ = raba_term::clear(&mut surface);
+    let result = raba_term::play(&mut surface, &movie, loops);
     let _ = surface.restore();
     result.map_err(|e| format!("writing to the terminal: {e}"))
 }
