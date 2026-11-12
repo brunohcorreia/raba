@@ -22,7 +22,10 @@ raba-core = { path = "../raba-core", version = "0.0.0" }
 raba-term = { path = "../raba-term", version = "0.0.0" }
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.2.1"
-# toml, serde, flate2, anyhow — added as milestones need them
+# .dur import: gzipped JSON. Both are budgeted for in DEPENDENCIES.md -- raba-gen
+# never enters an initramfs, so neither does the gzip code.
+serde_json = "1.0"
+flate2 = "1.0"
 
 [lints]
 workspace = true

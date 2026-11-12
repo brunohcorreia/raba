@@ -163,11 +163,50 @@ flagged CachyOS about a year before the Steam survey did.
 
 ## M2 — Import
 
-- `.dur` v7 and v8 → `.raba`, handling the colour-map transposition
-- **The critical test:** identical artwork as v7 and v8 must produce byte-identical `.raba`
-- ANSI art and plain text importers
-- `--also-dur` for display managers that play their own animation
-- Fuzz target on the `.dur` parser
+| # | What | Status |
+|---|---|---|
+| 1 | `.dur` v7 and v8 → `.raba`, handling the colour-map transposition | done |
+| 2 | **The critical test:** identical artwork as v7 and v8 must produce byte-identical `.raba` | done |
+| 3 | Fuzz target on the `.dur` parser | done |
+| 4 | Canvas placement: centre and crop when the art is not the console's size | done |
+| 5 | ANSI art and plain text importers | |
+| 6 | `--also-dur` for display managers that play their own animation | |
+
+### Progress
+
+`.dur` import was driven by a real file rather than by the specification:
+`/etc/ly/blackhole.dur`, a 240x67, 40-frame, 256-colour animation that a user runs
+as their Ly splash. It converts exactly — 16,080 cells of frame 0 checked against
+the source JSON, zero wrong characters and zero wrong colours.
+
+**It also disproved a worry.** The concern was that delta encoding stops paying
+for anything but a logo with a spinner, the wall `docs/3d-logos.md` hit. A black
+hole changes only **6.8% of cells per frame**, colour included, so 40 frames of
+full-screen animation come to 705 KB rather than the 7.7 MB a dense format would
+need. Delta encoding earns its place on real animation, not just on logos.
+
+Three things the real file taught that the specification did not:
+
+- **The version does not predict the key names.** `docs/dur-support.md` says v7
+  uses `sizeX`/`sizeY` and v8 uses `columns`/`lines`. This file declares v7 and
+  uses `columns`/`lines`, because it was written by `video-to-dur` rather than by
+  Durdraw. Both spellings are accepted from both versions.
+- **The version does not reliably predict the colour-map orientation either.**
+  Where the map's shape is unambiguous — a canvas that is not square — the shape
+  decides and the disagreement is reported. The version is consulted only when the
+  canvas is square and there is nothing else to go on.
+- **Durdraw's 0–15 are in curses order, not ANSI order.** 1 is blue, 4 is red.
+  Copying the numbers across unchanged swaps red and blue in every imported file,
+  which reads as bad art rather than as a bug.
+
+### Placement
+
+The black hole is 240x67; a console at boot may be 80x25. `raba_core::render::place`
+centres a canvas that is smaller than the screen and crops one that is larger,
+always returning exactly screen-sized output so the encoder's absolute cursor moves
+are always in range. Drawing past the last column instead would leave the console
+scrolled, which is the one thing a splash must not do. `raba-gen convert` warns at
+build time, where the canvas can still be changed.
 
 ---
 

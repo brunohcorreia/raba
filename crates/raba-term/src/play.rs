@@ -4,8 +4,8 @@
 //! theme looks right here, the core is right and only the VT layer remains in doubt —
 //! which is the whole reason `--preview` is a milestone and not a debug flag.
 
-use raba_core::render::to_ansi_into;
-use raba_core::surface::Surface;
+use raba_core::render::{fit, to_ansi_into};
+use raba_core::surface::{Size, Surface};
 use raba_core::{apply, Grid, Movie};
 use std::io;
 use std::thread::sleep;
@@ -27,10 +27,20 @@ pub const DEFAULT_DELAY_MS: u16 = 100;
 /// less than the rest of the animation, and the same policy is simpler to reason
 /// about than one that sometimes gives up.
 pub fn play<S: Surface>(surface: &mut S, movie: &Movie, loops: u32) -> io::Result<()> {
-    let Some(mut shown) = Grid::new(movie.columns, movie.lines, movie.palette) else {
+    let Some(mut current) = Grid::new(movie.columns, movie.lines, movie.palette) else {
         return Ok(());
     };
-    let mut current = shown.clone();
+
+    // Art is authored at one size and played at whatever this machine has. When
+    // they differ the canvas is centred and cropped, so that what reaches the
+    // encoder is always exactly screen-sized and its absolute cursor moves are
+    // always in range. Drawing past the last column instead would leave the
+    // console scrolled, which is the one thing a splash must not do.
+    let screen = surface.size();
+    let canvas = Size { columns: movie.columns, lines: movie.lines };
+    let Some(mut shown) = Grid::new(screen.columns, screen.lines, movie.palette) else {
+        return Ok(());
+    };
     let mut buffer: Vec<u8> = Vec::new();
 
     let rounds = if movie.looping { loops } else { 1 };
@@ -39,13 +49,14 @@ pub fn play<S: Surface>(surface: &mut S, movie: &Movie, loops: u32) -> io::Resul
     loop {
         for frame in &movie.frames {
             apply(&mut current, movie, frame);
-            to_ansi_into(&mut buffer, &current, Some(&shown));
+            let drawn = if canvas == screen { current.clone() } else { fit(&current, screen) };
+            to_ansi_into(&mut buffer, &drawn, Some(&shown));
             // Park the cursor below the art in the same write, so it does not blink
             // in the middle of the animation and so nothing has to be restored if
             // this process is interrupted.
-            park_below(&mut buffer, movie.lines);
+            park_below(&mut buffer, screen.lines.min(drawn.lines()));
             let _ = surface.present(&buffer);
-            shown.clone_from(&current);
+            shown = drawn;
 
             let delay = if frame.delay_ms == 0 { DEFAULT_DELAY_MS } else { frame.delay_ms };
             sleep(Duration::from_millis(u64::from(delay)));

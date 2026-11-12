@@ -5,6 +5,7 @@
 use raba_core::glyph::{self, audit, Safety};
 use raba_core::Movie;
 use raba_gen::build::{build, spinners, Recipe};
+use raba_gen::dur;
 use raba_gen::logos;
 use raba_gen::recipe::{self, ArtSource};
 use std::path::{Path, PathBuf};
@@ -20,6 +21,7 @@ raba-gen - build and convert .raba animations
 
 usage:
     raba-gen build <recipe.toml> [-o <out.raba>] [--preview]
+    raba-gen convert <art.dur> [-o <out.raba>] [--preview]
     raba-gen --check <file.raba>
     raba-gen --list-logos [pattern]
 
@@ -48,6 +50,7 @@ fn main() -> ExitCode {
 fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("build") => build_command(args.get(1..).unwrap_or(&[])),
+        Some("convert") => convert_command(args.get(1..).unwrap_or(&[])),
         Some("--check") => check_command(args.get(1..).unwrap_or(&[])),
         Some("--list-logos") => list_logos(args.get(1).map(String::as_str)),
         Some("--version") => {
@@ -193,6 +196,99 @@ fn build_command(args: &[String]) -> Result<(), String> {
         built.movie.frames.len(),
         built.movie.ops.len(),
         bytes.len()
+    );
+    Ok(())
+}
+
+/// `convert` — import a Durdraw `.dur` and write a `.raba`.
+///
+/// Nothing on the boot path reads `.dur`; this is the only place gzip and JSON
+/// appear, and they never leave build time. See `docs/dur-support.md`.
+fn convert_command(args: &[String]) -> Result<(), String> {
+    let mut input: Option<&str> = None;
+    let mut output: Option<PathBuf> = None;
+    let mut allow_unsafe = false;
+    let mut preview = false;
+    let mut index = 0;
+
+    while let Some(arg) = args.get(index) {
+        index = index.saturating_add(1);
+        match arg.as_str() {
+            "--preview" => preview = true,
+            "--allow-unsafe-glyphs" => allow_unsafe = true,
+            "-o" | "--out" => {
+                let value = args.get(index).ok_or("-o needs a path")?;
+                index = index.saturating_add(1);
+                output = Some(PathBuf::from(value));
+            }
+            other if other.starts_with('-') => {
+                return Err(format!("unknown option {other}\n\n{USAGE}"))
+            }
+            other => input = Some(other),
+        }
+    }
+
+    let input = input.ok_or("convert needs a .dur file")?;
+    let bytes = std::fs::read(input).map_err(|e| format!("{input}: {e}"))?;
+    let imported = dur::parse(&bytes).map_err(|e| format!("{input}: {e}"))?;
+
+    for note in &imported.notes {
+        eprintln!("raba-gen: {input}: {note}");
+    }
+    if !imported.name.is_empty() || !imported.artist.is_empty() {
+        eprintln!(
+            "raba-gen: {input}: {:?} by {:?}",
+            imported.name,
+            if imported.artist.is_empty() { "unknown" } else { &imported.artist }
+        );
+    }
+
+    // Imported art gets the same glyph check as art written here. The console does
+    // not care where a character came from.
+    if report_glyphs(&imported.movie) > 0 && !allow_unsafe {
+        return Err(format!(
+            "{input}: the art contains characters a console cannot draw; \
+             pass --allow-unsafe-glyphs if this is for a terminal"
+        ));
+    }
+
+    let movie = &imported.movie;
+
+    // Warned here, where the canvas can still be changed, rather than at boot
+    // where all that can happen is cropping. 80x25 is what raba(8) assumes when
+    // it cannot read the console.
+    let fallback = raba_core::surface::Size::FALLBACK;
+    let canvas = raba_core::surface::Size { columns: movie.columns, lines: movie.lines };
+    if raba_core::render::crops(canvas, fallback) {
+        eprintln!(
+            "raba-gen: {input}: canvas is {}x{}, larger than the {}x{} console \
+             raba(8) assumes when it cannot read the real size; it will be centred \
+             and cropped there (see docs/dur-support.md on size)",
+            movie.columns, movie.lines, fallback.columns, fallback.lines
+        );
+    }
+
+    let bytes_out = raba_core::encode(movie);
+
+    if preview {
+        let mut surface = raba_term::StdoutSurface::new();
+        let _ = raba_term::clear(&mut surface);
+        let played = raba_term::play(&mut surface, movie, PREVIEW_LOOPS);
+        let _ = <raba_term::StdoutSurface as raba_core::surface::Surface>::restore(&mut surface);
+        played.map_err(|e| format!("{input}: {e}"))?;
+        return Ok(());
+    }
+
+    let output = output.unwrap_or_else(|| Path::new(input).with_extension("raba"));
+    std::fs::write(&output, &bytes_out).map_err(|e| format!("{}: {e}", output.display()))?;
+    println!(
+        "{}: {}x{}, {} frames, {} ops, {} bytes",
+        output.display(),
+        movie.columns,
+        movie.lines,
+        movie.frames.len(),
+        movie.ops.len(),
+        bytes_out.len()
     );
     Ok(())
 }

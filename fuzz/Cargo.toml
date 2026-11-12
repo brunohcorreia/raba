@@ -10,6 +10,14 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 raba-core = { path = "../crates/raba-core" }
+raba-gen = { path = "../crates/raba-gen" }
+
+[[bin]]
+name = "dur"
+path = "fuzz_targets/dur.rs"
+test = false
+doc = false
+bench = false
 
 [[bin]]
 name = "parse"

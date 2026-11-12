@@ -5,8 +5,10 @@
 //! unit tested. See `docs/maintenance.md`.
 
 mod ansi;
+pub mod place;
 
 pub use ansi::{to_ansi, to_ansi_into};
+pub use place::{crops, fit, Placement};
 
 use crate::format::{limits, Frame, Movie, Palette};
 

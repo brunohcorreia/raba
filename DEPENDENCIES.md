@@ -55,7 +55,9 @@ longer matches what boot does is worse than no preview.
 **No budget.** It never enters an initramfs and is never on the boot path. A crate that
 breaks here is a build failure someone fixes at leisure, not an unbootable machine.
 
-Expected: `toml`, `serde`, `flate2` and a JSON parser for `.dur` import, `anyhow`.
+Spent: `serde` + `toml` for recipes, `serde_json` + `flate2` for `.dur` import. A `.dur`
+is gzipped JSON, so both of those are the format's requirement rather than a choice;
+neither can reach the boot path, because nothing on it reads `.dur`.
 
 ## Dev-dependencies
 
