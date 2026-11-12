@@ -23,25 +23,33 @@ no root, no VM — plain text in, animation on a screen out.
 | 6 | `raba-core`: grid → ANSI encoder, redraw minimisation, **one write per frame** | done |
 | 7 | `raba-core`: glyph validator against the console-safe set | done |
 | 8 | `raba-gen`: load fastfetch-style text art with `$1`..`$9` colour markers | done |
-| 9 | `raba-gen`: compose logo + spinner, least-common-multiple frame count | |
-| 10 | `raba`: `--preview`, rendering to stdout | |
-| 11 | First theme, and the verdict on the premise | |
+| 9 | `raba-gen`: compose logo + spinner, least-common-multiple frame count | done |
+| 10 | `raba`: `--preview`, rendering to stdout | done |
+| 11 | First theme, and the verdict on the premise | built; verdict pending |
 
 **Done when** `raba --preview themes/cachyos.raba` animates a logo in a terminal, and we
 have looked at it and decided it is worth continuing.
+
+It animates. **The looking is the part that is left**, and it is not something the code
+can do for itself: the tests prove the logo is the right shape, in the right colours,
+made of characters a console can draw. Whether that is *good* is a judgement, and it is
+the judgement the whole milestone exists to collect.
 
 ### Progress
 
 The format is implemented and frozen at version 1, and the renderer turns a grid into
 terminal bytes. `docs/format.md` describes what was built rather than what was sketched.
 
-- 80 tests pass; `clippy` is clean under `-D warnings` with the workspace deny lints
+- 132 tests pass; `clippy` is clean under `-D warnings` with the workspace deny lints
 - the failure table covers 25 shapes of malformed input, each asserting a specific error
 - property tests cover round-trip, determinism, truncation and "arbitrary bytes never
   panic"
 - a `cargo-fuzz` target asserts internal consistency and round-trip, not merely absence
   of panics
-- `raba` release binary: 281 KB against a 512 KB gate
+- `raba` release binary: 310 KB against a 512 KB gate, and still zero dependencies
+- the CachyOS theme is 54x24 in three colours: 15652 bytes, 4 frames, 1299 ops — of
+  which 1296 are frame 0. The animation costs one cell per frame, which is the delta
+  encoding doing the thing it was designed for.
 
 The renderer is checked against a model of a terminal rather than against golden bytes,
 so the property from [development.md](development.md) is stated directly: applying

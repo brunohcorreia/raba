@@ -5,11 +5,39 @@
 ---
 
 > [!WARNING]
-> **Status: pre-alpha. Nothing is implemented yet.**
-> This README describes the intended design, not shipped behaviour. The current task is
-> [M0](docs/milestones.md#m0--see-a-logo-animate), which exists to find out whether ASCII
-> art at console cell size looks good enough to justify the rest.
+> **Status: pre-alpha. There is no boot splash yet.**
+> The format, the renderer and the theme builder work; nothing touches a virtual
+> terminal, an initramfs or your bootloader. This README otherwise describes the
+> intended design rather than shipped behaviour.
 > Do not install this on a machine you need to boot.
+
+---
+
+## Try it
+
+No root, no initramfs, no virtual machine. Everything below runs in an ordinary
+terminal.
+
+```sh
+./scripts/build-themes.sh
+cargo run --release -p raba -- --preview themes/cachyos.raba
+```
+
+That is [M0](docs/milestones.md#m0--see-a-logo-animate): a logo and a spinner,
+animating, so the project's one untested assumption can be looked at rather than
+argued about. If ASCII art at console cell size does not look good enough, that is
+worth finding out for the price of a weekend.
+
+Build a theme from your own art:
+
+```sh
+raba-gen build my-logo.txt -o my-logo.raba --colours 2,10,6 --spinner blocks
+raba-gen check my-logo.raba          # will a console actually draw this?
+raba --preview my-logo.raba --loops 0
+```
+
+Art is plain text with `$1` to `$9` marking colour changes, the format fastfetch
+stores its logos in. `scripts/fastfetch-logo.py arch > themes/arch.txt` pulls one out.
 
 ---
 

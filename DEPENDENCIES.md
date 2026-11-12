@@ -14,6 +14,12 @@ crate here is code that can break a boot on someone else's release schedule.
 |---|---|---|---|
 | `raba-core` | format, layout, rendering | ours | no — it is the program |
 
+**Spent so far: none.** Through M0 the binary is `std` only, including `--preview`.
+The one allowance exists for `TIOCGWINSZ`, `VT_OPENQRY` and the rest of the VT ioctls,
+and until M3 needs them it stays unspent — so `--preview` reads `COLUMNS` and `LINES`
+from the environment and falls back to 80x25 rather than buying a syscall wrapper to
+ask a question it can mostly guess.
+
 Not here, deliberately:
 
 - **no JSON parser** — `.raba` is a fixed binary layout. This is the main reason the

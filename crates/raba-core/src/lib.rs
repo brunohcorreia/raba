@@ -15,5 +15,5 @@ pub mod surface;
 
 pub use format::{decode, encode, DecodeError, Frame, Movie, Op, Palette};
 pub use glyph::{is_safe, Safety};
-pub use render::{to_ansi, to_ansi_into, Cell, Grid};
+pub use render::{apply, to_ansi, to_ansi_into, Cell, Grid};
 pub use surface::{Size, Surface};

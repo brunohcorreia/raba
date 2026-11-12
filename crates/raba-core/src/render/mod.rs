@@ -8,7 +8,22 @@ mod ansi;
 
 pub use ansi::{to_ansi, to_ansi_into};
 
-use crate::format::{limits, Palette};
+use crate::format::{limits, Frame, Movie, Palette};
+
+/// Draw one frame's ops onto a grid.
+///
+/// This is the whole of playback: a movie is a starting canvas and a list of cells to
+/// change, so playing it is applying frames in order to a grid that persists between
+/// them. Frame 0 carries the full canvas, so starting from a blank grid is correct.
+///
+/// Out-of-range ops are skipped rather than panicking. Decoding validates every
+/// `Op::cell` against the canvas, so a decoded movie cannot contain one — but this
+/// runs during boot, where a missing character beats a dead machine.
+pub fn apply(grid: &mut Grid, movie: &Movie, frame: &Frame) {
+    for op in movie.frame_ops(frame) {
+        grid.set_index(op.cell as usize, Cell { ch: op.ch, fg: op.fg, bg: op.bg });
+    }
+}
 
 /// One character cell: what to draw and in what colours.
 ///
@@ -127,7 +142,31 @@ impl Grid {
 
     /// Reset every cell to [`Cell::BLANK`].
     pub fn clear(&mut self) {
-        self.cells.fill(Cell::BLANK);
+        self.fill(Cell::BLANK);
+    }
+
+    /// Set every cell to `cell`. How a theme gets a background other than black.
+    pub fn fill(&mut self, cell: Cell) {
+        self.cells.fill(cell);
+    }
+
+    /// Draw `other` onto this grid with its top left at `column`, `line`.
+    ///
+    /// Cells that fall outside are dropped rather than wrapping to the next row,
+    /// which is what makes this safe to use for laying out a logo on a canvas
+    /// without first working out whether it fits.
+    pub fn blit(&mut self, other: &Grid, column: u16, line: u16) {
+        for source_line in 0..other.lines() {
+            for source_column in 0..other.columns() {
+                let Some(cell) = other.get(source_column, source_line) else { continue };
+                let (Some(target_column), Some(target_line)) =
+                    (column.checked_add(source_column), line.checked_add(source_line))
+                else {
+                    continue;
+                };
+                self.set(target_column, target_line, *cell);
+            }
+        }
     }
 
     fn index_of(&self, column: u16, line: u16) -> Option<usize> {

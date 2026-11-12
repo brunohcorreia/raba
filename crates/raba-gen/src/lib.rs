@@ -5,3 +5,5 @@
 //! one the boot path will never have to survive. See `docs/maintenance.md`.
 
 pub mod art;
+pub mod build;
+pub mod compose;
