@@ -22,7 +22,7 @@ no root, no VM — plain text in, animation on a screen out.
 | 5 | `raba-core`: `Surface` trait and `BufferSurface` for tests | done |
 | 6 | `raba-core`: grid → ANSI encoder, redraw minimisation, **one write per frame** | done |
 | 7 | `raba-core`: glyph validator against the console-safe set | done |
-| 8 | `raba-gen`: load fastfetch-style text art with `$1`..`$9` colour markers | |
+| 8 | `raba-gen`: load fastfetch-style text art with `$1`..`$9` colour markers | done |
 | 9 | `raba-gen`: compose logo + spinner, least-common-multiple frame count | |
 | 10 | `raba`: `--preview`, rendering to stdout | |
 | 11 | First theme, and the verdict on the premise | |

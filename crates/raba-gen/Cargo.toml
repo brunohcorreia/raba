@@ -7,6 +7,10 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[lib]
+name = "raba_gen"
+path = "src/lib.rs"
+
 [[bin]]
 name = "raba-gen"
 path = "src/main.rs"
