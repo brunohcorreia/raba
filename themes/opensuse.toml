@@ -1,0 +1,15 @@
+# opensuse. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+
+[logo]
+source = "file:opensuse.txt"
+colors = [10, 15]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 10
+
+[canvas]
+framerate = 8

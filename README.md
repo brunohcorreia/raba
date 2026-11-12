@@ -20,8 +20,13 @@ terminal.
 
 ```sh
 ./scripts/build-themes.sh
-cargo run --release -p raba -- --preview themes/cachyos.raba
+cargo run --release -p raba -- --preview themes/arch.raba
 ```
+
+Eleven themes are included — Arch, CachyOS, Debian, Fedora, Ubuntu, Void, Gentoo,
+Alpine, openSUSE, NixOS and Linux Mint — with the art and colours taken from
+fastfetch. [themes/README.md](themes/README.md) is how you add another, and it needs
+no Rust.
 
 That is [M0](docs/milestones.md#m0--see-a-logo-animate): a logo and a spinner,
 animating, so the project's one untested assumption can be looked at rather than

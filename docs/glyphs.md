@@ -46,10 +46,15 @@ than in the default.
 
 **Quadrant and sextant blocks.** `▘▝▖▗` and the Symbols for Legacy Computing block are
 what terminal art tools reach for to get sub-cell resolution. The full blocks `█▀▄▌▐` are
-CP437 and safe; the quadrants are not CP437 and are not safe. Sextants were added to
-Unicode in 2019 and need a terminal like kitty or Ghostty — see
-[3d-logos.md](3d-logos.md), where this decides which shading modes could ever work at
-boot.
+CP437 and safe; the quadrants sitting beside them in Unicode are not. Sextants were added
+in 2019 and need a terminal like kitty or Ghostty — see [3d-logos.md](3d-logos.md), where
+this decides which shading modes could ever work at boot.
+
+This is not hypothetical. **Several fastfetch logos are drawn this way and cannot be used
+at boot at all.** NixOS is the example: its current logo is quadrants, `nixos_small` is
+sextants, and on a console both arrive as a logo full of holes. The fix is to find the
+distribution's ASCII variant — `NixOS2`, in that case — which is what
+[themes/README.md](../themes/README.md) tells a contributor to look for first.
 
 ## Why an unsafe glyph is a warning and a bad colour is an error
 

@@ -85,7 +85,7 @@ Makes themes contributable by someone who does not write Rust.
 | 5 | Vendor fastfetch logo art at a pinned commit | |
 | 6 | `--list-logos`, `raba-gen --preview` | |
 | 7 | Golden render tests | |
-| 8 | Themes for the first ten distributions | |
+| 8 | Themes for the first ten distributions | done |
 
 ### Progress
 
@@ -114,6 +114,19 @@ Colour fitting is automatic rather than a flag, which is what the page promises:
 index above 15 in a 16-colour theme is an xterm colour the author drew in, and the
 console's nearest equivalent is a better answer than an error. Every substitution is
 reported, so a typo still surfaces.
+
+Eleven themes ship, from 27x19 to 54x24. Their colours are extracted from fastfetch
+rather than chosen: the extractor renders each logo twice, once with the colour slots
+forced to known values to recover the `$1`..`$9` markers and once untouched to recover
+the real colours, then pairs them by position.
+
+Two things only came out of running it on real art. The Debian logo is made of dollar
+signs, which have to be escaped as `$$` or the art will not parse. And **several
+fastfetch logos cannot be used at boot at all** — NixOS's is quadrant blocks and
+`nixos_small` is sextants, so neither renders on a console; this repository ships the
+ASCII `NixOS2` variant instead. The glyph validator refused the build rather than
+shipping a logo full of holes, which is three times now that it has caught something
+reading would not have.
 
 ---
 

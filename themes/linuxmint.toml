@@ -1,0 +1,19 @@
+# linuxmint. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+#
+# Hand edit: the extracted art used U+00B4 ACUTE ACCENT, which is Latin-1 and may
+# vanish when setfont loads a font without it. Replaced with ASCII "'", which is the
+# same shape at 8x16. Regenerating with scripts/fastfetch-logo.py undoes this.
+
+[logo]
+source = "file:linuxmint.txt"
+colors = [10, 15]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 10
+
+[canvas]
+framerate = 8
