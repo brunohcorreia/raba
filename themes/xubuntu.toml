@@ -1,0 +1,16 @@
+# xubuntu. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'Xubuntu'.
+
+[logo]
+source = "file:xubuntu.txt"
+colors = [7, 15]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 7
+
+[canvas]
+framerate = 8

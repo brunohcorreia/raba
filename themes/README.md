@@ -17,29 +17,60 @@ raba --preview themes/arch.raba --loops 0
 
 ## What ships, and why these
 
-Thirty-three, chosen by evidence of user numbers rather than by taste. There is no
-authoritative count of users per distribution, so this blends the three populations
-that actually get measured:
+Fifty. There is no authoritative count of users per distribution, so the set is drawn
+from four sources that measure different populations and disagree with each other in
+useful ways:
 
 | source | what it measures | leaders |
 |---|---|---|
 | [Steam hardware survey](https://store.steampowered.com/hwsurvey?platform=linux), Oct 2026 | Linux gamers who opted in | CachyOS 16.4%, SteamOS Holo 13.9%, Arch 8.9%, Mint 8.4%, Bazzite 6.7% |
 | Stack Overflow developer survey 2025 | developers | Ubuntu 27.8%, Debian 11.4%, then Fedora and Arch |
 | W3Techs | web servers | Ubuntu, Debian, CentOS, RHEL and its rebuilds |
+| [distro.watch/rankings](https://distro.watch/rankings), 7 Nov 2026 | search and encyclopedia attention, 51 distributions | Ubuntu 43%, Debian 12%, Mint 10%, Arch 7.2%, Kali 7.2%, CachyOS 4.9% |
 
-DistroWatch page hits are deliberately not used: they measure interest, not installs,
-and a distribution can sit at the top of them for a year without a corresponding user
-base.
+The last one is the widest and the only one that covers the long tail, because it is
+the only one that does not need a distribution to be big enough to show up in a survey
+sample. It is built from Google Trends and Wikipedia pageviews, which makes it a
+measure of attention rather than installs — but attention is what decides whether
+somebody goes looking for a theme, and a distribution nobody searches for is a
+distribution nobody will miss here.
+
+Two sources were tried and are not used, for reasons worth recording so nobody repeats
+the work:
+
+**Reddit subscriber counts** cannot be had. Reddit blocks unauthenticated access to
+`/r/<name>/about.json`, and the third-party aggregators that republish the numbers
+disagree by more than fifty per cent on the same subreddit — r/archlinux shows up as
+226K, 285K and 344K across three of them, with only one carrying a date. A number that
+imprecise cannot order anything.
+
+**DistroWatch page hits** are a leading indicator rather than a user count, and the
+earlier version of this file dismissed them too flatly. They are the measure that put
+CachyOS at the top roughly a year before the Steam survey did, so they do carry real
+signal about where attention is heading. They are still not install counts, and
+DistroWatch says so itself. Treat them as an early warning about what to add next, not
+as a ranking.
 
 The enterprise four — RHEL, CentOS, Rocky, AlmaLinux — are here for the server side,
 where a splash matters less but the install base is large. Raspberry Pi OS is here for
-a hardware population nothing else counts.
+a hardware population nothing else counts. The Ubuntu flavours — Kubuntu, Lubuntu,
+Xubuntu — are separate entries because they have separate logos and separate
+identities, whatever the package archive says.
 
-### Two that are missing
+### What the widest source caught
 
-**Bazzite** is 6.7% of Linux Steam users and fastfetch has no logo for it. **Nobara**
-has one, drawn in braille, which no console font has. Both need art drawn by hand
-rather than extracted. That is a contained job that needs no Rust.
+Checking the set against all 51 ranked distributions found a hole that the survey-based
+sources could not: **Omarchy** sits ninth worldwide by search share, ahead of Zorin,
+NixOS, Manjaro and Pop!_OS, all four of which already shipped. It is young enough that
+no survey has sampled it yet. **Tails**, **Qubes OS**, **antiX** and **Puppy Linux**
+were the same kind of miss further down.
+
+### Two that are still missing
+
+**Bazzite** is 6.7% of Linux Steam users and eighth worldwide by search share, and
+fastfetch has no logo for it. **Nobara** has one, drawn in braille, which no console
+font has. Both need art drawn by hand rather than extracted. That is a contained job
+that needs no Rust.
 
 ## Adding a distribution
 

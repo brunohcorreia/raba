@@ -85,7 +85,7 @@ Makes themes contributable by someone who does not write Rust.
 | 5 | Vendor fastfetch logo art at a pinned commit | |
 | 6 | `--list-logos`, `raba-gen --preview` | |
 | 7 | Golden render tests | |
-| 8 | Themes for the most-used distributions | done — 33 |
+| 8 | Themes for the most-used distributions | done — 50 |
 
 ### Progress
 
@@ -115,10 +115,11 @@ index above 15 in a 16-colour theme is an xterm colour the author drew in, and t
 console's nearest equivalent is a better answer than an error. Every substitution is
 reported, so a typo still surfaces.
 
-Thirty-three themes ship, from 27x19 to 54x24, chosen by evidence of user numbers
-across the three populations that get measured — the Steam hardware survey for gamers,
-the Stack Overflow survey for developers, W3Techs for servers. DistroWatch page hits
-are deliberately not used: they measure interest, not installs. Their colours are extracted from fastfetch
+Fifty themes ship, chosen by evidence across four sources that measure different
+populations — the Steam hardware survey for gamers, the Stack Overflow survey for
+developers, W3Techs for servers, and distro.watch's Google Trends and Wikipedia
+ranking for the long tail. themes/README.md records why Reddit subscriber counts and
+DistroWatch page hits are not among them. Their colours are extracted from fastfetch
 rather than chosen: the extractor renders each logo twice, once with the colour slots
 forced to known values to recover the `$1`..`$9` markers and once untouched to recover
 the real colours, then pairs them by position.
@@ -142,6 +143,21 @@ matches.
 
 Bazzite and Nobara are the two notable absences: Bazzite has no fastfetch logo at all,
 and Nobara's is braille. Both need art drawn by hand.
+
+Widening the search to all 51 distributions distro.watch ranks found a hole the
+survey-based sources structurally could not. **Omarchy** is ninth worldwide by search
+share, ahead of Zorin, NixOS, Manjaro and Pop!_OS, all four of which had already
+shipped; it is new enough that no survey has sampled it. Tails, Qubes OS, antiX and
+Puppy Linux were the same kind of miss. Seventeen themes came out of that pass, all
+seventeen building with no glyph complaints except Mageia, whose cauldron bubbles were
+U+00B0 — the same character Garuda used, hand-edited to "o" the same way.
+
+Reddit was tried as a fifth source and abandoned. Reddit blocks unauthenticated access
+to the subscriber API, and the aggregators that republish the figures disagree by over
+fifty per cent on the same subreddit — r/archlinux appears as 226K, 285K and 344K
+across three of them. DistroWatch blocks automated access too, and is a measure of
+attention rather than installs; it is worth watching as an early signal, since it
+flagged CachyOS about a year before the Steam survey did.
 
 ---
 

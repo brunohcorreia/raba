@@ -23,11 +23,11 @@ terminal.
 cargo run --release -p raba -- --preview themes/arch.raba
 ```
 
-Thirty-three themes are included, covering the most-used distributions across desktop,
-server and gaming — Ubuntu, Debian, Mint, Fedora, Arch, CachyOS, SteamOS, Pop!_OS,
-Manjaro, Kali, RHEL and its rebuilds, Raspberry Pi OS and the rest. Art and colours are
-taken from fastfetch. [themes/README.md](themes/README.md) says how they were chosen
-and how to add another, which needs no Rust.
+Fifty themes are included, covering the most-used distributions across desktop, server
+and gaming — Ubuntu, Debian, Mint, Fedora, Arch, CachyOS, SteamOS, Omarchy, Kali,
+Tails, Qubes, Pop!_OS, Manjaro, RHEL and its rebuilds, Raspberry Pi OS and the rest.
+Art and colours are taken from fastfetch. [themes/README.md](themes/README.md) says how
+they were chosen and how to add another, which needs no Rust.
 
 That is [M0](docs/milestones.md#m0--see-a-logo-animate): a logo and a spinner,
 animating, so the project's one untested assumption can be looked at rather than

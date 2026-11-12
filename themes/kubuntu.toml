@@ -1,0 +1,16 @@
+# kubuntu. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'Kubuntu'.
+
+[logo]
+source = "file:kubuntu.txt"
+colors = [12, 15]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 12
+
+[canvas]
+framerate = 8

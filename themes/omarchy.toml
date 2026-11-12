@@ -1,0 +1,17 @@
+# omarchy. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'Omarchy'.
+
+[logo]
+source = "file:omarchy.txt"
+colors = []
+default_color = 7
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 7
+
+[canvas]
+framerate = 8

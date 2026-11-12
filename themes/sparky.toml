@@ -1,0 +1,16 @@
+# sparky. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'Sparky'.
+
+[logo]
+source = "file:sparky.txt"
+colors = [9]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 9
+
+[canvas]
+framerate = 8

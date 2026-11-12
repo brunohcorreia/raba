@@ -1,0 +1,20 @@
+# mageia. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# Hand edit: the extracted art used U+00B0 DEGREE SIGN for the bubbles rising
+# out of the cauldron, which is in the kernel's built-in font and missing from
+# some that replace it. Replaced with ASCII "o", which keeps the round shape.
+# Regenerating with scripts/fastfetch-logo.py undoes this.
+# fastfetch calls this logo 'Mageia'.
+
+[logo]
+source = "file:mageia.txt"
+colors = [14, 15]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 14
+
+[canvas]
+framerate = 8

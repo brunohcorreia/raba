@@ -1,0 +1,16 @@
+# bodhi. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'Bodhi'.
+
+[logo]
+source = "file:bodhi.txt"
+colors = [15, 11, 10]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 15
+
+[canvas]
+framerate = 8
