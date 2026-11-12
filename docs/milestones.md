@@ -20,7 +20,7 @@ no root, no VM — plain text in, animation on a screen out.
 | 3 | `raba-core`: decoder with bounded validation, bytes → `Movie` | done |
 | 4 | **The failure table** — every malformed input, exit 0, no panic | done |
 | 5 | `raba-core`: `Surface` trait and `BufferSurface` for tests | |
-| 6 | `raba-core`: grid → ANSI encoder with redraw minimisation |
+| 6 | `raba-core`: grid → ANSI encoder, redraw minimisation, **one write per frame** |
 | 7 | `raba-core`: glyph validator against the console-safe set |
 | 8 | `raba-gen`: load fastfetch-style text art with `$1`..`$9` colour markers |
 | 9 | `raba-gen`: compose logo + spinner, least-common-multiple frame count |
@@ -122,5 +122,15 @@ this is written.**
 ## Not scheduled
 
 Deliberately unplanned until something justifies them: DRM backend, Esc-to-show-details,
-bootloader first-frame image, `.raba` v2 with wider colour, Level 2 LUKS (collecting the
-passphrase — see [luks.md](luks.md) for why this is probably never).
+bootloader first-frame image, Level 2 LUKS (collecting the passphrase — see
+[luks.md](luks.md) for why this is probably never).
+
+**[3D rotating logos](3d-logos.md)** — fits the architecture as a `raba-gen` feature,
+because the mathematics happens at build time and the boot binary keeps playing
+pre-rendered frames. The open question is not whether it works but whether it suits a
+sequence whose job is to get out of the way. Prototype with `--preview` before committing.
+
+**`.raba` v2 with dense frames** — ops carry an explicit cell index, which a full-canvas
+frame does not need. Would nearly halve the cost of 3D rotation, where delta encoding
+contributes nothing. The trigger is 3D logos turning out to be wanted, not the idea being
+available.
