@@ -45,3 +45,6 @@
 # Local overrides
 /.env
 /local/
+
+# cargo-fuzz keeps its own lockfile
+/fuzz/Cargo.lock
