@@ -73,19 +73,13 @@ The format permits any UTF-8. The Linux console does not.
 The console holds 256 or 512 glyphs, inherited from VGA hardware. Characters outside
 the loaded font are replaced and the original codepoint is discarded by the kernel.
 
-| | |
-|---|---|
-| safe | ASCII `0x20`–`0x7E` |
-| safe | CP437 blocks `█ ▀ ▄ ▌ ▐ ░ ▒ ▓` |
-| safe | box drawing `─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼` |
-| unreliable | accented Latin-1 |
-| unsafe | Braille `⠋ ⠙ ⠹`, arrows, mathematical symbols, emoji |
+Safe is ASCII, the CP437 block elements and box drawing. Braille, the quadrant blocks
+and emoji are not. Accented Latin and CP437's Greek and mathematics are a third case —
+they work until `setfont` runs.
 
-Braille is the common surprise: at 256 codepoints it would consume half the glyph
-budget, which is why distributions ship it as a separate console font package.
-
-`raba-gen` validates this and refuses to build a theme that would fail. Check an
-existing file:
+**[glyphs.md](glyphs.md) has the rule and the reasoning.** Importing a `.dur` runs the
+same validator as building a theme from scratch, because the console does not care where
+the art came from.
 
 ```sh
 raba-gen --check theme.dur

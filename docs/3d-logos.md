@@ -47,7 +47,7 @@ art made of uniform characters does not come out flat.
 
 ## What the console allows
 
-The glyph ceiling from [format.md](format.md) decides which of its three shading modes can
+The glyph rule from [glyphs.md](glyphs.md) decides which of its three shading modes can
 survive a boot — and this is a good test of that validator, since the answer is not
 uniform:
 
@@ -60,8 +60,9 @@ uniform:
 Sextants are a 2019 Unicode addition. `fetch`'s own README says they need kitty, Ghostty,
 foot or WezTerm — none of which is a Linux virtual console. They would render as blanks.
 
-`raba-gen`'s glyph validator already rejects this, which is the first external confirmation
-that the check earns its place.
+`raba-gen`'s glyph validator already rejects all three sub-cell sets, which is the first
+external confirmation that the check earns its place — the full blocks `█▀▄▌▐` are CP437
+and safe, the quadrants right beside them in Unicode are not.
 
 The ASCII ramp is the one that matters, and it is also the original donut.c look.
 

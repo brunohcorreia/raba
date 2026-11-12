@@ -17,6 +17,7 @@
 mod terminal;
 
 use proptest::prelude::*;
+use raba_core::glyph::{is_safe, safety, Safety};
 use raba_core::render::to_ansi;
 use raba_core::{Cell, Grid, Palette};
 use terminal::Terminal;
@@ -110,6 +111,31 @@ proptest! {
         direct.apply(&to_ansi(after, Some(before)));
 
         prop_assert_eq!(stepwise.into_screen(), direct.into_screen());
+    }
+
+    /// The renderer changes a character if and only if it is a control character.
+    ///
+    /// This is the seam between the glyph validator and the renderer, and it is the
+    /// claim that makes substitution safe to rely on: the escape-injection defence
+    /// cannot be quietly mangling ordinary art as a side effect.
+    #[test]
+    fn only_control_characters_are_substituted(ch in any::<char>()) {
+        let mut after = Grid::new(1, 1, Palette::Ansi16).unwrap();
+        after.set(0, 0, Cell { ch, fg: 7, bg: 0 });
+
+        let mut terminal = Terminal::blank(1, 1, Palette::Ansi16);
+        terminal.apply(&to_ansi(&after, None));
+        let shown = terminal.into_screen().cell(0).unwrap().ch;
+
+        let is_control = matches!(ch, '\u{0}'..='\u{1f}' | '\u{7f}'..='\u{9f}');
+        prop_assert_eq!(shown, if is_control { ' ' } else { ch });
+        // And nothing the validator calls safe is ever a control character, so a
+        // theme that passes `--check` is never silently rewritten.
+        prop_assert!(!(is_safe(ch) && is_control));
+        // And below U+00A0 the only unsafe characters are the controls: everything
+        // else down there is printable ASCII. So substitution and the validator's
+        // verdict agree exactly over the range where substitution can happen.
+        prop_assert_eq!(is_control, (ch as u32) < 0xa0 && safety(ch) == Safety::Unsafe);
     }
 
     /// Nothing but ESC-introduced sequences and printable text leaves this module,

@@ -21,7 +21,7 @@ no root, no VM — plain text in, animation on a screen out.
 | 4 | **The failure table** — every malformed input, exit 0, no panic | done |
 | 5 | `raba-core`: `Surface` trait and `BufferSurface` for tests | done |
 | 6 | `raba-core`: grid → ANSI encoder, redraw minimisation, **one write per frame** | done |
-| 7 | `raba-core`: glyph validator against the console-safe set | |
+| 7 | `raba-core`: glyph validator against the console-safe set | done |
 | 8 | `raba-gen`: load fastfetch-style text art with `$1`..`$9` colour markers | |
 | 9 | `raba-gen`: compose logo + spinner, least-common-multiple frame count | |
 | 10 | `raba`: `--preview`, rendering to stdout | |
@@ -35,7 +35,7 @@ have looked at it and decided it is worth continuing.
 The format is implemented and frozen at version 1, and the renderer turns a grid into
 terminal bytes. `docs/format.md` describes what was built rather than what was sketched.
 
-- 65 tests pass; `clippy` is clean under `-D warnings` with the workspace deny lints
+- 80 tests pass; `clippy` is clean under `-D warnings` with the workspace deny lints
 - the failure table covers 25 shapes of malformed input, each asserting a specific error
 - property tests cover round-trip, determinism, truncation and "arbitrary bytes never
   panic"
@@ -54,6 +54,13 @@ That property immediately found something the format work had missed: nothing va
 a colour index against the declared palette, so a 16-colour movie could carry index 200
 and the renderer would silently show a different colour. The decoder now rejects it —
 see [format.md](format.md) on why rejection rather than clamping.
+
+The glyph validator reports three levels rather than a verdict, and the reasoning is in
+[glyphs.md](glyphs.md): RABA draws before anyone knows which console font is loaded, so
+safe can only mean the intersection of the kernel's built-in CP437 and the fonts a
+distribution loads over it. A property ties it to the renderer — a character is
+substituted if and only if it is a control character — so the escape-injection defence is
+provably not mangling ordinary art as a side effect.
 
 ---
 

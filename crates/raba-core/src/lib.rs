@@ -9,9 +9,11 @@
 //! enough to review line by line.
 
 pub mod format;
+pub mod glyph;
 pub mod render;
 pub mod surface;
 
 pub use format::{decode, encode, DecodeError, Frame, Movie, Op, Palette};
+pub use glyph::{is_safe, Safety};
 pub use render::{to_ansi, to_ansi_into, Cell, Grid};
 pub use surface::{Size, Surface};

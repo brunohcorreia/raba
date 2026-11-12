@@ -115,12 +115,17 @@ VGA hardware. Characters outside the loaded console font are replaced, and the k
 discards the original codepoint.
 
 Safe: ASCII, CP437 block elements (`█ ▀ ▄ ░ ▒ ▓`), box-drawing characters.
-Not safe: Braille (`⠋⠙⠹`), arrows, mathematical symbols, emoji.
+Not safe: braille (`⠋⠙⠹`), the quadrant blocks (`▘▝▖▗`), arrows, emoji.
+
+In between: accented letters and CP437's Greek and mathematics. These draw with the
+kernel's built-in font and may disappear when `setfont` loads a replacement — which is
+why art can look correct for the first second of boot and wrong afterwards. See
+[glyphs.md](glyphs.md).
 
 Check a theme:
 
 ```sh
-raba-gen --check /usr/share/raba/themes/yours.dur
+raba-gen --check /usr/share/raba/themes/yours.raba
 ```
 
 If you built the theme with `--allow-unsafe-glyphs`, this is why. Rebuild without it.
