@@ -1,0 +1,16 @@
+# centos. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'CentOS'.
+
+[logo]
+source = "file:centos.txt"
+colors = [11, 10, 12, 13]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 11
+
+[canvas]
+framerate = 8

@@ -1,0 +1,16 @@
+# devuan. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'Devuan'.
+
+[logo]
+source = "file:devuan.txt"
+colors = [13]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 13
+
+[canvas]
+framerate = 8

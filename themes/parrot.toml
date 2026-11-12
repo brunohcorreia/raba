@@ -1,0 +1,17 @@
+# parrot. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'Parrot'.
+
+[logo]
+source = "file:parrot.txt"
+colors = [14]
+
+# The art is 24 lines, so a spinner below it would not fit 25.
+[spinner]
+style = "ascii"
+position = "right"
+gap = 1
+color = 14
+
+[canvas]
+framerate = 8

@@ -33,6 +33,32 @@ from pathlib import Path
 SGR = re.compile(r"\x1b\[([0-9;]*)m")
 
 
+def known_logos() -> set:
+    """Every logo name fastfetch has, lowercased."""
+    listing = subprocess.run(["fastfetch", "--list-logos"],
+                             capture_output=True, text=True, check=True).stdout
+    return {name.lower() for name in re.findall(r'"([^"]+)"', listing)}
+
+
+def check_known(name: str) -> None:
+    """Refuse a name fastfetch does not have.
+
+    Asking for a logo that does not exist does not fail: fastfetch falls back to the
+    logo of the distribution it detects. So a typo, or a distribution it has never
+    heard of, silently produces *this machine's* logo under the wrong name --
+    `bazzite` yields a CachyOS logo on a CachyOS box, and nothing says so.
+    """
+    known = known_logos()
+    if name.lower() in known:
+        return
+    near = sorted(n for n in known if name.lower()[:4] in n)[:6]
+    hint = f"; did you mean {', '.join(near)}?" if near else ""
+    raise SystemExit(
+        f"fastfetch has no logo called {name!r}{hint}\n"
+        f"Without this check it would have fallen back to this machine's own logo."
+    )
+
+
 def render(name: str, overrides: bool) -> str:
     args = ["fastfetch", "-l", name, "--pipe", "false", "-s", "break",
             "--logo-padding-left", "0", "--logo-padding-top", "0"]
@@ -92,6 +118,11 @@ class Colour:
                 value = int(param)
                 if 30 <= value <= 37:
                     base = value - 30
+                elif value == 39:
+                    # Default foreground. A logo drawn in it is not uncoloured -- on
+                    # a console the default is light grey, and bolded it is white,
+                    # which is what MX and elementary actually look like.
+                    base = 7
                 elif 90 <= value <= 97:
                     base = value - 90 + 8
         if base is None:
@@ -100,6 +131,7 @@ class Colour:
 
 
 def extract(name: str):
+    check_known(name)
     marked = render(name, overrides=True).split("\n")
     plain = render(name, overrides=False).split("\n")
     colour = Colour()
@@ -134,11 +166,35 @@ def extract(name: str):
 
     highest = max(slot_colours) if slot_colours else 0
     colours = [slot_colours.get(n, 7) for n in range(1, highest + 1)]
-    return "\n".join(lines) + "\n", colours
+
+    # A logo with no `$n` markers at all is drawn entirely in one colour, and every
+    # cell lands in slot 0. Without this the art would come out in the default grey
+    # instead of the distribution's colour, which is wrong and not obviously wrong.
+    default = 7
+    if not colours:
+        single = Colour()
+        seen = [value for line in plain for _, value in runs(line, single)]
+        if seen:
+            default = max(set(seen), key=seen.count)
+    return "\n".join(lines) + "\n", colours, default
 
 
-def recipe(name: str, colours, source: str) -> str:
+# The size raba(8) assumes when it cannot read the console. A theme that does not fit
+# it is clipped on exactly the machines least able to say why.
+FALLBACK_LINES = 25
+
+
+def recipe(name: str, colours, default: int, source: str, lines: int) -> str:
     listed = ", ".join(str(c) for c in colours)
+    uncoloured = "" if colours else f"default_color = {default}\n"
+    # A tall logo plus a gap plus a spinner line can overflow an 80x25 console. Put
+    # the spinner beside the art instead, where it costs a column and no lines.
+    beside = lines + 2 > FALLBACK_LINES
+    position = "right" if beside else "below"
+    why = (
+        f"# The art is {lines} lines, so a spinner below it would not fit {FALLBACK_LINES}.\n"
+        if beside else ""
+    )
     note = "" if source == name else f"# fastfetch calls this logo {source!r}.\n"
     return f"""\
 # {name}. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
@@ -147,12 +203,12 @@ def recipe(name: str, colours, source: str) -> str:
 [logo]
 source = "file:{name}.txt"
 colors = [{listed}]
-
-[spinner]
+{uncoloured}
+{why}[spinner]
 style = "ascii"
-position = "below"
+position = "{position}"
 gap = 1
-color = {colours[0] if colours else 7}
+color = {colours[0] if colours else default}
 
 [canvas]
 framerate = 8
@@ -163,7 +219,7 @@ if __name__ == "__main__":
     if len(sys.argv) not in (2, 3, 4):
         raise SystemExit(__doc__)
     source = sys.argv[1]
-    logo, colours = extract(source)
+    logo, colours, default = extract(source)
     if len(sys.argv) == 2:
         sys.stdout.write(logo)
     else:
@@ -171,6 +227,7 @@ if __name__ == "__main__":
         directory = Path(sys.argv[2])
         directory.mkdir(parents=True, exist_ok=True)
         (directory / f"{name}.txt").write_text(logo)
-        (directory / f"{name}.toml").write_text(recipe(name, colours, source))
+        (directory / f"{name}.toml").write_text(
+            recipe(name, colours, default, source, logo.count(chr(10))))
         width = max((len(line) for line in logo.split("\n")), default=0)
-        print(f"{name}: colors = {colours}, about {width}x{logo.count(chr(10))}")
+        print(f"{name}: colors = {colours or [default]}, about {width}x{logo.count(chr(10))}")

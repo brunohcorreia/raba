@@ -85,7 +85,7 @@ Makes themes contributable by someone who does not write Rust.
 | 5 | Vendor fastfetch logo art at a pinned commit | |
 | 6 | `--list-logos`, `raba-gen --preview` | |
 | 7 | Golden render tests | |
-| 8 | Themes for the first ten distributions | done |
+| 8 | Themes for the most-used distributions | done — 33 |
 
 ### Progress
 
@@ -115,7 +115,10 @@ index above 15 in a 16-colour theme is an xterm colour the author drew in, and t
 console's nearest equivalent is a better answer than an error. Every substitution is
 reported, so a typo still surfaces.
 
-Eleven themes ship, from 27x19 to 54x24. Their colours are extracted from fastfetch
+Thirty-three themes ship, from 27x19 to 54x24, chosen by evidence of user numbers
+across the three populations that get measured — the Steam hardware survey for gamers,
+the Stack Overflow survey for developers, W3Techs for servers. DistroWatch page hits
+are deliberately not used: they measure interest, not installs. Their colours are extracted from fastfetch
 rather than chosen: the extractor renders each logo twice, once with the colour slots
 forced to known values to recover the `$1`..`$9` markers and once untouched to recover
 the real colours, then pairs them by position.
@@ -127,6 +130,18 @@ fastfetch logos cannot be used at boot at all** — NixOS's is quadrant blocks a
 ASCII `NixOS2` variant instead. The glyph validator refused the build rather than
 shipping a logo full of holes, which is three times now that it has caught something
 reading would not have.
+
+Two more found while widening the set. `ESC[39m` is "default foreground", and a logo
+drawn in it is not uncoloured — on a console the default is grey and bolded it is
+white, which is what MX and elementary actually look like; reading it as "no colour"
+shipped them grey. And asking fastfetch for a logo it does not have **does not fail**:
+it falls back to the logo of the distribution running the command, so
+`fastfetch-logo.py bazzite` on a CachyOS machine would have written a CachyOS logo into
+`bazzite.txt` in silence. The extractor now refuses an unknown name and suggests near
+matches.
+
+Bazzite and Nobara are the two notable absences: Bazzite has no fastfetch logo at all,
+and Nobara's is braille. Both need art drawn by hand.
 
 ---
 

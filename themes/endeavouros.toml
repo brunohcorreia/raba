@@ -1,0 +1,16 @@
+# endeavouros. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'EndeavourOS'.
+
+[logo]
+source = "file:endeavouros.txt"
+colors = [13, 9, 12]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 13
+
+[canvas]
+framerate = 8

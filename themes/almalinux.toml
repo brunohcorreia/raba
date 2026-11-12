@@ -1,0 +1,16 @@
+# almalinux. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'Almalinux'.
+
+[logo]
+source = "file:almalinux.txt"
+colors = [9, 11, 12, 10, 14]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 9
+
+[canvas]
+framerate = 8

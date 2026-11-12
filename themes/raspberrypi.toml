@@ -1,0 +1,16 @@
+# raspberrypi. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'raspbian'.
+
+[logo]
+source = "file:raspberrypi.txt"
+colors = [9, 10]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 9
+
+[canvas]
+framerate = 8

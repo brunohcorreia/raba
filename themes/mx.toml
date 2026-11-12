@@ -1,0 +1,16 @@
+# mx. Art and colours extracted from fastfetch; see scripts/fastfetch-logo.py.
+# Distribution logos are trademarks of their respective projects.
+# fastfetch calls this logo 'MX'.
+
+[logo]
+source = "file:mx.txt"
+colors = [15]
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 15
+
+[canvas]
+framerate = 8
