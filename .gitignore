@@ -1,0 +1,47 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo.lock IS committed — this produces binaries, not a library.
+
+# Fuzzing
+/fuzz/target/
+/fuzz/artifacts/
+/fuzz/coverage/
+
+# Generated animations — themes are built from recipes in themes/*.toml
+*.raba
+!tests/fixtures/**/*.raba
+
+# Generated man pages — sources are man/*.scd
+/man/*.1
+/man/*.5
+/man/*.8
+!/man/*.scd
+
+# Test environment
+*.qcow2
+*.img
+!tests/vm/**/*.img.sha256
+*.ppm
+/tests/vm/images/
+/tests/vm/work/
+
+# Build and packaging output
+*.pkg.tar.*
+/pkg/
+/src/
+!/crates/*/src/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Local overrides
+/.env
+/local/

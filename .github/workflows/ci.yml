@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  check:
+    name: fmt, clippy, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets
+      - run: cargo test --workspace
+
+  msrv:
+    name: minimum supported rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace
+
+  deny:
+    name: licences and advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  size:
+    name: binary size gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: build and measure
+        run: |
+          cargo build --release --target x86_64-unknown-linux-musl -p raba
+          SIZE=$(stat -c%s target/x86_64-unknown-linux-musl/release/raba)
+          LIMIT=$(cat .binary-size-limit)
+          echo "raba: $SIZE bytes (limit $LIMIT)"
+          echo "### \`raba\`: $SIZE bytes (limit $LIMIT)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$SIZE" -gt "$LIMIT" ]; then
+            echo "::error::binary size $SIZE exceeds limit $LIMIT."
+            echo "This is a gate, not a metric. Either justify the growth and raise"
+            echo ".binary-size-limit in the same commit, or reduce the binary."
+            exit 1
+          fi

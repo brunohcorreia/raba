@@ -1,0 +1,18 @@
+[package]
+name = "raba-core"
+description = "Pure core: .raba format, layout, compositing, rendering. No I/O."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Dependency budget: ZERO. This crate is pure data transformation and is linked
+# into the boot binary. See docs/maintenance.md.
+[dependencies]
+
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true

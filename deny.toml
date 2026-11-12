@@ -1,0 +1,22 @@
+# cargo-deny. See docs/maintenance.md — the dependency budget is enforced here.
+
+[advisories]
+yanked = "deny"
+
+[licenses]
+allow = ["GPL-3.0", "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Unicode-3.0"]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# An async runtime in a boot splash is a design error, not a dependency choice.
+deny = [
+    { name = "tokio" },
+    { name = "async-std" },
+    { name = "smol" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

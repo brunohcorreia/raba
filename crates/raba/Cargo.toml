@@ -1,0 +1,21 @@
+[package]
+name = "raba"
+description = "ASCII art boot splash"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "raba"
+path = "src/main.rs"
+
+# Dependency budget: 1 direct. Every addition needs an entry in DEPENDENCIES.md.
+# No JSON, no decompression, no async runtime — that is the point of owning .raba.
+[dependencies]
+raba-core = { path = "../raba-core" }
+# rustix = { version = "1", features = ["termios", "process"] }   # milestone 3
+
+[lints]
+workspace = true

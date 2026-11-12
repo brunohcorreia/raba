@@ -1,0 +1,23 @@
+name: Theme
+description: Add or fix a distribution theme
+labels: [theme]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Themes are the easiest contribution — a recipe is about ten lines of TOML.
+        See [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md).
+
+        Remember the console only has 256–512 glyphs: ASCII, CP437 blocks and
+        box-drawing characters are safe, Braille and emoji are not. `raba-gen` will
+        tell you if your theme breaks this.
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution
+    validations: { required: true }
+  - type: textarea
+    id: recipe
+    attributes:
+      label: Recipe
+      render: toml

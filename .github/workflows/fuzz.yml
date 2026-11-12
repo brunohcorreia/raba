@@ -1,0 +1,19 @@
+name: Fuzz
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    name: parser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - run: cargo install cargo-fuzz
+      # The parser reads untrusted input as root, early in boot. This is the
+      # highest-value fuzz target in the project. See docs/security.md.
+      - run: cargo fuzz run parse -- -max_total_time=1800
+        working-directory: .

@@ -1,0 +1,43 @@
+name: Bug report
+description: Something does not work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **If your machine will not boot**, add `raba.enable=0` to the kernel command
+        line from your bootloader first. See
+        [docs/troubleshooting.md](../blob/main/docs/troubleshooting.md).
+
+        A boot failure is the most serious bug this project can have. It is worth your
+        time to report it, and ours to fix it.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations: { required: true }
+  - type: textarea
+    id: report
+    attributes:
+      label: Output of `raba-report`
+      description: Collects log, config, initramfs contents and versions. Paste it here.
+      render: shell
+  - type: input
+    id: distro
+    attributes:
+      label: Distribution and init system
+      placeholder: "CachyOS, systemd"
+    validations: { required: true }
+  - type: input
+    id: boot
+    attributes:
+      label: Bootloader and initramfs generator
+      placeholder: "systemd-boot, mkinitcpio"
+    validations: { required: true }
+  - type: dropdown
+    id: crypto
+    attributes:
+      label: Disk encryption
+      options: ["none", "LUKS with passphrase", "LUKS with TPM unlock"]
+    validations: { required: true }

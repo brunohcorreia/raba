@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = ["crates/raba-core", "crates/raba", "crates/raba-gen"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/brunohcorreia/raba"
+authors = ["Bruno Correia"]
+
+# Enforced, not aspirational. See docs/maintenance.md.
+[workspace.lints.rust]
+unsafe_code = "forbid"          # overridden to "allow" in crates/raba/src/vt only
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "warn"
+cast_possible_truncation = "warn"
+todo = "warn"
+
+# The boot binary must be small. Binary size is a CI gate.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

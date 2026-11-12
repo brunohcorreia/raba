@@ -1,0 +1,21 @@
+[package]
+name = "raba-gen"
+description = "Build and convert .raba animations. Build-time only, never in an initramfs."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "raba-gen"
+path = "src/main.rs"
+
+# No dependency budget here. This never enters the boot path, so a crate that
+# breaks is a build failure someone fixes at leisure. See docs/maintenance.md.
+[dependencies]
+raba-core = { path = "../raba-core" }
+# toml, serde, flate2, anyhow — added as milestones need them
+
+[lints]
+workspace = true
