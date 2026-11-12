@@ -28,16 +28,31 @@ animating, so the project's one untested assumption can be looked at rather than
 argued about. If ASCII art at console cell size does not look good enough, that is
 worth finding out for the price of a weekend.
 
-Build a theme from your own art:
+Build a theme of your own. A recipe is about ten lines of TOML next to the art:
+
+```toml
+# themes/mine.toml
+[logo]
+source = "file:mine.txt"
+colors = [2, 10, 6]     # what the art's $1, $2 and $3 mean
+
+[spinner]
+style = "ascii"
+position = "below"
+
+[canvas]
+framerate = 8
+```
 
 ```sh
-raba-gen build my-logo.txt -o my-logo.raba --colours 2,10,6 --spinner blocks
-raba-gen check my-logo.raba          # will a console actually draw this?
-raba --preview my-logo.raba --loops 0
+raba-gen build themes/mine.toml
+raba --preview themes/mine.raba --loops 0
 ```
 
 Art is plain text with `$1` to `$9` marking colour changes, the format fastfetch
-stores its logos in. `scripts/fastfetch-logo.py arch > themes/arch.txt` pulls one out.
+stores its logos in. `scripts/fastfetch-logo.py arch > themes/arch.txt` pulls one out
+of an installed fastfetch. `man 5 raba-theme` has the full schema; `raba-gen --check`
+tells you whether a console can actually draw what you made.
 
 ---
 

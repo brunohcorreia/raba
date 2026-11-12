@@ -76,13 +76,44 @@ provably not mangling ordinary art as a side effect.
 
 Makes themes contributable by someone who does not write Rust.
 
-- `raba-gen build` from a TOML recipe, full `raba-theme(5)` schema
-- 256 → 16 colour downsampling; clamp backgrounds to 0–7
-- Spinner styles: `ascii`, `dots`, `bar`, `custom`
-- `--list-logos`, `--check`, `--preview`
-- Vendor fastfetch logo art at a pinned commit
-- Golden render tests
-- Themes for the first ten distributions
+| | issue | |
+|---|---|---|
+| 1 | `raba-gen build` from a TOML recipe, full `raba-theme(5)` schema | done |
+| 2 | 256 → 16 colour downsampling; clamp backgrounds to 0–7 | done |
+| 3 | Spinner styles: `ascii`, `dots`, `bar`, `arc`, `blocks`, `custom` | done |
+| 4 | `--check` | done |
+| 5 | Vendor fastfetch logo art at a pinned commit | |
+| 6 | `--list-logos`, `raba-gen --preview` | |
+| 7 | Golden render tests | |
+| 8 | Themes for the first ten distributions | |
+
+### Progress
+
+The recipe schema is what `raba-theme(5)` specifies, not a parallel invention. That
+was not true at first: the schema was built before the man page was read, and had to be
+rewritten to match it. The man page is the spec; where the two disagreed, the code moved.
+
+Where the page was *wrong*, it moved instead. It described the `bar` spinner as "CP437
+blocks", and only `▄` and `█` of that set are in CP437 — the eighth blocks `▁▂▃▅▆▇` are
+not in any console font. The glyph validator caught it, which is the second time that
+check has found something nobody would have found by reading. `bar` and `arc` are kept
+and marked terminal-only, and `blocks` was added as the non-ASCII spinner that does work
+at boot.
+
+Three places where the page promised something the format cannot carry, now recorded
+rather than quietly skipped:
+
+- `canvas.align`, `x_offset` and `y_offset` are run-time placement. The console's size
+  is not known at build time and the header has no field for the intent. Accepted and
+  reported as not honoured.
+- The page's outro example says it plays once, and the page documented no key to say so.
+  Added `canvas.repeat`.
+- `logo.source = "fastfetch:name"` needs vendored art, which is issue 5.
+
+Colour fitting is automatic rather than a flag, which is what the page promises: an
+index above 15 in a 16-colour theme is an xterm colour the author drew in, and the
+console's nearest equivalent is a better answer than an error. Every substitution is
+reported, so a typo still surfaces.
 
 ---
 
@@ -151,6 +182,20 @@ this is written.**
 Deliberately unplanned until something justifies them: DRM backend, Esc-to-show-details,
 bootloader first-frame image, Level 2 LUKS (collecting the passphrase — see
 [luks.md](luks.md) for why this is probably never).
+
+**Palette animation.** The Linux console's `ESC ] P nrrggbb` redefines one palette
+entry and recolours everything already on screen, with no redraw. On the 54x24 CachyOS
+theme a colour cycle done by redrawing costs 15552 bytes a frame — the whole theme is
+15652 — and the same effect through the palette costs 10 bytes a frame. Fade in and
+out, pulse and colour cycling all fall out of it. Needs an additive `.raba` v2 op so a
+frame can carry a palette change, a `restore` that emits `ESC ] R`, since this changes
+the console globally and not just our area, and an OSC 4 spelling for terminal
+emulators — which is exactly the difference the `Surface` trait exists to hide.
+
+**Movement.** `ESC [ n P` and `ESC [ n @` shift a line's contents; `ESC [ r` with
+`L`/`M` scrolls a region. A logo sliding in costs a few hundred bytes a step that way
+against 15552 for redrawing it, though the column entering the screen still has to be
+drawn. Needs a shift op in the format, which is a larger change than the palette one.
 
 **[3D rotating logos](3d-logos.md)** — fits the architecture as a `raba-gen` feature,
 because the mathematics happens at build time and the boot binary keeps playing

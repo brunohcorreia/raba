@@ -11,12 +11,24 @@
 use raba_core::format::Palette;
 use raba_core::glyph::{audit, Safety};
 use raba_core::{apply, decode, encode, Grid, Movie};
-use raba_gen::build::{build, Recipe, SpinnerSpec};
-use raba_gen::compose::spinners;
+use raba_gen::build::{build, spinners, Recipe, SpinnerSpec, TextSpec};
+use raba_gen::layout::Position;
 
 /// The art that ships in `themes/`, read from the repository rather than copied, so
 /// that changing the theme and forgetting to run the tests is not possible.
 const CACHYOS: &str = include_str!("../../../themes/cachyos.txt");
+
+/// A one-cell spinner drawn on top of the art, for tests about everything except
+/// placement.
+fn spinner_at() -> SpinnerSpec {
+    SpinnerSpec {
+        frames: vec!["x".to_owned()],
+        fg: 7,
+        position: Position::Overlay,
+        gap: 0,
+        period: None,
+    }
+}
 
 fn frame(movie: &Movie, index: usize) -> Grid {
     let mut grid = Grid::new(movie.columns, movie.lines, movie.palette).unwrap();
@@ -51,25 +63,107 @@ fn no_spinner_means_the_canvas_is_exactly_the_art() {
 }
 
 #[test]
-fn an_explicit_position_is_taken_literally() {
-    let recipe = Recipe {
-        spinner: Some(SpinnerSpec { glyphs: vec!['x'], fg: 7, at: Some((2, 0)) }),
-        ..Recipe::default()
-    };
+fn an_overlay_spinner_takes_no_room() {
+    let recipe = Recipe { spinner: Some(spinner_at()), ..Recipe::default() };
     let built = build("$1####", &recipe).unwrap();
     assert_eq!((built.movie.columns, built.movie.lines), (4, 1), "no room added");
-    assert_eq!(text(&frame(&built.movie, 0), 0), "##x#");
+    assert_eq!(text(&frame(&built.movie, 0), 0), "#x##", "centred on the art");
 }
 
 #[test]
-fn a_spinner_placed_past_the_art_grows_the_canvas() {
+fn a_spinner_above_pushes_the_logo_down() {
+    // The part of layout that is easy to get wrong: reserving space is not enough,
+    // the art has to move.
     let recipe = Recipe {
-        spinner: Some(SpinnerSpec { glyphs: vec!['x'], fg: 7, at: Some((6, 3)) }),
+        spinner: Some(SpinnerSpec {
+            frames: vec!["x".to_owned()],
+            fg: 7,
+            position: Position::Above,
+            gap: 1,
+            period: None,
+        }),
         ..Recipe::default()
     };
     let built = build("$1####", &recipe).unwrap();
-    assert_eq!((built.movie.columns, built.movie.lines), (7, 4));
-    assert_eq!(text(&frame(&built.movie, 0), 3), "      x");
+    assert_eq!((built.movie.columns, built.movie.lines), (4, 3));
+    let first = frame(&built.movie, 0);
+    assert_eq!(text(&first, 0), " x  ");
+    assert_eq!(text(&first, 2), "####");
+}
+
+#[test]
+fn padding_surrounds_the_whole_theme() {
+    let recipe = Recipe { spinner: None, padding: 2, ..Recipe::default() };
+    let built = build("$1##", &recipe).unwrap();
+    assert_eq!((built.movie.columns, built.movie.lines), (6, 5));
+    assert_eq!(text(&frame(&built.movie, 0), 2), "  ##  ");
+}
+
+#[test]
+fn a_caption_is_painted_in_rather_than_animated() {
+    // Static cells cost nothing in a delta format, so there is no reason to make a
+    // caption an overlay and every reason not to.
+    let recipe = Recipe {
+        spinner: None,
+        text: Some(TextSpec {
+            content: "booting".to_owned(),
+            fg: 3,
+            position: Position::Below,
+            gap: 1,
+        }),
+        ..Recipe::default()
+    };
+    let built = build("$1###", &recipe).unwrap();
+    assert_eq!((built.movie.columns, built.movie.lines), (7, 3));
+    assert_eq!(text(&frame(&built.movie, 0), 2), "booting");
+    assert_eq!(built.movie.frames.len(), 1, "nothing moves");
+}
+
+#[test]
+fn a_spinner_period_holds_each_step_for_several_frames() {
+    let recipe = Recipe {
+        spinner: Some(SpinnerSpec {
+            frames: vec!["a".to_owned(), "b".to_owned()],
+            fg: 7,
+            position: Position::Overlay,
+            gap: 0,
+            period: Some(6),
+        }),
+        ..Recipe::default()
+    };
+    let built = build("$1#", &recipe).unwrap();
+    assert_eq!(built.movie.frames.len(), 6);
+    // Each step held three frames, so only two of the six carry a change.
+    assert_eq!(built.movie.frames.iter().filter(|f| f.op_count > 0).count(), 2);
+}
+
+#[test]
+fn a_period_that_does_not_divide_is_refused() {
+    // Rounding would hold one step longer than the others, which reads as a stutter
+    // and looks like a bug in the player rather than in the recipe.
+    let recipe = Recipe {
+        spinner: Some(SpinnerSpec {
+            frames: vec!["a".to_owned(), "b".to_owned(), "c".to_owned()],
+            fg: 7,
+            position: Position::Overlay,
+            gap: 0,
+            period: Some(7),
+        }),
+        ..Recipe::default()
+    };
+    let error = build("$1#", &recipe).unwrap_err().to_string();
+    assert!(error.contains('7') && error.contains('3'), "{error}");
+}
+
+#[test]
+fn uneven_spinner_frames_are_padded_to_the_widest() {
+    // `.`, `..`, `...` is what an author means by a three-step spinner; making them
+    // write the trailing spaces would be making them do the obvious thing by hand.
+    let recipe = Recipe { spinner: SpinnerSpec::named("dots", 7), ..Recipe::default() };
+    let built = build("$1#####", &recipe).unwrap();
+    assert_eq!(built.movie.frames.len(), 3);
+    assert_eq!(text(&frame(&built.movie, 0), 2), " .   ");
+    assert_eq!(text(&frame(&built.movie, 2), 2), " ... ");
 }
 
 #[test]
@@ -118,7 +212,7 @@ fn the_cachyos_theme_builds() {
     let recipe = Recipe {
         colours: vec![2, 10, 6],
         spinner: SpinnerSpec::named("ascii", 10),
-        delay_ms: 120,
+        framerate: 8,
         ..Recipe::default()
     };
     let built = build(CACHYOS, &recipe).unwrap();

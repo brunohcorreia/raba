@@ -1,0 +1,16 @@
+# CachyOS. Art extracted from fastfetch; see scripts/fastfetch-logo.py.
+
+[logo]
+source = "file:cachyos.txt"
+# What the art's $1, $2 and $3 markers mean: outline, fill, highlights.
+colors = [2, 10, 6]
+background = 0
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 10
+
+[canvas]
+framerate = 8

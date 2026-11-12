@@ -4,12 +4,26 @@
 yanked = "deny"
 
 [licenses]
-allow = ["GPL-3.0", "MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Unicode-3.0"]
+# "GPL-3.0" and "GPL-3.0-or-later" are different SPDX identifiers, and ours is the
+# second one. Allowing only the first rejected our own crates.
+allow = [
+    "GPL-3.0",
+    "GPL-3.0-or-later",
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+]
 confidence-threshold = 0.9
 
 [bans]
 multiple-versions = "warn"
+# Wildcards are banned because a dependency without a version bound is a dependency
+# that changes under you. Our own crates reference each other by path, which is the
+# one case where that is not true.
 wildcards = "deny"
+allow-wildcard-paths = true
 # An async runtime in a boot splash is a design error, not a dependency choice.
 deny = [
     { name = "tokio" },

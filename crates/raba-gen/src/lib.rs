@@ -7,3 +7,6 @@
 pub mod art;
 pub mod build;
 pub mod compose;
+pub mod layout;
+pub mod palette;
+pub mod recipe;

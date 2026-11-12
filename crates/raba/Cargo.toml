@@ -14,7 +14,7 @@ path = "src/main.rs"
 # Dependency budget: 1 direct. Every addition needs an entry in DEPENDENCIES.md.
 # No JSON, no decompression, no async runtime — that is the point of owning .raba.
 [dependencies]
-raba-core = { path = "../raba-core" }
+raba-core = { path = "../raba-core", version = "0.0.0" }
 # rustix = { version = "1", features = ["termios", "process"] }   # milestone 3
 
 [lints]

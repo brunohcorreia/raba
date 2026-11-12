@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
-# Build every theme in themes/ from its art source.
+# Build every theme in themes/ from its recipe.
 #
 # Themes are generated, so themes/*.raba is gitignored and this is how you get one.
-# M1 replaces the flags here with themes/*.toml recipes; until then the recipe is
-# this script. See docs/milestones.md.
+# Each theme is a themes/<name>.toml recipe next to its art; see man 5 raba-theme.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 cargo build --release -p raba-gen
 GEN=target/release/raba-gen
 
-# CachyOS: the logo's three colour slots are green, bright green and cyan.
-"$GEN" build themes/cachyos.txt -o themes/cachyos.raba \
-  --colours 2,10,6 --spinner ascii --spinner-fg 10 --delay 120
+for recipe in themes/*.toml; do
+  "$GEN" build "$recipe"
+done
 
 for theme in themes/*.raba; do
-  "$GEN" check "$theme"
+  "$GEN" --check "$theme"
 done

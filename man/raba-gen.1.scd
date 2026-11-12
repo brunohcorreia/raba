@@ -8,11 +8,11 @@ raba-gen - build and convert .raba animations
 
 *raba-gen* build _recipe.toml_ [*-o* _out.raba_]
 
-*raba-gen* convert _input_ [*-o* _out.raba_]
-
-*raba-gen* *--list-logos* [_pattern_]
-
 *raba-gen* *--check* _file.raba_
+
+*raba-gen* convert _input_ [*-o* _out.raba_] (not implemented yet)
+
+*raba-gen* *--list-logos* [_pattern_] (not implemented yet)
 
 # DESCRIPTION
 
@@ -35,18 +35,22 @@ whatever it likes while *raba*(8) depends on nothing.
 	Output file. Defaults to the recipe's name with a *.raba* extension.
 
 *--list-logos* [_pattern_]
-	List the bundled logo names, optionally filtered.
+	List the bundled logo names, optionally filtered. Not implemented yet: it
+	needs the vendored fastfetch art. _scripts/fastfetch-logo.py_ extracts a logo
+	from an installed fastfetch in the meantime.
 
 *--check* _file.raba_
 	Validate an existing *.raba* without generating anything. Reports format version,
 	canvas size, frame count, and any glyph the console cannot render.
 
 *--preview*
-	Render the result in the current terminal instead of writing a file.
+	Render the result in the current terminal instead of writing a file. Not
+	implemented yet; *raba --preview* _file.raba_ plays a built theme.
 
 *--also-dur* _path_
 	Additionally write a *.dur* alongside the *.raba*. Useful when something else — a
 	display manager that plays its own animation, say — should show matching art.
+	Not implemented yet; it arrives with *convert*.
 
 *--dur-version* _7_|_8_
 	Format version for *--also-dur*. Default: *7*, which more readers accept.
@@ -63,9 +67,14 @@ cannot display.
 
 The console holds 256 or 512 glyphs. Anything outside the loaded font is replaced and
 the original codepoint is lost by the kernel. The practical safe set is ASCII, CP437
-block elements (*█ ▀ ▄ ▌ ▐ ░ ▒ ▓*) and box-drawing characters. Braille patterns,
-arrows, mathematical symbols and emoji are not safe — Braille alone would consume 256
+block elements (*█ ▀ ▄ ▌ ▐ ░ ▒ ▓*) and box-drawing characters. Braille patterns, the
+quadrant blocks (*▘▝▖▗*), arrows and emoji are not — Braille alone would consume 256
 of the available slots, which is why distributions ship it as a separate console font.
+
+Accented letters and CP437's Greek and mathematics are a third case: they are in the
+kernel's built-in font and missing from some fonts that replace it, so they are
+reported as a warning rather than an error. See _docs/glyphs.md_ for the rule and why
+it is an intersection of fonts rather than a single font.
 
 A failure lists each offending character with its codepoint and the frame and position
 where it appears. This turns an invisible boot-time rendering bug into a build error.

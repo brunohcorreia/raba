@@ -20,7 +20,7 @@ testing = []
 
 [dev-dependencies]
 proptest = "1"
-raba-core = { path = ".", features = ["testing"] }
+raba-core = { path = ".", version = "0.0.0", features = ["testing"] }
 
 [lints]
 workspace = true

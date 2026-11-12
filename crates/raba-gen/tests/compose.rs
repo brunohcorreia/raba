@@ -12,7 +12,8 @@ use raba_core::format::Palette;
 use raba_core::glyph::{safety, Safety};
 use raba_core::{apply, decode, encode, Cell, Grid, Movie};
 use raba_gen::art::parse;
-use raba_gen::compose::{compose, paint, spinners, ComposeError, Overlay};
+use raba_gen::build::spinners;
+use raba_gen::compose::{compose, paint, ComposeError, Overlay};
 
 fn logo() -> Grid {
     parse("$1####\n$1#  #\n$1####").unwrap().to_grid(Palette::Ansi16, &[6], 7, 0).unwrap()
@@ -146,22 +147,34 @@ fn a_composed_movie_survives_the_format() {
 }
 
 #[test]
-fn every_built_in_spinner_is_console_safe() {
-    // A spinner nobody can see is worse than no spinner. docs/glyphs.md is why
-    // braille is not on this list.
-    for (name, glyphs) in spinners::ALL {
-        for &ch in *glyphs {
-            assert_eq!(safety(ch), Safety::Safe, "spinner {name}: {ch:?}");
+fn the_console_safe_spinners_are_the_ones_we_claim() {
+    // A spinner nobody can see is worse than no spinner, and raba-theme(5) now says
+    // which is which. bar and arc are documented and not console-safe; they exist
+    // for terminal targets and raba-gen refuses them without --allow-unsafe-glyphs.
+    for name in ["ascii", "dots", "blocks"] {
+        for frame in spinners::named(name).unwrap() {
+            for ch in frame.chars() {
+                assert_eq!(safety(ch), Safety::Safe, "spinner {name}: {ch:?}");
+            }
         }
+    }
+    for name in ["bar", "arc"] {
+        let unsafe_glyphs = spinners::named(name)
+            .unwrap()
+            .iter()
+            .flat_map(|frame| frame.chars())
+            .any(|ch| safety(ch) == Safety::Unsafe);
+        assert!(unsafe_glyphs, "spinner {name} is documented as needing a terminal");
     }
 }
 
 #[test]
 fn built_in_spinners_compose() {
-    for (name, glyphs) in spinners::ALL {
-        let overlay = Overlay::spinner(1, 1, glyphs, 7, 0);
+    for (name, frames) in spinners::ALL {
+        let glyphs: Vec<char> = frames.iter().filter_map(|frame| frame.chars().next()).collect();
+        let overlay = Overlay::spinner(1, 1, &glyphs, 7, 0);
         let movie = compose(&logo(), &[overlay], 100, true).unwrap();
-        assert_eq!(movie.frames.len(), glyphs.len(), "{name}");
+        assert_eq!(movie.frames.len(), frames.len(), "{name}");
     }
 }
 
@@ -237,7 +250,9 @@ fn the_whole_authoring_chain_runs() {
     // decode, play. Every M0 piece in one line of control flow.
     let art = parse("$1 /\\ \n$1/__\\").unwrap();
     let base = art.to_grid(Palette::Ansi16, &[4], 7, 0).unwrap();
-    let overlay = Overlay::spinner(0, 1, spinners::ASCII, 7, 0);
+    let ascii: Vec<char> =
+        spinners::ASCII.iter().filter_map(|frame| frame.chars().next()).collect();
+    let overlay = Overlay::spinner(0, 1, &ascii, 7, 0);
     let movie =
         decode(&encode(&compose(&base, std::slice::from_ref(&overlay), 120, true).unwrap()))
             .unwrap();
