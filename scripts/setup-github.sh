@@ -1,24 +1,48 @@
 #!/usr/bin/env bash
-# Create GitHub milestones and the M0 issues.
+# Create the GitHub milestones and issues for work that is still open.
 #
-# Run this once, after the remote exists:
-#   gh repo create raba --public --source=. --remote=origin
 #   ./scripts/setup-github.sh
 #
-# Idempotent for milestones; issues are created unconditionally, so run it once.
+# Milestones are idempotent. Issues are matched by title, so re-running will not
+# create duplicates — which matters, because this is the kind of script somebody
+# runs twice to see what it does.
+#
+# Completed work is not filed as a closed issue. docs/milestones.md tracks what is
+# done and the git history says how; filing eleven issues in order to close them is
+# noise in both places.
 set -euo pipefail
 
 repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 echo "repository: $repo"
 
 milestone() {
-    gh api "repos/$repo/milestones" --method POST \
-        -f title="$1" -f description="$2" >/dev/null 2>&1 \
+    if gh api "repos/$repo/milestones" --method POST \
+        -f title="$1" -f description="$2" >/dev/null 2>&1; then
+        echo "  + $1"
+    else
+        echo "  = $1 (exists)"
+    fi
+}
+
+label() {
+    gh label create "$1" --color "$2" --description "$3" >/dev/null 2>&1 \
         && echo "  + $1" || echo "  = $1 (exists)"
 }
 
+issue() {
+    local title=$1 body=$2 milestone=$3 labels=$4
+    if gh issue list --state all --search "\"$title\" in:title" \
+        --json title -q '.[].title' | grep -qxF "$title"; then
+        echo "  = $title (exists)"
+        return
+    fi
+    gh issue create --title "$title" --body "$body" \
+        --milestone "$milestone" --label "$labels" >/dev/null
+    echo "  + $title"
+}
+
 echo "milestones:"
-milestone "M0 — See a logo animate"  "Validates the premise: does ASCII art look good at console cell size?"
+milestone "M0 — See a logo animate"  "Validates the premise: does ASCII art look good at console cell size? Complete."
 milestone "M1 — Theme authoring"     "Themes contributable without writing Rust."
 milestone "M2 — Import"              ".dur, ANSI and text import."
 milestone "M3 — The dangerous part"  "VT layer. VM harness first."
@@ -26,94 +50,63 @@ milestone "M4 — Lifecycle"           "Socket, state, resume, handoff."
 milestone "M5 — Early boot"          "initramfs hooks, units, raba-setup."
 milestone "M6 — Breadth"             "Other inits, LUKS, packaging."
 
-issue() {
-    gh issue create --title "$1" --body "$2" --milestone "M0 — See a logo animate" \
-        --label "${3:-}" >/dev/null && echo "  + $1"
-}
+echo "labels:"
+label "themes"      "0e8a16" "Theme art, recipes and the generator"
+label "core"        "1d76db" "The format, renderer and anything on the boot path"
+label "testing"     "fbca04" "Harnesses, fixtures and coverage"
+label "good first issue" "7057ff" "Contained, with a clear finish line"
 
-echo "M0 issues:"
-issue "raba-core: .raba format types" \
-"Define \`Movie\`, \`Frame\`, \`Op\`, \`Palette\` per \`docs/format.md\`.
+echo "M1 issues:"
 
-Freezing the byte layout is part of this issue — the sketch in the doc is not final, and
-a format gets specified by being implemented. Update \`docs/format.md\` to match whatever
-is built.
+issue "Vendor fastfetch logo art at a pinned commit" \
+"\`logo.source = \"fastfetch:NAME\"\` is in \`raba-theme(5)\` and currently errors, because
+there is no bundled art to resolve it against.
 
-No I/O. \`raba-core\` has a dependency budget of zero." "core"
+fastfetch compiles its logos into the binary rather than shipping files, so the art has
+to come from its repository. Vendor at a pinned commit, record the commit, and treat
+updates as deliberate — see \`docs/risks.md\`.
 
-issue "raba-core: encoder" \
-"\`Movie\` → bytes. Frame 0 full, later frames as deltas, periodic keyframes.
+Credit matters here: distribution logos are trademarks of their projects, and fastfetch
+is MIT. \`docs/packaging.md\` already says what to credit.
 
-Include a round-trip test: encode, decode, assert equality." "core"
+\`scripts/fastfetch-logo.py\` extracts one logo from an installed fastfetch and is the
+stopgap, not the answer.
 
-issue "raba-core: decoder with bounded validation" \
-"bytes → \`Movie\`.
+Blocks \`--list-logos\`." \
+"M1 — Theme authoring" "themes"
 
-The rule from \`docs/security.md\`: **total size comes from the header and is validated
-before a single allocation.** Hard ceilings on canvas dimensions and frame count. Every
-offset bounds-checked once at load so the renderer can index without further checks.
+issue "raba-gen --list-logos and --preview" \
+"Both are documented in \`raba-gen(1)\` and both error as unimplemented.
 
-This is the code that makes the gzip-bomb class of failure structurally impossible. It is
-also the highest-value fuzz target in the project." "core,security"
+\`--list-logos\` needs the vendored art, so it waits on that issue.
 
-issue "The failure table" \
-"The project's central promise expressed as code. See \`docs/development.md\`.
+\`--preview\` renders a built theme in the current terminal instead of writing a file.
+\`raba --preview\` already does this; the open question is whether \`StdoutSurface\` moves
+somewhere both binaries can use, or whether raba-gen keeps its own fifteen lines. Putting
+terminal I/O into \`raba-core\` would break the rule that the core is pure, so duplication
+may be the cheaper of the two." \
+"M1 — Theme authoring" "themes"
 
-Every malformed input asserts **exit 0 and no panic**: truncated header, \`total_bytes\`
-disagreeing with file size, canvas 10^9 x 10^9, frame count over ceiling, op index out of
-range, zero frames, CRC mismatch, absent file.
+issue "Golden render tests for themes" \
+"Every shipped theme, rendered to bytes and compared against a recorded expectation, so
+a change to the renderer or the composer that alters what a theme looks like has to be
+acknowledged rather than discovered.
 
-Write this early and review it more carefully than anything else." "core,test"
+The renderer is deterministic and there is already a terminal model in
+\`crates/raba-core/tests/terminal/\` that turns its output back into a grid. A golden file
+of the grid is more readable in a diff than a golden file of escape sequences, and it
+does not churn when an unrelated optimisation changes the byte stream." \
+"M1 — Theme authoring" "testing"
 
-issue "raba-core: Surface trait" \
-"\`trait Surface { fn size(); fn write(); fn restore(); }\` with \`BufferSurface\` for tests.
+issue "Themes for the first ten distributions" \
+"One recipe and one art file each, under \`themes/\`. Arch, Debian, Fedora, Ubuntu, Void,
+Gentoo, Alpine, openSUSE, NixOS and Linux Mint is a reasonable first ten.
 
-The abstraction that keeps the impure layer small enough to review line by line, and that
-makes \`--preview\` the same code path as a real terminal rather than a separate one." "core"
+Each needs: art that fits 80x25, colours that survive the 16-colour fit, and a clean
+\`raba-gen --check\`. The CachyOS theme in \`themes/\` is the worked example.
 
-issue "raba-core: grid to ANSI encoder" \
-"Compose a frame into a cell grid, emit escape sequences, minimise redraw by diffing
-against the previous grid.
-
-Property test: \`to_ansi(grid, prev)\` applied to \`prev\` yields \`grid\`. Easy to get
-subtly wrong, hard to catch by example." "core"
-
-issue "raba-core: glyph validator" \
-"Accept ASCII, CP437 block elements and box-drawing. Reject Braille, arrows, mathematical
-symbols and emoji.
-
-The Linux console holds 256-512 glyphs; anything outside the loaded font renders as a
-replacement character and the kernel discards the codepoint. Validation turns an invisible
-boot-time rendering bug into a build error.
-
-Report the offending character, its codepoint, and where it appears." "core"
-
-issue "raba-gen: load fastfetch-style text art" \
-"Plain text with \`\$1\`..\`\$9\` colour markers: everything after a marker takes that
-colour until the next marker or end of line.
-
-Source art is fastfetch's, MIT, 534 logos." "gen"
-
-issue "raba-gen: compose logo and spinner" \
-"Place a spinner relative to a logo. Canvas is the bounding box, not the terminal size.
-
-Frame count is the least common multiple of the element periods, so the loop closes
-without a visible jump — a 4-frame pulse beside a 10-frame spinner needs 20 frames." "gen"
-
-issue "raba: --preview" \
-"Render a \`.raba\` in the current terminal and exit. No VT, no root, no system state.
-
-Not a debug feature: it is the same core driving a different \`Surface\`, and it is what
-makes art iteration possible without a VM. Needed before anything in M3." "cli"
-
-issue "First theme, and the verdict on the premise" \
-"Build a theme for CachyOS, run \`raba --preview\`, and **look at it**.
-
-The question this milestone exists to answer: does a ~40x20 cell logo on an 8x16 console
-font look good enough to justify the project?
-
-If the answer is no, that is a legitimate outcome and the design docs become a record of
-a decision not to proceed. Write the verdict in \`notas/arquitetura.md\` either way." "theme"
+Good first issue: adding one distribution is self-contained and needs no Rust." \
+"M1 — Theme authoring" "themes,good first issue"
 
 echo
-echo "done. remaining milestones are in docs/milestones.md; create their issues as you reach them."
+echo "done. docs/milestones.md is the plan; this only files what is open."
