@@ -25,6 +25,21 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features
       - run: cargo test --workspace --all-features
 
+  shell:
+    name: shellcheck the initramfs glue
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The hooks run as root in somebody's initramfs and during somebody's
+      # kernel update. `cargo test` proves what they do; this proves they are
+      # not written in a way that does something else by accident.
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: shellcheck --severity=warning integration/tests/*.sh
+      # The install hook is sourced by mkinitcpio's bash, and the runtime hook
+      # is run by busybox ash; neither has a shebang shellcheck can trust.
+      - run: shellcheck --severity=warning --shell=bash integration/mkinitcpio/install/raba
+      - run: shellcheck --severity=warning --shell=dash integration/mkinitcpio/hooks/raba
+
   msrv:
     name: minimum supported rust version
     runs-on: ubuntu-latest

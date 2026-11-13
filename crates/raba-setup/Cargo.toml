@@ -1,0 +1,23 @@
+[package]
+name = "raba-setup"
+description = "set up and verify a RABA installation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "raba-setup"
+path = "src/main.rs"
+
+# Build time and install time, never the boot path: this binary is not in the
+# initramfs, so the dependency budget in docs/maintenance.md does not apply to
+# it. It depends on `raba` for one reason — the configuration parser — because
+# the file the hook freezes has to be read by exactly the code that will read it
+# back at boot.
+[dependencies]
+raba = { path = "../raba", version = "0.0.0" }
+
+[lints]
+workspace = true

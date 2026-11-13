@@ -5,6 +5,7 @@ members = [
     "crates/raba-term",
     "crates/raba",
     "crates/raba-gen",
+    "crates/raba-setup",
     # Tier 3a: the /init for the QEMU harness. Never shipped. See docs/development.md.
     "crates/raba-vmtest",
 ]

@@ -41,7 +41,14 @@ cannot collide. You get the prompt on a clean console, then the splash.
 sudo mkinitcpio -P
 ```
 
-With a systemd-based initramfs, use `sd-raba` instead of `raba`.
+One hook name for both kinds of initramfs. There is no `sd-raba`: the hook
+notices whether it is building a systemd image and adds a unit or a runtime
+script accordingly. Plymouth shipped a separate `sd-plymouth` and deprecated it.
+
+The hook puts a copy of your configuration inside the image with the theme path
+already resolved, because `Theme=auto` needs `os-release`(5) and an initramfs
+has none. `raba-setup --freeze` is what writes it, and `raba --check` tells you
+what it will say.
 
 ### dracut (Fedora, RHEL, openSUSE)
 

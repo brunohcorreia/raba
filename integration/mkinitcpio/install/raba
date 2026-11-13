@@ -1,0 +1,108 @@
+#!/bin/bash
+# RABA's mkinitcpio build hook: what goes into the image.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# ---------------------------------------------------------------------------
+# This file may not fail an image build. Ever.
+#
+# mkinitcpio counts a failing `add_*` as a build error — see the RETURN trap in
+# /usr/lib/initcpio/functions — and a build error fails the whole image, which
+# fails the kernel update that triggered it. A boot splash that can do that to
+# somebody's `pacman -Syu` has no business being in their HOOKS.
+#
+# So the rule here is narrow and absolute: **nothing is handed to an `add_*`
+# function before it has been checked to exist**, and `build` returns 0 on every
+# path. `warning` is used where another hook would use `error`, because an image
+# without a splash boots and an image that was never written does not.
+#
+# `integration/tests/mkinitcpio-build.sh` runs this file against a stubbed
+# mkinitcpio that counts errors the way the real one does, in every state a
+# half-installed system can be in.
+# ---------------------------------------------------------------------------
+
+build() {
+    local file frozen units unit
+
+    # Every one of these is a reason to put nothing in the image, and none of
+    # them is a reason to stop the image being built.
+    if ! command -v raba > /dev/null; then
+        warning 'raba: /usr/bin/raba is not installed; this image gets no splash'
+        return 0
+    fi
+    if ! command -v raba-setup > /dev/null; then
+        warning 'raba: raba-setup is not installed; this image gets no splash'
+        return 0
+    fi
+
+    # Resolved *here*, on a running system that has /etc and os-release(5),
+    # because an initramfs has neither. What comes back is the whole effective
+    # configuration with every path already absolute. See raba.conf(5).
+    if ! frozen="$(raba-setup --freeze)"; then
+        warning 'raba: no theme resolved; this image gets no splash (try: raba --check)'
+        return 0
+    fi
+
+    add_binary raba
+    if command -v raba-ctl > /dev/null; then
+        add_binary raba-ctl
+    fi
+
+    # The art the frozen configuration names, at the same paths it names.
+    while IFS= read -r file; do
+        if [[ -f "$file" ]]; then
+            add_file "$file"
+        else
+            warning 'raba: %s went away while the image was being built' "$file"
+        fi
+    done < <(raba-setup --print-files)
+
+    printf '%s' "$frozen" | add_file - /etc/raba/raba.conf 644
+
+    # One hook name for both kinds of initramfs. `add_systemd_unit` exists only
+    # when the `systemd` hook has already been sourced into this shell, which is
+    # exactly the condition we need to distinguish: a systemd initramfs has no
+    # /init script to run a runtime hook from, and a busybox one has no systemd
+    # to run a unit from.
+    # shellcheck disable=SC2154  # _d_hooks is mkinitcpio's own, and is how
+    # add_runscript itself finds the file the elif branch checks for.
+    if command -v add_systemd_unit > /dev/null; then
+        units=('raba-start.service')
+        for unit in "${units[@]}"; do
+            # The same lookup `add_systemd_unit` does, because the thing being
+            # checked is whether that call is about to fail. RABA_UNIT_PATH is a
+            # seam for integration/tests, which cannot write to /usr/lib;
+            # mkinitcpio never sets it.
+            if PATH="${RABA_UNIT_PATH:-/usr/lib/systemd/system:/lib/systemd/system:/etc/systemd/system}" \
+                type -P "$unit" > /dev/null; then
+                add_systemd_unit "$unit"
+                # Wanted from inside the image only. Installing this package
+                # enables nothing on the host; putting `raba` in HOOKS is the
+                # decision, and this is what it means. See docs/packaging.md.
+                add_symlink "/usr/lib/systemd/system/sysinit.target.wants/$unit" "../$unit"
+            else
+                warning 'raba: %s is missing; this image gets no splash' "$unit"
+            fi
+        done
+    elif PATH="$_d_hooks" type -P raba > /dev/null; then
+        add_runscript
+    else
+        warning 'raba: the runtime hook is missing; this image gets no splash'
+    fi
+
+    return 0
+}
+
+help() {
+    cat << HELPEOF
+This hook puts RABA in the initramfs, so the boot splash appears before the root
+filesystem is mounted. It carries a copy of your configuration with the theme
+already resolved — editing /etc/raba/raba.conf has no effect until the image is
+rebuilt.
+
+If you use disk encryption, place this hook *after* 'encrypt'. RABA does not
+supply the passphrase prompt and does not want to; cryptsetup prompts on a clean
+console and the splash comes up afterwards. See raba.conf(5) and docs/luks.md.
+HELPEOF
+}
+
+# vim: set ft=sh ts=4 sw=4 et:

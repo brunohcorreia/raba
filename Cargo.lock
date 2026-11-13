@@ -322,6 +322,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "raba-setup"
+version = "0.0.0"
+dependencies = [
+ "raba",
+]
+
+[[package]]
 name = "raba-term"
 version = "0.0.0"
 dependencies = [

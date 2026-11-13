@@ -1,0 +1,21 @@
+# Tell the splash the system is up.
+#
+# Fire and forget: the outro plays and raba exits on its own. Pair it with
+# raba-quit-wait.service if something after it needs the terminal back.
+[Unit]
+Description=Terminate the RABA boot splash
+Documentation=man:raba-ctl(1)
+After=rc-local.service raba-start.service systemd-user-sessions.service
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+# `-` and an exit code of 0 when nothing is listening: a display manager that
+# failed to start because the splash was absent would be the splash breaking a
+# boot. See man 1 raba-ctl on exit status.
+ExecStart=-/usr/bin/raba-ctl quit
+RemainAfterExit=yes
+TimeoutSec=20
+
+[Install]
+WantedBy=multi-user.target

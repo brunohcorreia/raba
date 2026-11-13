@@ -1,0 +1,23 @@
+# Hold the boot until the splash has actually let go of the terminal.
+#
+# The difference from raba-quit.service is the waiting: this one returns when
+# raba has exited, so whatever is ordered after it starts on a terminal nobody
+# else is drawing on.
+[Unit]
+Description=Hold until the RABA boot splash has finished
+Documentation=man:raba-ctl(1)
+After=rc-local.service raba-start.service systemd-user-sessions.service
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=-/usr/bin/raba-ctl quit --wait
+RemainAfterExit=yes
+# Not 0. Plymouth's equivalent waits for ever, and a splash that hangs then owns
+# the boot it was supposed to decorate. raba-ctl returns at EOF, Boot.Timeout
+# bounds raba itself, and this is the third thing that has to fail before a boot
+# stalls.
+TimeoutSec=20
+
+[Install]
+WantedBy=multi-user.target

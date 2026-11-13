@@ -1,0 +1,26 @@
+#!/usr/bin/ash
+# RABA's mkinitcpio runtime hook: a busybox initramfs, running as PID 1's child.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+run_hook() {
+    # Backgrounded, because /init calls this and the boot has to carry on. The
+    # splash is a child of PID 1 from here until something kills it, and being
+    # killed is not an event: /run/raba.state carries the terminal and the frame
+    # across switch_root, and whatever starts next picks the animation back up.
+    # See docs/early-boot.md.
+    if [ -x /usr/bin/raba ]; then
+        /usr/bin/raba &
+    fi
+    return 0
+}
+
+run_emergencyhook() {
+    # The init script is about to drop to a rescue shell. Whatever went wrong,
+    # the person about to read the screen needs the screen.
+    if [ -x /usr/bin/raba-ctl ]; then
+        /usr/bin/raba-ctl quit --wait
+    fi
+    return 0
+}
+
+# vim: set ft=sh ts=4 sw=4 et:

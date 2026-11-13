@@ -14,7 +14,7 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
-use raba::config::{self, Config, Level, Mode, Position, Source, Style, Theme, Tty};
+use raba::config::{self, Boot, Config, Level, Mode, Outro, Position, Source, Style, Theme, Tty};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -546,4 +546,128 @@ fn the_report_of_a_theme_that_resolved_to_nothing_lists_what_was_looked_for() {
 
     assert!(report.contains("void.raba"), "{report}");
     assert!(report.contains("generic.raba"), "{report}");
+}
+
+// ---------------------------------------------------------------- freeze ----
+
+/// The property the whole freeze rests on: what comes out is something this
+/// same parser reads back as the same thing.
+///
+/// An image carries a file written by one version of this code and read by
+/// another — the one on the installed system writes it, the one inside the
+/// initramfs reads it — so a value that is spelled in a way the parser does not
+/// accept is a splash that works until it is put where it is meant to run. The
+/// first draft of `length` printed `30s`, which the parser refuses.
+#[test]
+fn a_frozen_configuration_parses_back_to_the_same_configuration() {
+    let scratch = Scratch::new("freeze-roundtrip");
+    scratch.write("themes/void.raba", "x");
+    scratch.write("themes/void-outro.raba", "x");
+    scratch.write(
+        "raba.conf",
+        "\
+[Boot]
+Theme=void
+Tty=4
+ShowDelay=0.3
+Timeout=45
+FrameRateOverride=24
+[Outro]
+MaxDuration=0.75
+FinishFrame=false
+[Progress]
+Enable=true
+Style=percent
+Source=none
+Position=above
+Width=0
+Color=15
+BackgroundColor=1
+[Handoff]
+Mode=clear
+RestoreTty=false
+[Log]
+Level=debug
+File=/var/log/raba.log
+",
+    );
+    let before = config::start(&scratch.places());
+    let frozen = before.freeze().expect("something to freeze");
+
+    let (after, problems) = parse(&frozen);
+    assert!(problems.is_empty(), "a frozen file complains when read back: {problems:?}");
+
+    // Theme is the one key that deliberately changes: a name becomes the path
+    // it resolved to, because an initramfs has no os-release to resolve with.
+    assert_eq!(after.boot.theme, Theme::Path(scratch.path("themes/void.raba")));
+    assert_eq!(after.outro.theme, Theme::Path(scratch.path("themes/void-outro.raba")));
+    assert_eq!(
+        Boot { theme: before.config.boot.theme.clone(), ..after.boot.clone() },
+        before.config.boot
+    );
+    assert_eq!(
+        Outro { theme: before.config.outro.theme.clone(), ..after.outro.clone() },
+        before.config.outro
+    );
+    assert_eq!(after.progress, before.config.progress);
+    assert_eq!(after.handoff, before.config.handoff);
+    assert_eq!(after.log, before.config.log);
+}
+
+#[test]
+fn freezing_resolves_auto_so_that_an_initramfs_never_has_to() {
+    let scratch = Scratch::new("freeze-auto");
+    scratch.write("themes/cachyos.raba", "x");
+    scratch.write("os-release", "ID=cachyos\nID_LIKE=arch\n");
+    let frozen = config::start(&scratch.places()).freeze().expect("something to freeze");
+
+    let wanted = format!("Theme={}", scratch.path("themes/cachyos.raba").display());
+    assert!(frozen.contains(&wanted), "{frozen}");
+    assert!(!frozen.contains("Theme=auto\n"), "an unresolved auto reached the image:\n{frozen}");
+}
+
+#[test]
+fn a_disabled_timeout_survives_being_frozen() {
+    let scratch = Scratch::new("freeze-zero");
+    scratch.write("themes/generic.raba", "x");
+    scratch.write("raba.conf", "[Boot]\nTimeout=0\nShowDelay=1.25\n");
+    let frozen = config::start(&scratch.places()).freeze().expect("something to freeze");
+
+    assert!(frozen.contains("Timeout=0\n"), "{frozen}");
+    assert!(frozen.contains("ShowDelay=1.25\n"), "{frozen}");
+    assert_eq!(clean(&frozen).boot.timeout, None);
+}
+
+#[test]
+fn an_outro_that_did_not_resolve_is_frozen_as_disabled() {
+    // Writing Enable=true next to a theme that is not there would make every
+    // boot look for a file the build already knew was missing.
+    let scratch = Scratch::new("freeze-outro");
+    scratch.write("themes/generic.raba", "x");
+    let frozen = config::start(&scratch.places()).freeze().expect("something to freeze");
+
+    assert!(frozen.contains("Enable=false"), "{frozen}");
+    assert!(!clean(&frozen).outro.enable);
+}
+
+#[test]
+fn there_is_nothing_to_freeze_without_a_theme() {
+    let scratch = Scratch::new("freeze-nothing");
+    let startup = config::start(&scratch.places());
+    assert!(startup.freeze().is_none());
+    assert!(startup.files().is_empty());
+}
+
+#[test]
+fn the_files_an_image_needs_are_the_art_and_only_the_art() {
+    let scratch = Scratch::new("freeze-files");
+    scratch.write("themes/generic.raba", "x");
+    scratch.write("themes/generic-outro.raba", "x");
+    scratch.write("raba.conf", "[Boot]\nTheme=generic\n");
+    let files = config::start(&scratch.places()).files();
+
+    assert_eq!(
+        files,
+        [scratch.path("themes/generic.raba"), scratch.path("themes/generic-outro.raba")]
+    );
 }

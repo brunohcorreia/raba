@@ -510,13 +510,93 @@ is reachable from a socket.
 
 ## M5 — Early boot
 
-- mkinitcpio hook, busybox and systemd initramfs, one hook name
-- dracut module — **v1, not later**: Void, Gentoo and Chimera are non-systemd and use dracut
-- systemd units: start, quit, quit-wait
-- `raba-setup` with `--dry-run` default, `--apply`, `--check`
-- **TPM2 token detection with a warning before touching the initramfs**
-- Hook never fails an image build
-- Config frozen into the initramfs; `raba-set-theme` rebuilds
+M4 made RABA drivable. M5 is everything that puts it inside an initramfs, which is
+where it is supposed to run and the one place none of the tests so far have been.
+
+| # | What | Status |
+|---|---|---|
+| 1 | `raba-setup --freeze`: one self-contained configuration, `auto` already resolved | done |
+| 2 | mkinitcpio install hook — busybox and systemd, one hook name | done |
+| 3 | mkinitcpio runtime hook | done |
+| 4 | The hook cannot fail an image build, proven against a stubbed mkinitcpio | done |
+| 5 | systemd units: start, quit, quit-wait | done |
+| 6 | dracut module — **v1, not later**: Void, Gentoo and Chimera are non-systemd | |
+| 7 | initramfs-tools hook (Debian, Ubuntu) | |
+| 8 | Service files for OpenRC, runit, s6 and dinit | |
+| 9 | `raba-setup`: dry run by default, `--apply`, `--check` | |
+| 10 | TPM2 token detected and warned about **before** the initramfs is touched | |
+| 11 | A real mkinitcpio image, booted in QEMU, draws | |
+
+### The one rule the hook lives by
+
+mkinitcpio counts a failing `add_*` as a build error — the `RETURN` trap in
+`/usr/lib/initcpio/functions` — and a build error fails the whole image, which
+fails the kernel update that triggered it. A boot splash that can do *that* to
+somebody's `pacman -Syu` has no business being in their `HOOKS`.
+
+So the hook hands nothing to an `add_*` before checking it exists, and `build`
+returns 0 on every path. Where another hook would call `error`, this one calls
+`warning`: an image without a splash boots, and an image that was never written
+does not.
+
+That is a promise about a shell script, so it is tested like one.
+`integration/tests/mkinitcpio-build.sh` is a stub of mkinitcpio whose `add_*`
+functions fail exactly where the real ones fail and count it the same way, and
+the hook is run against nine half-installed machines — no `raba`, no
+`raba-setup`, no theme, no unit, no runtime hook, art that vanishes mid-build.
+Every case asserts the same two things: nothing was counted, and `build`
+returned 0. `cargo test` runs it, because a hook that can break a kernel update
+should not be left to a CI job nobody runs locally.
+
+The stub is deliberately stricter than the real thing in one place. Records go
+to files rather than shell arrays, because `add_file -` is called from inside a
+pipeline — and in real mkinitcpio a failing `add_*` in a pipeline increments a
+copy of `_builderrors` that is then thrown away.
+
+### One hook name, two kinds of initramfs
+
+`command -v add_systemd_unit` is the whole test. That function exists only when
+mkinitcpio has already sourced its `systemd` install hook into the same shell,
+which is exactly the distinction that matters: a systemd initramfs has no
+`/init` script to run a runtime hook from, and a busybox one has no systemd to
+run a unit from. One name in `HOOKS`, and no `sd-raba` — Plymouth shipped that
+and deprecated it, and [packaging.md](packaging.md) already says not to repeat
+other people's reversed decisions.
+
+The unit is wanted from **inside the image only**: the hook writes a
+`sysinit.target.wants` symlink into the initramfs and touches nothing on the
+host. Putting `raba` in `HOOKS` is the consent; installing the package is not.
+
+### Freezing, and why `auto` cannot wait
+
+`Theme=auto` resolves against `os-release`(5), and there is no `os-release` in
+an initramfs. So resolution happens where the answer is knowable — at image
+build time, on a running system — and `raba-setup --freeze` writes the whole
+effective configuration, every path absolute, into `/etc/raba/raba.conf`
+*inside the image*. Nothing is layered underneath it there; `raba.defaults` is
+not in the image.
+
+Every key is written, not only the ones that differ from a default. A key that
+quietly failed to survive the freeze would be a setting that works on the
+installed system and not at boot, which is the one kind of difference nobody
+would think to look for.
+
+The property that makes this safe is a round trip: what `freeze` writes, the
+parser reads back as the same configuration. The first draft failed it — the
+report spells a duration `30s` and the parser wants `30` — which is exactly the
+bug this test exists to catch, found before the file had ever been near an
+initramfs.
+
+### raba-setup is a second binary on purpose
+
+Freezing a configuration, inspecting an image and warning about a TPM all happen
+on a machine with a shell, a package manager and a `/etc`. None of them belong
+in the binary that has a size gate and goes into an initramfs, and all of them
+are allowed to be as large as they need to be in one that does not.
+
+It depends on `raba` as a library for exactly one thing: the configuration
+parser. The file it writes is read back by `raba` at boot, and a second
+implementation of that format would be a second set of bugs.
 
 ---
 

@@ -1,0 +1,33 @@
+# The splash, started by systemd.
+#
+# Used in two places with one file: inside a systemd initramfs, where the
+# mkinitcpio hook drops a sysinit.target.wants symlink into the image, and on
+# the real root, where you enable it yourself. Both can run on the same boot —
+# the second one finds the first still drawing, and declines. See
+# crates/raba/src/conflict.rs.
+[Unit]
+Description=RABA boot splash
+Documentation=man:raba(8) man:raba.conf(5)
+DefaultDependencies=no
+After=systemd-vconsole-setup.service
+# The console font decides which glyphs exist, so it goes first where it can.
+Wants=systemd-vconsole-setup.service
+# The same kill switch as everywhere else, honoured before systemd even starts
+# the process. raba checks /proc/cmdline itself as well; this is so a disabled
+# splash does not show up as a started unit.
+ConditionKernelCommandLine=!raba.enable=0
+ConditionVirtualization=!container
+ConditionPathExists=!/run/plymouth.pid
+IgnoreOnIsolate=true
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/raba
+# raba blocks SIGTERM and acts on it at a frame boundary, restoring the terminal
+# on the way out; a second one is fatal by design. There is nothing here to make
+# survive switch_root: systemd's killing spree is answered by resuming from
+# /run/raba.state rather than by fighting it. See docs/early-boot.md.
+TimeoutStopSec=5
+
+[Install]
+WantedBy=sysinit.target

@@ -223,7 +223,7 @@ fn whole<T: std::str::FromStr>(value: &str, want: &str) -> Result<T, String> {
 // --------------------------------------------------------------- sections ---
 
 /// `[Boot]`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Boot {
     pub theme: Theme,
     pub tty: Tty,
@@ -235,7 +235,7 @@ pub struct Boot {
 }
 
 /// `[Outro]`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Outro {
     pub enable: bool,
     pub theme: Theme,
@@ -244,7 +244,7 @@ pub struct Outro {
 }
 
 /// `[Progress]`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Progress {
     pub enable: bool,
     pub style: Style,
@@ -257,14 +257,14 @@ pub struct Progress {
 }
 
 /// `[Handoff]`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Handoff {
     pub mode: Mode,
     pub restore_tty: bool,
 }
 
 /// `[Log]`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Log {
     pub level: Level,
     pub file: PathBuf,
@@ -925,10 +925,170 @@ fn terminal(tty: Tty) -> String {
 /// percent of the binary size gate. All it would buy is the way a number is
 /// printed in a report nobody sees on most boots. Integers and a decimal point.
 fn length(duration: Duration) -> String {
-    let millis = duration.subsec_millis();
-    if millis == 0 {
-        return format!("{}s", duration.as_secs());
+    format!("{}s", decimal(thousandths(duration)))
+}
+
+/// Milliseconds, saturating. A duration longer than half a billion years is not
+/// a `Timeout`, and the alternative is a cast that lies.
+fn thousandths(duration: Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
+
+/// Thousandths as a decimal, without a trailing `.000` and without a float.
+///
+/// `1500` is `1.5`, `30000` is `30`. Shared by the report, where it is read by a
+/// person, and by [`Startup::freeze`], where it has to be read back by
+/// [`seconds`] — which is why the only spelling it produces is one that parses.
+fn decimal(thousandths: u64) -> String {
+    let whole = thousandths / 1000;
+    let fraction = thousandths % 1000;
+    if fraction == 0 {
+        return format!("{whole}");
     }
-    let fraction = format!("{millis:03}");
-    format!("{}.{}s", duration.as_secs(), fraction.trim_end_matches('0'))
+    let digits = format!("{fraction:03}");
+    format!("{whole}.{}", digits.trim_end_matches('0'))
+}
+
+// ---------------------------------------------------------------- freeze ----
+
+impl Startup {
+    /// The whole effective configuration as one self-contained file.
+    ///
+    /// This is what goes into the initramfs. `raba`(8) cannot read
+    /// `/etc/raba/raba.conf` at boot — the root filesystem is not mounted — so
+    /// the hook that builds the image resolves everything here, on a running
+    /// system where `/etc` and `os-release`(5) exist, and writes the answer
+    /// inside. `Theme=auto` in particular **cannot** be resolved at boot: there
+    /// is no `os-release` in an initramfs, which is why `raba.conf`(5) says
+    /// resolution happens when the image is generated.
+    ///
+    /// Every key is written, not just the ones that differ from a default, and
+    /// nothing is layered underneath it: `raba.defaults` is not in the image. A
+    /// key that quietly failed to survive the freeze would be a setting that
+    /// works on the installed system and not at boot, which is the one kind of
+    /// difference nobody would think to look for.
+    ///
+    /// `None` when no theme resolved — there is nothing to freeze, and the hook
+    /// has nothing to put in the image.
+    #[must_use]
+    pub fn freeze(&self) -> Option<String> {
+        let theme = self.settings.theme.to_str()?;
+        if theme.is_empty() {
+            return None;
+        }
+        let config = &self.config;
+        let outro = self.settings.outro.as_ref().and_then(|path| path.to_str());
+        let mut out = String::new();
+
+        out.push_str("# Generated for the initramfs. Do not edit.\n");
+        out.push_str("#\n");
+        out.push_str(
+            "# Edits belong in /etc/raba/raba.conf on the root filesystem. This copy is\n",
+        );
+        out.push_str(
+            "# rebuilt from it every time the image is, and every path in it is already\n",
+        );
+        out.push_str("# resolved: there is no os-release(5) in an initramfs to resolve `auto`\n");
+        out.push_str("# against. See raba.conf(5).\n");
+
+        out.push_str("\n[Boot]\n");
+        row(&mut out, "Theme", theme);
+        row(&mut out, "Tty", &tty_value(config.boot.tty));
+        row(&mut out, "ShowDelay", &decimal(thousandths(config.boot.show_delay)));
+        row(
+            &mut out,
+            "Timeout",
+            &config.boot.timeout.map_or_else(|| "0".to_owned(), |t| decimal(thousandths(t))),
+        );
+        row(&mut out, "FrameRateOverride", &rate(config.boot.frame_rate));
+
+        out.push_str("\n[Outro]\n");
+        // An outro that did not resolve is an outro that is not there. Writing
+        // `Enable=true` next to a theme that does not exist would make every
+        // boot look for a file the build already knows is missing.
+        row(&mut out, "Enable", boolean_value(config.outro.enable && outro.is_some()));
+        // No `Theme=` at all when there is nothing to name. `auto` here would be
+        // a word that cannot be resolved where this file is going, and an empty
+        // value is one its own parser refuses.
+        if let Some(outro) = outro {
+            row(&mut out, "Theme", outro);
+        }
+        row(&mut out, "MaxDuration", &decimal(thousandths(config.outro.max_duration)));
+        row(&mut out, "FinishFrame", boolean_value(config.outro.finish_frame));
+
+        out.push_str("\n[Progress]\n");
+        row(&mut out, "Enable", boolean_value(config.progress.enable));
+        row(&mut out, "Style", config.progress.style.name());
+        row(&mut out, "Source", config.progress.source.name());
+        row(&mut out, "Position", config.progress.position.name());
+        row(&mut out, "Width", &config.progress.width.to_string());
+        row(&mut out, "Color", &config.progress.color.to_string());
+        row(&mut out, "BackgroundColor", &config.progress.background.to_string());
+
+        out.push_str("\n[Handoff]\n");
+        row(&mut out, "Mode", config.handoff.mode.name());
+        row(&mut out, "RestoreTty", boolean_value(config.handoff.restore_tty));
+
+        out.push_str("\n[Log]\n");
+        row(&mut out, "Level", config.log.level.name());
+        row(&mut out, "File", &config.log.file.display().to_string());
+
+        Some(out)
+    }
+
+    /// The files the image needs beside the frozen configuration, one per line.
+    ///
+    /// Only art: the binaries are the hook's business and the configuration is
+    /// generated rather than copied. Every path here exists — the hook calls
+    /// `add_file` on each, and in mkinitcpio an `add_*` that fails is an image
+    /// build that fails. See `integration/mkinitcpio/install/raba`.
+    #[must_use]
+    pub fn files(&self) -> Vec<PathBuf> {
+        let mut files = Vec::new();
+        if !self.settings.theme.as_os_str().is_empty() {
+            files.push(self.settings.theme.clone());
+        }
+        files.extend(self.settings.outro.clone());
+        files.retain(|path| path.is_file());
+        files
+    }
+}
+
+fn row(out: &mut String, key: &str, value: &str) {
+    out.push_str(key);
+    out.push('=');
+    out.push_str(value);
+    out.push('\n');
+}
+
+const fn boolean_value(yes: bool) -> &'static str {
+    if yes {
+        "true"
+    } else {
+        "false"
+    }
+}
+
+fn tty_value(tty: Tty) -> String {
+    match tty {
+        Tty::Auto => "auto".to_owned(),
+        Tty::Fixed(number) => number.to_string(),
+    }
+}
+
+/// A frame rate, through the integer formatter.
+///
+/// The multiplication is the only arithmetic done on the value, and the
+/// alternative — `{}` on an `f64` — costs fifteen kilobytes of Grisu in a
+/// binary that has a size gate. `0` is the documented "use the theme's rate".
+fn rate(rate: Option<f64>) -> String {
+    let Some(rate) = rate else {
+        return "0".to_owned();
+    };
+    let thousandths = (rate * 1000.0).round();
+    if !thousandths.is_finite() || thousandths < 0.0 || thousandths > 1_000_000.0 {
+        return "0".to_owned();
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    decimal(thousandths as u64)
 }
