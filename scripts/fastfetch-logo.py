@@ -94,6 +94,63 @@ def read_slot(params):
     return None
 
 
+# The sixteen colours a Linux console actually has, as the VGA palette renders
+# them. Everything below is measured against these and nothing else: a logo is
+# going to be drawn in one of them whatever fastfetch asked for.
+CONSOLE_RGB = [
+    (0, 0, 0), (170, 0, 0), (0, 170, 0), (170, 85, 0),
+    (0, 0, 170), (170, 0, 170), (0, 170, 170), (170, 170, 170),
+    (85, 85, 85), (255, 85, 85), (85, 255, 85), (255, 255, 85),
+    (85, 85, 255), (255, 85, 255), (85, 255, 255), (255, 255, 255),
+]
+CUBE = (0, 95, 135, 175, 215, 255)
+
+
+def xterm_rgb(index: int):
+    """What `38;5;N` actually means, in RGB."""
+    if index < 16:
+        return CONSOLE_RGB[index]
+    if index < 232:
+        rest = index - 16
+        return (CUBE[rest // 36], CUBE[rest // 6 % 6], CUBE[rest % 6])
+    return (8 + 10 * (index - 232),) * 3
+
+
+def nearest_console(index: int) -> int:
+    """The closest of the sixteen to a 256-colour value.
+
+    Twenty-nine of fastfetch's logos are written in the 256-colour palette, and
+    until this existed every one of them came out of here with no colour at all:
+    the reader below understood `31` and `1;36` and nothing else, so the slot was
+    dropped, the recipe said `colors = []`, and the art drew in its default. The
+    symptom was a build-time warning nobody read and a logo in the wrong colour
+    on somebody's boot.
+
+    Distance is redmean, which is a cheap approximation of how different two
+    colours look rather than how far apart their numbers are. Plain Euclidean
+    RGB answers "light grey" for a yellow-green often enough to be useless.
+
+    Saturated sources are matched against saturated candidates only. Without
+    that rule a muted brand colour lands on grey, which is technically the
+    nearest point and visibly the wrong answer: a logo has a colour on purpose,
+    and the worst of the fifteen coloured choices is closer to the intent than
+    the best grey.
+    """
+    want = xterm_rgb(index)
+    saturated = max(want) - min(want) > 40
+    greys = {0, 7, 8, 15}
+
+    def distance(other):
+        mean = (want[0] + other[0]) / 2
+        dr, dg, db = (want[i] - other[i] for i in range(3))
+        return (2 + mean / 256) * dr * dr + 4 * dg * dg + (2 + (255 - mean) / 256) * db * db
+
+    candidates = range(16)
+    if saturated:
+        candidates = [slot for slot in candidates if slot not in greys]
+    return min(candidates, key=lambda slot: distance(CONSOLE_RGB[slot]))
+
+
 class Colour:
     """Reads a real logo's SGR, tracking bold separately from colour.
 
@@ -125,6 +182,13 @@ class Colour:
                     base = 7
                 elif 90 <= value <= 97:
                     base = value - 90 + 8
+        # `38;5;N`, read as a whole rather than parameter by parameter: the `5`
+        # in it is not a colour and the loop above would be happy to treat it as
+        # one.
+        if len(params) >= 3 and params[0] == "38" and params[1] == "5" and params[2].isdigit():
+            base = nearest_console(int(params[2]))
+            # An explicit 256-colour value has already said how bright it is.
+            return base
         if base is None:
             return None
         return base + 8 if self.bold and base < 8 else base

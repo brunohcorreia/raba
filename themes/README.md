@@ -186,3 +186,20 @@ Every theme in this directory must:
 
 Art comes from [fastfetch](https://github.com/fastfetch-cli/fastfetch), MIT licensed.
 Distribution logos are trademarks of their respective projects.
+
+## Colours fastfetch writes in 256 colours
+
+Twenty-nine of fastfetch's logos name their colour as `38;5;N` rather than as one of the
+sixteen a Linux console has. `scripts/fastfetch-logo.py` converts those: it works out
+what the value means in RGB and picks the nearest console colour, measuring with redmean
+and, for a saturated source, refusing to answer "grey" — a logo has a colour on purpose,
+and the worst of the fifteen coloured choices is closer to the intent than the best grey.
+
+**It is an approximation and sometimes it is wrong.** Azure sits between cyan and blue
+and the arithmetic has to pick one. If a logo comes out in a colour its project would not
+recognise, change the number in the recipe and say why in a comment above it; nothing
+regenerates a recipe that already exists unless somebody asks it to.
+
+The first one this mattered for was Omarchy, whose `38;5;149` was being dropped entirely
+— the reader understood `31` and `1;36` and nothing else — so the recipe said
+`colors = []` and the logo drew in the default grey.

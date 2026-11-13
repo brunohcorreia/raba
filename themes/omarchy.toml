@@ -4,14 +4,13 @@
 
 [logo]
 source = "file:omarchy.txt"
-colors = []
-default_color = 7
+colors = [11]
 
 [spinner]
 style = "ascii"
 position = "below"
 gap = 1
-color = 7
+color = 11
 
 [canvas]
 framerate = 8
