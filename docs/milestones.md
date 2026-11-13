@@ -378,7 +378,7 @@ decides *when* — the part somebody else has to be able to drive.
 | 3 | The phase machine, pure and testable: boot loop → outro → handoff | done |
 | 4 | Control socket: `0600`, root-owned, `SO_PEERCRED` rejecting non-root | done |
 | 5 | `raba-ctl`: `quit`, `deactivate`, `reactivate`, `message`, `ping`, `status` | done |
-| 6 | `/run/raba.state`, resumable: being killed stops being an event | |
+| 6 | `/run/raba.state`, resumable: being killed stops being an event | done |
 | 7 | `raba` as a daemon: phases, `MaxDuration`, signals | |
 | 8 | Timeout **reveals the console** rather than exiting | |
 | 9 | Conflict detection in the binary, not in service files | |

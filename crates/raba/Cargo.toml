@@ -21,7 +21,7 @@ path = "src/main.rs"
 [dependencies]
 raba-core = { path = "../raba-core", version = "0.0.0" }
 raba-term = { path = "../raba-term", version = "0.0.0" }
-rustix = { version = "1", features = ["termios", "system", "net", "process"] }
+rustix = { version = "1", features = ["termios", "system", "net", "process", "time"] }
 
 [lints]
 workspace = true
