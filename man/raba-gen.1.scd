@@ -8,9 +8,31 @@ raba-gen - build and convert .raba animations
 
 *raba-gen* build _recipe.toml_ [*-o* _out.raba_]
 
-*raba-gen* *--check* _file.raba_
+*raba-gen* *generate* _animation_
+	Produce an animation that has no source file. _animation_ is one of *doom*,
+	*matrix*, *colormix* or *gameoflife* — the names Ly uses in its own
+	configuration, so a setup can be carried across.
 
-*raba-gen* convert _input_ [*-o* _out.raba_] (not implemented yet)
+	*--columns* _N_, *--lines* _N_
+		Canvas size. Default 80x25.
+	*--frames* _N_
+		How long the loop runs. For *gameoflife* this is a budget rather than a
+		length: the animation repeats every 30 generations and stops there.
+	*--delay* _MS_
+		Milliseconds per frame. Default 80.
+	*--seed* _N_
+		The same seed gives the same file, so a build is reproducible.
+	*--palette* _16_|_256_
+		Colour depth. Default 16, which is what a console has.
+
+	All of these loop except *doom*, which is chaotic and says so when it runs.
+	See *docs/generated.md*.
+
+*--check* _file.raba_
+
+*raba-gen* convert _input.dur_ [*-o* _out.raba_] [*--preview*]
+
+*raba-gen* generate _animation_ [*-o* _out.raba_] [*--preview*]
 
 *raba-gen* *--list-logos* [_pattern_]
 
@@ -46,6 +68,26 @@ whatever it likes while *raba*(8) depends on nothing.
 
 	The art is vendored from fastfetch at a pinned commit, reported in the
 	footer of the listing.
+
+*generate* _animation_
+	Produce an animation that has no source file. _animation_ is one of *doom*,
+	*matrix*, *colormix* or *gameoflife* — the names Ly uses in its own
+	configuration, so a setup can be carried across.
+
+	*--columns* _N_, *--lines* _N_
+		Canvas size. Default 80x25.
+	*--frames* _N_
+		How long the loop runs. For *gameoflife* this is a budget rather than a
+		length: the animation repeats every 30 generations and stops there.
+	*--delay* _MS_
+		Milliseconds per frame. Default 80.
+	*--seed* _N_
+		The same seed gives the same file, so a build is reproducible.
+	*--palette* _16_|_256_
+		Colour depth. Default 16, which is what a console has.
+
+	All of these loop except *doom*, which is chaotic and says so when it runs.
+	See *docs/generated.md*.
 
 *--check* _file.raba_
 	Validate an existing *.raba* without generating anything. Reports format version,

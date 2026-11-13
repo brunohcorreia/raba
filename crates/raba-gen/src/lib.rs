@@ -8,6 +8,7 @@ pub mod art;
 pub mod build;
 pub mod compose;
 pub mod dur;
+pub mod generate;
 pub mod layout;
 pub mod logos;
 pub mod palette;

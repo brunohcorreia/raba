@@ -6,6 +6,7 @@ use raba_core::glyph::{self, audit, Safety};
 use raba_core::Movie;
 use raba_gen::build::{build, spinners, Recipe};
 use raba_gen::dur;
+use raba_gen::generate::{generate, Kind, Spec};
 use raba_gen::logos;
 use raba_gen::recipe::{self, ArtSource};
 use std::path::{Path, PathBuf};
@@ -22,12 +23,17 @@ raba-gen - build and convert .raba animations
 usage:
     raba-gen build <recipe.toml> [-o <out.raba>] [--preview]
     raba-gen convert <art.dur> [-o <out.raba>] [--preview]
+    raba-gen generate <kind> [-o <out.raba>] [--preview]
     raba-gen --check <file.raba>
     raba-gen --list-logos [pattern]
 
 options:
     -o <path>              output file (default: the recipe's name with .raba)
     --preview              play the result here instead of writing a file
+    --columns N --lines N  canvas for generate (default 80x25)
+    --frames N --delay MS  length and frame time for generate
+    --seed N               generator seed; the same seed gives the same file
+    --palette 16|256       colour depth for generate (default 16)
     --allow-unsafe-glyphs  downgrade the glyph check from an error to a warning
     --version              print the version and the format version
     --help                 print this
@@ -51,6 +57,7 @@ fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("build") => build_command(args.get(1..).unwrap_or(&[])),
         Some("convert") => convert_command(args.get(1..).unwrap_or(&[])),
+        Some("generate") => generate_command(args.get(1..).unwrap_or(&[])),
         Some("--check") => check_command(args.get(1..).unwrap_or(&[])),
         Some("--list-logos") => list_logos(args.get(1).map(String::as_str)),
         Some("--version") => {
@@ -289,6 +296,127 @@ fn convert_command(args: &[String]) -> Result<(), String> {
         movie.frames.len(),
         movie.ops.len(),
         bytes_out.len()
+    );
+    Ok(())
+}
+
+/// `generate` — produce an animation that has no source file.
+///
+/// Ly's built-in animations are procedural code rather than art, so there is
+/// nothing to import. Generating them here instead of running them at boot is
+/// what the project's rule asks for: authoring time may compute anything, run
+/// time only plays frames.
+fn generate_command(args: &[String]) -> Result<(), String> {
+    let mut kind: Option<Kind> = None;
+    let mut output: Option<PathBuf> = None;
+    let mut spec = Spec::default();
+    let mut preview = false;
+    let mut index = 0;
+
+    let number = |args: &[String], at: usize, what: &str| -> Result<u64, String> {
+        args.get(at)
+            .ok_or_else(|| format!("{what} needs a value"))?
+            .parse::<u64>()
+            .map_err(|e| format!("{what}: {e}"))
+    };
+
+    while let Some(arg) = args.get(index) {
+        index = index.saturating_add(1);
+        match arg.as_str() {
+            "--preview" => preview = true,
+            "-o" | "--out" => {
+                let value = args.get(index).ok_or("-o needs a path")?;
+                index = index.saturating_add(1);
+                output = Some(PathBuf::from(value));
+            }
+            "--columns" => {
+                spec.columns = u16::try_from(number(args, index, "--columns")?).unwrap_or(80);
+                index = index.saturating_add(1);
+            }
+            "--lines" => {
+                spec.lines = u16::try_from(number(args, index, "--lines")?).unwrap_or(25);
+                index = index.saturating_add(1);
+            }
+            "--frames" => {
+                spec.frames = u16::try_from(number(args, index, "--frames")?).unwrap_or(60);
+                index = index.saturating_add(1);
+            }
+            "--delay" => {
+                spec.delay_ms = u16::try_from(number(args, index, "--delay")?).unwrap_or(80);
+                index = index.saturating_add(1);
+            }
+            "--seed" => {
+                spec.seed = number(args, index, "--seed")?;
+                index = index.saturating_add(1);
+            }
+            "--palette" => {
+                spec.palette = match args.get(index).map(String::as_str) {
+                    Some("16") => raba_core::Palette::Ansi16,
+                    Some("256") => raba_core::Palette::Xterm256,
+                    other => return Err(format!("--palette {other:?}; use 16 or 256")),
+                };
+                index = index.saturating_add(1);
+            }
+            other if other.starts_with('-') => {
+                return Err(format!("unknown option {other}\n\n{USAGE}"))
+            }
+            other => {
+                kind = Some(Kind::named(other).ok_or_else(|| {
+                    format!(
+                        "unknown animation {other:?}; try {}",
+                        Kind::ALL.map(Kind::name).join(", ")
+                    )
+                })?);
+            }
+        }
+    }
+
+    let kind = kind.ok_or_else(|| {
+        format!("generate needs an animation: {}", Kind::ALL.map(Kind::name).join(", "))
+    })?;
+
+    let movie = generate(kind, &spec);
+
+    if !kind.loops_seamlessly() {
+        eprintln!(
+            "raba-gen: {} is chaotic and does not return to its first frame, so the \
+             loop has a seam; see the module docs for why it is not hidden",
+            kind.name()
+        );
+    }
+    if movie.frames.len() != usize::from(spec.frames) {
+        eprintln!(
+            "raba-gen: {} settled into a {}-frame cycle, shorter than the {} asked for",
+            kind.name(),
+            movie.frames.len(),
+            spec.frames
+        );
+    }
+    if report_glyphs(&movie) > 0 {
+        return Err(format!("{}: generated characters a console cannot draw", kind.name()));
+    }
+
+    let bytes = raba_core::encode(&movie);
+
+    if preview {
+        let mut surface = raba_term::StdoutSurface::new();
+        let _ = raba_term::clear(&mut surface);
+        let played = raba_term::play(&mut surface, &movie, PREVIEW_LOOPS);
+        let _ = <raba_term::StdoutSurface as raba_core::surface::Surface>::restore(&mut surface);
+        played.map_err(|e| format!("{}: {e}", kind.name()))?;
+        return Ok(());
+    }
+
+    let output = output.unwrap_or_else(|| PathBuf::from(format!("{}.raba", kind.name())));
+    std::fs::write(&output, &bytes).map_err(|e| format!("{}: {e}", output.display()))?;
+    println!(
+        "{}: {}x{}, {} frames, {} ops, {} bytes",
+        output.display(),
+        movie.columns,
+        movie.lines,
+        movie.frames.len(),
+        movie.ops.len(),
+        bytes.len()
     );
     Ok(())
 }

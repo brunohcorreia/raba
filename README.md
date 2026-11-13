@@ -145,7 +145,12 @@ editors:
 raba-gen convert art.dur -o art.raba      # Durdraw
 raba-gen convert art.ans -o art.raba      # ANSI art
 raba-gen build theme.toml -o theme.raba   # logo + spinner recipe
+raba-gen generate matrix -o matrix.raba   # no source file at all
 ```
+
+Not every animation has a file. `generate` produces the ones Ly has built in —
+`doom`, `matrix`, `colormix`, `gameoflife` — as `.raba`, computed once at build time
+rather than run at boot. See [docs/generated.md](docs/generated.md).
 
 The rule the design follows:
 
@@ -252,6 +257,7 @@ font.
 | [docs/format.md](docs/format.md) | the `.raba` format and the converters |
 | [docs/early-boot.md](docs/early-boot.md) | starting early, and surviving `switch_root` |
 | [docs/dur-support.md](docs/dur-support.md) | importing `.dur`, and its version traps |
+| [docs/generated.md](docs/generated.md) | animations with no source file, and how each loops |
 | [docs/progress.md](docs/progress.md) | progress indication, and why it is hard |
 | [docs/luks.md](docs/luks.md) | disk encryption, and why RABA stays out of it |
 | [docs/risks.md](docs/risks.md) | pre-mortem: what can break, including upstream |

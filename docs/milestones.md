@@ -169,8 +169,9 @@ flagged CachyOS about a year before the Steam survey did.
 | 2 | **The critical test:** identical artwork as v7 and v8 must produce byte-identical `.raba` | done |
 | 3 | Fuzz target on the `.dur` parser | done |
 | 4 | Canvas placement: centre and crop when the art is not the console's size | done |
-| 5 | ANSI art and plain text importers | |
-| 6 | `--also-dur` for display managers that play their own animation | |
+| 5 | `generate` for animations that have no source file | done |
+| 6 | ANSI art and plain text importers | |
+| 7 | `--also-dur` for display managers that play their own animation | |
 
 ### Progress
 
@@ -358,3 +359,38 @@ nudging the console palette's green by one does not move any nearest-colour
 decision, and `Cell::BLANK` never survives, because frame 0 writes every cell.
 Changing one spinner glyph was caught in all 50, each with the line of the first
 difference.
+
+
+### Generated animations
+
+Ly has five built-in animations and four of them are procedural code rather than
+art, so there was nothing to import. `raba-gen generate` produces them instead —
+`doom`, `matrix`, `colormix`, `gameoflife`, under Ly's own names so a setup can be
+carried across. See [generated.md](generated.md).
+
+The interesting constraint is that all of them must **loop**, because `raba`(8)
+repeats the boot animation until the system is ready, and a seam shows up in the
+same place every few seconds. Each closes its loop differently: matrix by giving
+every column a fall cycle that divides the frame count, colormix by using sine
+waves over a whole number of turns, Life by *finding* its cycle rather than
+imposing one. Fire does not close, and says so — it is chaotic, forcing the state
+back would be a visible jump, and a crossfade needs blending a console cannot do.
+
+Life was a random soup first, and measuring it changed the design: on an 80x25
+torus **every seed tried settled to period 2**. The cycle detection was returning
+an exact and correct answer, and the answer was a two-frame file of things
+twitching. The board is now a garden of oscillators with coprime periods — 15, 3
+and 2 — so it repeats every 30 generations, which the same search finds
+independently.
+
+Two things the tests caught that review had not. The shader dithered its brightest
+band against bright yellow as a background, which on a console is the blink bit
+rather than a bright colour: it would have flashed. That rule is now enforced at
+compile time. And the module comment claiming backgrounds stayed in 0–7 was the
+thing being contradicted, which is a reminder that a comment is not a check.
+
+**Delta encoding keeps paying even when most of the screen moves.** Fire changes
+about half the canvas every frame and still costs less than a dense format would,
+and the black hole that drove the importer changes only 6.8%. The worry recorded in
+`3d-logos.md` — that the format stops earning its place once the art is not a logo
+with a spinner — turns out not to apply to real animation.
