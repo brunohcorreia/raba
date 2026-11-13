@@ -315,13 +315,12 @@ fn boot(startup: &config::Startup) {
     // which tells the person nothing at all. Here the list of what was looked
     // for still exists, so the message can be the list.
     if startup.settings.theme.as_os_str().is_empty() {
+        // Always a list: `config::candidates` cannot return an empty one, so
+        // there is no "no theme is configured" case to handle separately. There
+        // was a branch for it, and nothing could reach it.
         let looked: Vec<String> =
             startup.tried.iter().map(|path| path.display().to_string()).collect();
-        report(&if looked.is_empty() {
-            "not drawing: no theme is configured".to_owned()
-        } else {
-            format!("not drawing: no theme found; looked for {}", looked.join(", "))
-        });
+        report(&format!("not drawing: no theme found; looked for {}", looked.join(", ")));
         return;
     }
     let outcome = raba::boot::run(&startup.settings);

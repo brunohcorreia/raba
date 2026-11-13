@@ -214,3 +214,136 @@ fn the_cp437_table_is_total_and_round_trips() {
 fn first_byte_for(ch: char) -> u8 {
     u8::try_from(cp437::TABLE.iter().position(|c| *c == ch).unwrap()).unwrap()
 }
+
+// --- the escape sequences real art uses and nothing tested --------------------
+//
+// Added when coverage said the SGR table and the erase sequences were
+// unexercised. Every one of these appears in art people actually have: the
+// bright-colour codes are how most .ans files colour anything, and the erase
+// forms are what an editor emits when it clears the screen before drawing.
+
+#[test]
+fn a_bright_foreground_is_the_top_half_of_the_palette() {
+    // 90-97 is how almost every .ans file draws a bright colour; mapping it to
+    // the dim eight would quietly flatten the art.
+    let art = parsed(b"\x1b[91mA\x1b[0m");
+    assert_eq!(colour_at(&art, 0, 0).0, 9, "bright red foreground");
+}
+
+/// A console has eight background colours, not sixteen: the ninth bit is the
+/// blink attribute. So 100-107 lands on the dim half deliberately, and the
+/// note is how the author hears about it.
+#[test]
+fn a_bright_background_lands_on_the_dim_half_and_the_note_says_so() {
+    let art = parsed(b"\x1b[101mB\x1b[0m");
+    assert_eq!(colour_at(&art, 0, 0).1, 1, "bright red background folded to red");
+    assert!(
+        art.notes.iter().any(|note| note.to_lowercase().contains("background")),
+        "the fold happened without a word: {:?}",
+        art.notes
+    );
+}
+
+#[test]
+fn reverse_video_swaps_the_two_colours_rather_than_being_ignored() {
+    let art = parsed(b"\x1b[31;44m\x1b[7mX");
+    assert_eq!(colour_at(&art, 0, 0), (4, 1), "7m did not swap foreground and background");
+}
+
+#[test]
+fn the_default_colour_codes_put_the_defaults_back() {
+    let art = parsed(b"\x1b[31;44mA\x1b[39mB\x1b[49mC");
+    assert_eq!(colour_at(&art, 1, 0).0, 7, "39m did not restore the default foreground");
+    assert_eq!(colour_at(&art, 2, 0).1, 0, "49m did not restore the default background");
+}
+
+#[test]
+fn a_256_colour_background_is_kept_as_the_index_it_asked_for() {
+    let art = parsed(b"\x1b[48;5;123mX");
+    assert_eq!(colour_at(&art, 0, 0).1, 123);
+}
+
+#[test]
+fn blinking_text_is_imported_and_the_note_says_it_was_lost() {
+    // Nothing in a .raba blinks, so the only honest thing is to say so: a
+    // decision made silently is one nobody can check.
+    let art = parsed(b"\x1b[5mX");
+    assert!(
+        art.notes.iter().any(|note| note.contains("blink")),
+        "blinking was dropped without a word: {:?}",
+        art.notes
+    );
+}
+
+#[test]
+fn an_unknown_sgr_parameter_is_ignored_rather_than_refused() {
+    // Art in the wild carries codes from editors nobody has any more. Dropping
+    // one costs a colour; refusing the file costs the art.
+    let art = parsed(b"\x1b[73mX\x1b[0m");
+    assert_eq!(rows(&art), vec!["X"]);
+}
+
+#[test]
+fn erase_to_the_end_of_the_screen_leaves_what_came_before_it() {
+    let art = parsed(b"keep\r\ngone\x1b[1;5H\x1b[0J");
+    assert_eq!(rows(&art).first().map(String::as_str), Some("keep"));
+}
+
+#[test]
+fn erase_to_the_start_of_the_screen_clears_the_lines_above() {
+    // 1J erases from the top of the screen down to the cursor, so the first
+    // line goes and what is written afterwards stays.
+    let art = parsed(b"gone\r\nxxxx\x1b[1Jkeep");
+    let rows = rows(&art);
+    assert_eq!(rows.first().map(String::as_str), Some(""), "the line above was not cleared");
+    assert!(rows.iter().any(|row| row.contains("keep")), "{rows:?}");
+}
+
+#[test]
+fn erase_the_whole_screen_leaves_nothing_before_it() {
+    let art = parsed(b"gone\r\nalso gone\x1b[2Jkept");
+    let rows = rows(&art);
+    assert!(rows.iter().all(|row| !row.contains("gone")), "2J left something behind: {rows:?}");
+}
+
+#[test]
+fn a_tab_moves_to_the_next_multiple_of_eight() {
+    let art = parsed(b"a\tb");
+    assert_eq!(rows(&art).first().map(String::as_str), Some("a       b"));
+}
+
+#[test]
+fn art_with_nothing_on_it_is_refused_rather_than_becoming_an_empty_animation() {
+    let outcome = ansi::parse(b"", &Options::default());
+    assert!(matches!(outcome, Err(AnsiError::Empty)), "{outcome:?}");
+}
+
+#[test]
+fn art_taller_than_the_format_allows_is_refused_by_height() {
+    let mut bytes = Vec::new();
+    for _ in 0..1100 {
+        bytes.extend_from_slice(b"x\r\n");
+    }
+    let outcome = ansi::parse(&bytes, &Options::default());
+    assert!(matches!(outcome, Err(AnsiError::TooTall { .. })), "{outcome:?}");
+}
+
+#[test]
+fn every_reason_ansi_art_is_refused_says_what_the_limit_is() {
+    let cases = [
+        AnsiError::Empty,
+        AnsiError::TooWide { columns: 2000 },
+        AnsiError::TooTall { lines: 2000 },
+    ];
+    for error in cases {
+        let said = error.to_string();
+        assert!(said.len() > 10, "{error:?} says {said:?}, which is not a sentence");
+        if !matches!(error, AnsiError::Empty) {
+            assert!(said.contains("2000"), "{error:?} did not say what it got: {said}");
+            assert!(
+                said.contains("1024"),
+                "{error:?} said what was wrong and not what is allowed: {said}"
+            );
+        }
+    }
+}

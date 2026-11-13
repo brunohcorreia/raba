@@ -949,17 +949,18 @@ impl Startup {
 
         push(&mut out, "boot:");
         push(&mut out, &format!("  Theme         {}", self.config.boot.theme));
-        match (self.settings.theme.as_os_str().is_empty(), self.tried.as_slice()) {
-            (false, _) => {
-                push(&mut out, &format!("  resolved      {}", self.settings.theme.display()))
+        // No arm for "nothing was looked for": `candidates` cannot return an
+        // empty list. `Path` and `Named` are one entry each and `Auto` always
+        // ends with `generic`, so a theme that resolved to nothing always has a
+        // list to show. There used to be an arm for it, and it was a line of
+        // output no run could produce.
+        if self.settings.theme.as_os_str().is_empty() {
+            push(&mut out, "  resolved      nothing; looked for");
+            for path in &self.tried {
+                push(&mut out, &format!("                {}", path.display()));
             }
-            (true, []) => push(&mut out, "  resolved      nothing, and nothing was looked for"),
-            (true, tried) => {
-                push(&mut out, "  resolved      nothing; looked for");
-                for path in tried {
-                    push(&mut out, &format!("                {}", path.display()));
-                }
-            }
+        } else {
+            push(&mut out, &format!("  resolved      {}", self.settings.theme.display()));
         }
         // From `settings`, not from `config`: `--check` is documented as
         // reporting *what would happen*, and the command line has the last word
@@ -992,7 +993,11 @@ impl Startup {
                 Some(path) => push(&mut out, &format!("  resolved      {}", path.display())),
                 None => push(&mut out, "  resolved      nothing; no outro will play"),
             }
-            push(&mut out, &format!("  MaxDuration   {}", length(self.config.outro.max_duration)));
+            // From `settings`, like the three above and for the same reason:
+            // this read `config` until a test asked what
+            // `raba --check --max-duration 2.5` printed. The answer was the
+            // file's 1.5s, over a daemon that would have used 2.5s.
+            push(&mut out, &format!("  MaxDuration   {}", length(self.settings.max_duration)));
         }
 
         let unhonoured = self.config.unhonoured();

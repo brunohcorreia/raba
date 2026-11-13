@@ -300,3 +300,180 @@ fn a_flag_that_needs_a_value_and_has_none_says_which_flag() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("--tty"));
 }
+
+// --- the options the parser has and nothing ran --------------------------------
+
+/// A theme with a character no console font has, for the two commands that are
+/// supposed to notice.
+fn theme_with_an_undrawable_glyph(scratch: &Scratch, name: &str) -> PathBuf {
+    let mut grid = Grid::new(2, 1, raba_core::Palette::Ansi16).expect("a grid");
+    grid.set(0, 0, Cell { ch: '\u{1f600}', fg: 7, bg: 0 });
+    grid.set(1, 0, Cell { ch: '\u{1f600}', fg: 7, bg: 0 });
+    let ops: Vec<raba_core::Op> = grid
+        .cells()
+        .iter()
+        .enumerate()
+        .map(|(index, cell)| raba_core::Op {
+            cell: u32::try_from(index).expect("a small index"),
+            ch: cell.ch,
+            fg: cell.fg,
+            bg: cell.bg,
+        })
+        .collect();
+    let movie = Movie {
+        columns: 2,
+        lines: 1,
+        palette: raba_core::Palette::Ansi16,
+        scaling: raba_core::Scaling::Crop,
+        looping: true,
+        frames: vec![raba_core::Frame {
+            delay_ms: 10,
+            op_start: 0,
+            op_count: u16::try_from(ops.len()).expect("a small frame"),
+        }],
+        ops,
+    };
+    std::fs::create_dir_all(scratch.path("themes")).expect("a themes directory");
+    let path = scratch.path(&format!("themes/{name}.raba"));
+    std::fs::write(&path, raba_core::encode(&movie)).expect("writing a theme");
+    path
+}
+
+#[test]
+fn preview_and_check_together_are_refused_as_two_different_questions() {
+    let scratch = Scratch::new("preview-and-check");
+    theme(&scratch, "thing");
+    let output = raba(&scratch, &["--check", "--preview", "themes/thing.raba"]);
+    assert!(!output.status.success(), "both at once exited 0");
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("different questions"), "{said}");
+}
+
+#[test]
+fn preview_plays_a_theme_and_says_nothing_when_it_is_drawable() {
+    let scratch = Scratch::new("preview");
+    theme(&scratch, "thing");
+    let path = scratch.path("themes/thing.raba");
+    let output = raba(&scratch, &["--preview", path.to_str().expect("utf-8"), "--loops", "1"]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(!output.stdout.is_empty(), "--preview drew nothing");
+}
+
+#[test]
+fn preview_warns_about_a_glyph_a_console_cannot_draw_and_plays_it_anyway() {
+    // A preview runs on a capable terminal with somebody watching: seeing the
+    // problem is the point, so this warns rather than refuses. `--check` is
+    // where the same finding is an exit code.
+    let scratch = Scratch::new("preview-glyph");
+    let path = theme_with_an_undrawable_glyph(&scratch, "emoji");
+    let output = raba(&scratch, &["--preview", path.to_str().expect("utf-8"), "--loops", "1"]);
+    assert!(output.status.success(), "a preview refused to play");
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("will not draw on a console"), "{said}");
+    assert!(said.contains("docs/glyphs.md"), "it warned with nowhere to read about it: {said}");
+}
+
+#[test]
+fn check_fails_on_a_theme_with_a_glyph_no_console_can_draw() {
+    let scratch = Scratch::new("check-glyph");
+    theme_with_an_undrawable_glyph(&scratch, "emoji");
+    scratch.write("raba.conf", "[Boot]\nTheme=emoji\n");
+    let output = raba(&scratch, &["--check"]);
+    assert!(!output.status.success(), "--check passed a theme the console cannot draw");
+    let text = stdout(&output);
+    assert!(text.contains("will not draw on a console"), "{text}");
+}
+
+#[test]
+fn check_says_how_big_the_theme_is_and_how_many_frames_it_has() {
+    let scratch = Scratch::new("check-theme");
+    theme(&scratch, "thing");
+    scratch.write("raba.conf", "[Boot]\nTheme=thing\n");
+    let output = raba(&scratch, &["--check"]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let text = stdout(&output);
+    assert!(text.contains("1 frames"), "{text}");
+    assert!(text.contains("8x2"), "{text}");
+}
+
+#[test]
+fn check_says_why_when_the_theme_cannot_be_read_instead_of_only_that_it_failed() {
+    let scratch = Scratch::new("check-unreadable");
+    std::fs::create_dir_all(scratch.path("themes")).expect("themes");
+    scratch.write("themes/broken.raba", "not a raba file");
+    scratch.write("raba.conf", "[Boot]\nTheme=broken\n");
+    let output = raba(&scratch, &["--check"]);
+    assert!(!output.status.success());
+    assert!(stdout(&output).contains("theme:"), "{}", stdout(&output));
+}
+
+#[test]
+fn a_file_too_large_to_be_a_theme_is_refused_before_it_is_read_into_memory() {
+    let scratch = Scratch::new("too-large");
+    std::fs::create_dir_all(scratch.path("themes")).expect("themes");
+    let path = scratch.path("themes/huge.raba");
+    let file = std::fs::File::create(&path).expect("creating");
+    // Sparse: the point is the length in the metadata, which is what the guard
+    // reads, and allocating 17 MB to prove it would be rude to a test suite.
+    file.set_len(17 * 1024 * 1024).expect("a large sparse file");
+    drop(file);
+
+    let output = raba(&scratch, &["--preview", path.to_str().expect("utf-8")]);
+    assert!(!output.status.success(), "a 17 MB theme was read");
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("past the"), "{said}");
+}
+
+#[test]
+fn the_outro_ceiling_can_be_set_on_the_command_line_and_check_reports_it() {
+    let scratch = Scratch::new("max-duration");
+    theme(&scratch, "thing");
+    scratch.write("raba.conf", "[Boot]\nTheme=thing\n");
+    let output = raba(&scratch, &["--check", "--max-duration", "2.5"]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(stdout(&output).contains("2.5"), "{}", stdout(&output));
+}
+
+#[test]
+fn an_option_that_wants_a_value_and_does_not_get_one_names_what_it_wanted() {
+    let scratch = Scratch::new("missing-values");
+    for option in ["--theme", "--outro", "--tty", "--show-delay", "--timeout", "--max-duration"] {
+        let output = raba(&scratch, &[option]);
+        assert!(!output.status.success(), "{option} with no value exited 0");
+        let said = String::from_utf8_lossy(&output.stderr);
+        assert!(said.contains(option), "{option} refused without naming itself: {said}");
+    }
+}
+
+#[test]
+fn more_configuration_problems_than_fit_on_a_console_are_cut_short_with_a_count() {
+    // A handful of lines is a diagnostic; a hundred scrolling past during a boot
+    // is noise. The last line has to say where the rest are.
+    let scratch = Scratch::new("many-problems");
+    theme(&scratch, "thing");
+    let mut config = String::from("[Boot]\nTheme=thing\n");
+    for n in 0..9 {
+        config.push_str(&format!("NotAKey{n}=7\n"));
+    }
+    scratch.write("raba.conf", &config);
+
+    let output = raba(&scratch, &[]);
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("more; run `raba --check`"), "{said}");
+    assert!(said.matches("NotAKey").count() <= 5, "every problem was printed:\n{said}");
+}
+
+#[test]
+fn a_machine_nobody_has_set_up_is_told_every_name_auto_tried() {
+    let scratch = Scratch::new("no-theme-at-all");
+    // No config, no themes directory, and an os-release nothing matches: the
+    // state a machine is in before anybody has set it up. `auto` still has a
+    // list — the ID, then `generic` — and the list is the answer to "why is
+    // there no splash".
+    scratch.write("os-release", "ID=nosuchdistro\n");
+    let output = raba(&scratch, &[]);
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("nosuchdistro.raba"), "{said}");
+    assert!(said.contains("generic.raba"), "auto did not fall through to generic: {said}");
+    assert!(output.status.success(), "the absence of a splash is not a boot failure");
+}

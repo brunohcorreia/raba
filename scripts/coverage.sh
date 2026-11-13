@@ -90,6 +90,18 @@ done
 profiles=("${out}/raw"/*.profraw)
 if [ -s "${out}/vm/objects.txt" ]; then
     guest_count=$(find "${out}/vm" -name '*.profraw' | wc -l)
+    # Stale is worse than absent, and silently so. A guest binary built from
+    # older sources carries an older coverage map: llvm-cov is then holding two
+    # descriptions of the same files, reports the union of both, and the extra
+    # regions are ones no current line corresponds to. The symptom is a file
+    # growing by a hundred uncovered regions after an edit that deleted code.
+    newest_source=$(find "${root}/crates" -name '*.rs' -newer "$(head -1 "${out}/vm/objects.txt")" -print -quit 2> /dev/null || true)
+    if [ -n "$newest_source" ]; then
+        echo "coverage: the virtual-machine profile is older than ${newest_source#"${root}/"}," >&2
+        echo "coverage: so it is being left out. Run scripts/vm-test.sh --coverage again" >&2
+        echo "coverage: to measure crates/raba/src/vt; without it that module reads 0%." >&2
+        guest_count=0
+    fi
     if [ "$guest_count" -gt 0 ]; then
         while read -r guest; do
             [ -x "$guest" ] || die "the guest binary ${guest} is gone; run scripts/vm-test.sh --coverage again"

@@ -131,6 +131,13 @@ struct Screen {
     /// Set once if the art ever asked for something a console cannot show.
     blink_used: bool,
     bright_background_used: bool,
+    /// The lowest line the art tried to write to, when that was past the end.
+    ///
+    /// `row` drops those writes, so without this the art was quietly cropped:
+    /// `AnsiError::TooTall` was declared, documented and unreachable, because
+    /// `cells` could never grow past the limit for the check below to catch.
+    /// A drawing whose bottom is missing is not something to find out later.
+    too_tall: Option<usize>,
 }
 
 impl Screen {
@@ -146,6 +153,7 @@ impl Screen {
             bold: false,
             blink_used: false,
             bright_background_used: false,
+            too_tall: None,
         }
     }
 
@@ -153,6 +161,10 @@ impl Screen {
     /// jumps the cursor far down should not cost a screen of blanks on the way.
     fn row(&mut self, line: usize) -> Option<&mut Vec<Cell>> {
         if line >= usize::from(limits::MAX_LINES) {
+            // Remembered, not just refused: the caller turns this into an
+            // error rather than handing back art with the bottom cut off.
+            let seen = line.saturating_add(1);
+            self.too_tall = Some(self.too_tall.map_or(seen, |most| most.max(seen)));
             return None;
         }
         while self.cells.len() <= line {
@@ -342,11 +354,14 @@ pub fn parse(bytes: &[u8], options: &Options) -> Result<Imported, AnsiError> {
     if screen.cells.is_empty() {
         return Err(AnsiError::Empty);
     }
-    let lines = screen.cells.len();
-    let lines = u16::try_from(lines).map_err(|_| AnsiError::TooTall { lines })?;
-    if lines > limits::MAX_LINES {
-        return Err(AnsiError::TooTall { lines: usize::from(lines) });
+    if let Some(lines) = screen.too_tall {
+        return Err(AnsiError::TooTall { lines });
     }
+    let lines = screen.cells.len();
+    // Cannot fail: `row` refuses a line at or past `MAX_LINES`, which is well
+    // inside a `u16`. Written as a conversion rather than a cast so that a
+    // future change to the limit is a compile-time question.
+    let lines = u16::try_from(lines).map_err(|_| AnsiError::TooTall { lines })?;
 
     let movie = to_movie(&screen.cells, columns, lines);
     Ok(Imported { movie, name: sauce.title, artist: sauce.author, notes })

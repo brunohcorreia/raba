@@ -9,7 +9,7 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
-use raba::control::wire::{Command, Reply};
+use raba::control::wire::{Command, Reply, MAX_REQUEST};
 use raba::control::Listener;
 use std::path::{Path, PathBuf};
 use std::process::{Command as Process, Output};
@@ -224,4 +224,109 @@ fn quit_with_wait_returns_when_the_instance_is_gone() {
     let output = ctl(&scratch.socket(), &["quit", "--wait"]);
     assert_eq!(code(&output), 0);
     assert!(started.elapsed() < Duration::from_secs(5), "waited {:?}", started.elapsed());
+}
+
+// --- the argument parser, and the two replies that are not a command's --------
+
+#[test]
+fn help_and_version_answer_without_a_socket_at_all() {
+    let scratch = Scratch::new("help");
+    for flag in ["--help", "-h"] {
+        let output = ctl(&scratch.socket(), &[flag]);
+        assert_eq!(code(&output), 0, "{flag}");
+        let text = String::from_utf8_lossy(&output.stdout);
+        for command in ["ping", "status", "quit", "deactivate", "message"] {
+            assert!(text.contains(command), "{flag} does not mention {command}:\n{text}");
+        }
+    }
+
+    let output = ctl(&scratch.socket(), &["--version"]);
+    assert_eq!(code(&output), 0);
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains(env!("CARGO_PKG_VERSION")),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+/// Exit 2, not 0. Every other failure here is deliberately exit 0 so that a
+/// boot-time unit cannot be failed by a splash — but a command line nobody
+/// typed correctly is a bug in a service file, and a service file that is
+/// wrong should say so.
+#[test]
+fn no_command_at_all_prints_the_usage_and_exits_two() {
+    let scratch = Scratch::new("no-command");
+    let output = ctl(&scratch.socket(), &[]);
+    assert_eq!(code(&output), 2);
+    assert!(!output.stdout.is_empty(), "it refused without printing the usage");
+}
+
+#[test]
+fn a_command_longer_than_the_protocol_allows_is_refused_here_rather_than_sent() {
+    let scratch = Scratch::new("too-long");
+    // The server reads at most `MAX_REQUEST` and then stops, so a client that
+    // sends more is a client whose message is silently cut in half. Better to
+    // find out on this side.
+    let huge = "x".repeat(MAX_REQUEST + 10);
+    let output = ctl(&scratch.socket(), &["message", &huge]);
+    assert_eq!(code(&output), 2);
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("limit"), "{said}");
+}
+
+/// A server that answers every connection with one fixed line, however wrong.
+fn answering(path: &Path, reply: &'static str) -> std::thread::JoinHandle<()> {
+    let (ready, is_ready) = mpsc::channel();
+    let path = path.to_path_buf();
+    let handle = std::thread::spawn(move || {
+        let listener = std::os::unix::net::UnixListener::bind(&path).expect("binding");
+        ready.send(()).expect("announcing");
+        if let Ok((mut stream, _)) = listener.accept() {
+            use std::io::Write as _;
+            let _ = stream.write_all(reply.as_bytes());
+        }
+    });
+    is_ready.recv_timeout(Duration::from_secs(5)).expect("server came up");
+    handle
+}
+
+#[test]
+fn a_refusal_from_the_server_is_passed_on_with_its_reason() {
+    let scratch = Scratch::new("refused-reason");
+    let server = answering(&scratch.socket(), "-ERR not drawing\n");
+    let output = ctl(&scratch.socket(), &["message", "hello"]);
+    let _ = server.join();
+
+    assert_eq!(code(&output), 1, "a refusal is exit 1, not a crash and not a success");
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("not drawing"), "the reason was dropped: {said}");
+}
+
+#[test]
+fn a_reply_that_is_neither_ok_nor_err_is_an_error_naming_what_arrived() {
+    // Not a case any RABA produces. It is the case where something else is
+    // listening on the path — which is exactly when a client must not guess.
+    let scratch = Scratch::new("nonsense-reply");
+    let server = answering(&scratch.socket(), "HTTP/1.1 200 OK\n");
+    let output = ctl(&scratch.socket(), &["ping"]);
+    let _ = server.join();
+
+    assert_eq!(code(&output), 2);
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("HTTP/1.1 200 OK"), "it did not say what it got: {said}");
+}
+
+#[test]
+fn an_ok_with_something_after_it_is_printed() {
+    let scratch = Scratch::new("ok-with");
+    let server = answering(&scratch.socket(), "+OK unlocking\n");
+    let output = ctl(&scratch.socket(), &["message", "unlocking"]);
+    let _ = server.join();
+
+    assert_eq!(code(&output), 0);
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("unlocking"),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
 }

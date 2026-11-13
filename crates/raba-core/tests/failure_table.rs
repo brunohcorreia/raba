@@ -541,3 +541,68 @@ fn encodes_sizes_the_decoder_agrees_with() {
     assert_eq!(bytes.len(), expected);
     assert_eq!(u32::from_le_bytes(bytes[16..20].try_into().unwrap()) as usize, expected);
 }
+
+/// Every reason a `.raba` can be refused, as the sentence a person reads.
+///
+/// The variants are produced by the table above; the *messages* were not —
+/// `Display` was 0% covered, seventeen arms of it. A reason that reaches a
+/// kernel log with the wrong numbers in it, or with none, is worse than no
+/// reason: it sends whoever is reading `dmesg` after a boot with no splash to
+/// look at the wrong thing.
+///
+/// Constructed directly rather than decoded, because several of these need a
+/// file that is hard to build and the point here is the sentence, not the
+/// path to it. The compiler keeps the list complete: adding a variant without
+/// adding a line below is a non-exhaustive match.
+#[test]
+fn every_reason_a_file_is_refused_says_what_was_wrong_and_what_was_expected() {
+    use raba_core::DecodeError as E;
+
+    let cases: Vec<(E, Vec<String>)> = vec![
+        (E::TooShort { got: 7 }, vec!["7".to_owned(), "too short".to_owned()]),
+        (E::BadMagic { got: *b"NOPE" }, vec!["not a .raba".to_owned(), "4e".to_owned()]),
+        (E::UnsupportedVersion { got: 99 }, vec!["99".to_owned()]),
+        (E::SizeMismatch { declared: 100, actual: 90 }, vec!["100".to_owned(), "90".to_owned()]),
+        (E::FileTooLarge { declared: 99_999_999 }, vec!["99999999".to_owned()]),
+        (E::BadCanvas { columns: 0, lines: 5 }, vec!["0x5".to_owned()]),
+        (E::NoFrames, vec!["no frames".to_owned()]),
+        (E::TooManyFrames { got: 70_000 }, vec!["70000".to_owned()]),
+        (E::BadPalette { got: 9 }, vec!["9".to_owned(), "palette".to_owned()]),
+        (E::BadScaling { got: 9 }, vec!["9".to_owned(), "scaling".to_owned()]),
+        (
+            E::ColourOutOfPalette { op: 3, value: 200, max: 15 },
+            vec!["3".to_owned(), "200".to_owned(), "15".to_owned()],
+        ),
+        (E::ReservedNotZero { offset: 22 }, vec!["22".to_owned(), "reserved".to_owned()]),
+        (E::LayoutMismatch { declared: 80, computed: 96 }, vec!["80".to_owned(), "96".to_owned()]),
+        (
+            E::CrcMismatch { declared: 0xdead_beef, computed: 0x0bad_f00d },
+            vec!["0xdeadbeef".to_owned(), "0x0badf00d".to_owned()],
+        ),
+        (
+            E::FrameOpsOutOfRange { frame: 2, start: 10, count: 5 },
+            vec!["2".to_owned(), "10".to_owned(), "5".to_owned()],
+        ),
+        (
+            E::CellOutOfRange { op: 4, cell: 900, cells: 200 },
+            vec!["4".to_owned(), "900".to_owned(), "200".to_owned()],
+        ),
+        (E::BadCodepoint { op: 1, value: 0xd800 }, vec!["1".to_owned(), "0xd800".to_owned()]),
+    ];
+
+    for (error, wanted) in cases {
+        let said = error.to_string();
+        assert!(!said.is_empty(), "{error:?} has no message");
+        for fragment in &wanted {
+            assert!(
+                said.contains(fragment.as_str()),
+                "{error:?} says {said:?}, which does not contain {fragment:?}"
+            );
+        }
+        // A message that is only numbers is a message nobody can act on.
+        assert!(
+            said.chars().filter(char::is_ascii_alphabetic).count() > 5,
+            "{error:?} says {said:?}, which is not a sentence"
+        );
+    }
+}
