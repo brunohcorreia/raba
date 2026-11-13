@@ -2,8 +2,8 @@
 #
 # Three packages out of one source tree, which is the layout docs/packaging.md
 # argues for: the program, the art and the authoring tool are three different
-# kinds of thing. The split is not about size — all 51 themes together are
-# 463 KiB, and only one of them ever enters an initramfs — it is so that a
+# kinds of thing. The split is not about size — the 50 logos together are
+# 464 KiB, and only one of them ever enters an initramfs — it is so that a
 # trademark complaint about a logo touches one package and not the splash.
 
 pkgbase=raba

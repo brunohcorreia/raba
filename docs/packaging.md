@@ -124,7 +124,7 @@ and users who want only the program are not carrying 534 logos.
 |---|---|
 | one theme, on disk | 9.5 KB average; `arch.raba` is 9424 bytes |
 | one theme, gzipped into an initramfs | 1.8 KB — and **only one ever goes in**, the frozen one |
-| all 50 themes, installed | 463 KiB |
+| all 50 themes, installed | 464 KiB |
 | `raba-themes` package | **74 KiB** |
 | `raba` package | 401 KiB |
 | `raba-gen` package | 560 KiB |

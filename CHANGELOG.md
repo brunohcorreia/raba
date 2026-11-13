@@ -5,7 +5,7 @@ versioning](https://semver.org/), with the reservation that the `.raba` format a
 control protocol have version numbers of their own — see
 [docs/format.md](docs/format.md) and [docs/protocol.md](docs/protocol.md).
 
-## 0.1.0 — unreleased
+## 0.1.0 — 13 November 2026
 
 The first release. A boot splash that plays an ASCII animation from inside the
 initramfs, across `switch_root`, and gets out of the way when the display manager takes
@@ -23,7 +23,7 @@ the screen.
   on install.
 - **`raba-gen`** — builds a `.raba` from a ten-line TOML recipe and a text file, and
   imports Durdraw `.dur` v7 and v8.
-- **51 themes**, art and colours from fastfetch, covering the most-used distributions
+- **50 logo themes** plus the generic fallback, art and colours from fastfetch, covering the most-used distributions
   on desktop, server and gaming. Logos are the trademarks of their projects; see
   [themes/README.md](themes/README.md).
 
@@ -59,6 +59,23 @@ was left running, that the login prompt took the screen back. Plus, on each:
   `raba-quit.service` is ordered after `display-manager.service`, so the greeter takes
   the terminal and RABA leaves without restoring anything. Holding the animation past
   the greeter to a compositor's first frame is a different problem and is not solved.
+
+### Size
+
+| | |
+|---|---|
+| `raba`, static against musl | 521 KiB |
+| `raba`, dynamic against glibc | 424 KiB |
+| `raba-ctl` | 310 KiB |
+| `raba-setup` | 437 KiB |
+| all 50 logo themes together | 464 KiB, of which exactly one enters an initramfs |
+
+Two direct dependencies outside the project's own crates: `rustix` for the VT ioctls
+and `libc` for the signal mask, which between them pull in `bitflags` and
+`linux-raw-sys` and nothing else. `rustix` reaches the kernel through `linux-raw-sys`
+rather than a C library, which is why the static build needs no libc at all.
+[DEPENDENCIES.md](DEPENDENCIES.md) justifies each one against the budget it is spent
+from.
 
 ### If it goes wrong
 
