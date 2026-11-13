@@ -182,6 +182,33 @@ INSTALL
 MID
         indented "${root}/integration/tests/distro/check.sh"
         cat << 'TAIL'
+  - path: /usr/local/bin/raba-watch
+    permissions: '0755'
+    content: |
+      #!/bin/sh
+      # Which terminal the screen is showing, ten times a second, for the first
+      # twelve seconds of the boot. This is the view from inside the machine,
+      # and it is the half the screenshots cannot give: a splash that is drawn
+      # on a terminal nobody is looking at is invisible for a reason that no
+      # amount of photographing the screen will explain.
+      end=$(( $(cut -d. -f1 /proc/uptime) + 12 ))
+      while [ "$(cut -d. -f1 /proc/uptime)" -lt "$end" ]; do
+          printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime)" \
+              "$(cat /sys/class/tty/tty0/active 2>/dev/null)" >> /run/raba-watch.log
+          sleep 0.1
+      done
+  - path: /etc/systemd/system/raba-watch.service
+    content: |
+      [Unit]
+      Description=RABA test: which terminal is on screen
+      DefaultDependencies=no
+      After=raba-start.service
+      ConditionPathExists=/var/lib/raba-installed
+      [Service]
+      Type=simple
+      ExecStart=/usr/local/bin/raba-watch
+      [Install]
+      WantedBy=sysinit.target
   - path: /etc/systemd/system/raba-check.service
     content: |
       [Unit]
@@ -197,8 +224,9 @@ MID
       WantedBy=multi-user.target
 runcmd:
   - /usr/local/bin/raba-install
-  - systemctl enable raba-check.service
+  - systemctl enable raba-check.service raba-watch.service
   - touch /var/lib/raba-installed
+  - [sh, -c, "echo raba-test-rebooting > /dev/console"]
   - systemctl reboot
 TAIL
     } > "${work}/seed/user-data"
@@ -209,8 +237,12 @@ TAIL
 
     local size_kib
     size_kib=$(du -sk "$staging" | cut -f1)
+    # `-C` refuses to create a file that is already there, so a run killed
+    # before its cleanup would otherwise poison every run after it with
+    # "could not make the payload disk" and no further explanation.
+    rm -f "$payload"
     mkfs.vfat -n RABAPKGS -C "$payload" $((size_kib + 8192)) > /dev/null 2>&1 \
-        || die "could not make the payload disk"
+        || die "could not make the payload disk (mkfs.vfat on ${payload})"
     mcopy -i "$payload" "$staging"/* :: || die "could not copy the payload"
 
     # --- boot it -------------------------------------------------------------
@@ -244,14 +276,36 @@ TAIL
     # Held open for the life of the loop: qemu quits the monitor at EOF.
     exec 3> "$monitor"
 
-    local shots=0
+    # The splash is on the screen for about a second and a half, somewhere
+    # inside a run that lasts ten minutes. Sampling the whole run at that rate
+    # would be fourteen gigabytes of screenshots; sampling it at one a second
+    # misses the splash more often than it finds it — a Fedora run caught it in
+    # exactly one frame out of 378, and a Debian run that did everything right
+    # caught it in none.
+    #
+    # So: follow the guest. The installer says `raba-test: rebooting` on the
+    # console when it is done, and the checks print a TAP plan once the splash
+    # is long over. Between those two lines is the second boot, which is the
+    # only part of this worth photographing, and it is sampled four times a
+    # second. Outside them a frame every three seconds is plenty to notice that
+    # a machine is stuck on a firmware screen.
+    # A frame is three megabytes, so the fast window is capped as well as
+    # bounded: a guest that reboots and then hangs forever must not fill the
+    # disk while nobody is watching.
+    local shots=0 fast=0
     local deadline=$((SECONDS + timeout_seconds))
+    local interval
     while kill -0 "$qemu" 2> /dev/null && [ "$SECONDS" -lt "$deadline" ]; do
+        interval=3
+        if [ "$fast" -lt 400 ] \
+            && grep -qa 'raba-test-rebooting' "${work}/serial.log" 2> /dev/null \
+            && ! grep -qa 'in-guest:' "${work}/serial.log" 2> /dev/null; then
+            interval=0.25
+            fast=$((fast + 1))
+        fi
         shots=$((shots + 1))
         printf 'screendump %s/shots/%04d.ppm\n' "$work" "$shots" >&3 2> /dev/null || true
-        # Every second: the splash is up for a handful of them, and a sampling
-        # rate close to the thing being sampled is how a real pass turns flaky.
-        sleep 1
+        sleep "$interval"
     done
 
     local timed_out=0
@@ -315,6 +369,18 @@ TAIL
     if [ -z "$plan" ]; then
         echo "distro-test: ${distro} never ran the checks. The last of what it said:" >&2
         tail -30 "$tap" | sed 's/^/#   /' >&2
+        # Which half failed, named out loud. A run where the guest never even
+        # reached the reboot is a *harness* failure — most likely this file's
+        # own cloud-config, which cloud-init will have complained about and then
+        # carried on without, leaving a machine sitting at a login prompt doing
+        # nothing for the whole timeout. That happened, cost forty minutes, and
+        # the cause was a colon inside an unquoted YAML scalar.
+        if ! grep -qa 'raba-test-rebooting' "$tap"; then
+            echo "distro-test: it never got as far as installing. The seed:" >&2
+            grep -aiE 'cloud-init.*(error|traceback|failed|invalid|yaml)' "$tap" \
+                | tail -5 | sed 's/^/#   /' >&2
+            echo "#   (user-data is at ${work}/seed/user-data)" >&2
+        fi
         return 1
     fi
     if [ "$failures" != "0" ]; then
