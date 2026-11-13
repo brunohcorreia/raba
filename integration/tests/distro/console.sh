@@ -56,4 +56,10 @@ if [ -f /etc/default/grub ]; then
 fi
 
 cat /proc/cmdline
-cat /boot/loader/entries/*.conf 2> /dev/null
+cat /boot/loader/entries/*.conf 2> /dev/null || true
+
+# Explicitly, because everything above is best-effort across four bootloaders
+# and the last line of it is a diagnostic `cat`. Without this the script's exit
+# status is that cat's — 1 on any machine with no systemd-boot entries — and
+# the caller, which now runs under `set -e`, stops before installing anything.
+exit 0

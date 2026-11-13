@@ -129,7 +129,12 @@ one_distro() {
         # it was meant to be testing — which happened, and cost a run and the
         # half hour of looking at the wrong thing afterwards.
         local newest_package
-        newest_package=$(ls -t "${packages}"/*.pkg.tar.* 2> /dev/null | head -1)
+        # `|| true` is load-bearing. On a tree that has never built a package
+        # the glob matches nothing, `ls` exits 2, `pipefail` carries that out of
+        # the command substitution and `set -e` ends the run — exit 2, no
+        # message, before a single line of output. Which is what a new
+        # contributor got for running this first.
+        newest_package=$(ls -t "${packages}"/*.pkg.tar.* 2> /dev/null | head -1 || true)
         if [ -z "$newest_package" ] || [ -n "$(find "$root" -type f \
                 -not -path "${root}/target/*" -not -path "${root}/.git/*" \
                 -newer "$newest_package" -print -quit 2> /dev/null)" ]; then
@@ -207,7 +212,7 @@ CASE
     content: |
 SURVIVED
         indented "${root}/integration/tests/distro/survived.sh"
-        cat << 'WATCH'
+        cat << 'UNITS'
   - path: /etc/systemd/system/raba-case.service
     content: |
       [Unit]
@@ -241,93 +246,9 @@ SURVIVED
   - path: /usr/local/bin/raba-watch
     permissions: '0755'
     content: |
-      #!/bin/sh
-      # Which terminal the screen is showing, ten times a second, for the first
-      # twelve seconds of the boot. This is the view from inside the machine,
-      # and it is the half the screenshots cannot give: a splash that is drawn
-      # on a terminal nobody is looking at is invisible for a reason that no
-      # amount of photographing the screen will explain.
-      end=$(( $(cut -d. -f1 /proc/uptime) + 12 ))
-      best=0
-      while [ "$(cut -d. -f1 /proc/uptime)" -lt "$end" ]; do
-          now=$(cat /sys/class/tty/tty0/active 2>/dev/null)
-          printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime)" "$now" >> /run/raba-watch.log
-          # What is *on* that console, read from the kernel's own copy of the
-          # screen rather than from a photograph of the monitor. /dev/vcsN is
-          # the text of virtual console N, and it is the only answer that does
-          # not depend on whether the emulator and the guest agree about the
-          # video mode — which on a machine with no KMS driver in its initramfs
-          # they do not, and a correct splash photographs as a black screen.
-          case "$now" in
-              tty[0-9]*)
-                  n=${now#tty}
-                  # Every console, tty1 included. An earlier version skipped
-                  # tty1 on the assumption that it belongs to the login prompt,
-                  # and reported that nothing was ever drawn on an Arch machine
-                  # whose splash the camera had photographed: with a systemd
-                  # initramfs, RABA adopts the console that is already active,
-                  # and that is tty1. The fullest snapshot wins, so a login
-                  # prompt's handful of characters never displaces a screen of
-                  # art.
-                  if true; then
-                      if ! cat "/dev/vcs$n" > /run/raba-watch-screen.new 2>> /run/raba-watch.err
-                      then
-                          echo "could not read /dev/vcs$n" >> /run/raba-watch.err
-                      fi
-                      ink=$(tr -cd '[:graph:]' < /run/raba-watch-screen.new | wc -c)
-                      if [ "$ink" -gt "$best" ]; then
-                          best=$ink
-                          mv /run/raba-watch-screen.new /run/raba-watch-screen.txt
-                      fi
-                  fi
-                  ;;
-          esac
-          # What the splash process is doing, if it is still there: the
-          # state letter from /proc/PID/stat (R running, S sleeping, D in
-          # uninterruptible I/O, T stopped) and the kernel function it is
-          # waiting in. A splash that has stopped drawing but is still alive
-          # is the failure this was written to catch, and "which syscall is
-          # it sitting in" is the question that distinguishes a wedged write
-          # from a loop that has decided there is nothing to draw.
-          for pid in $(pgrep -x raba 2>/dev/null); do
-              printf '%s pid=%s state=%s wchan=%s\n' \
-                  "$(cut -d' ' -f1 /proc/uptime)" "$pid" \
-                  "$(awk '{print $3}' "/proc/$pid/stat" 2>/dev/null)" \
-                  "$(cat "/proc/$pid/wchan" 2>/dev/null)" >> /run/raba-watch-proc.log
-          done
-          # And ask the splash itself what it thinks it is doing. The process
-          # answers the socket while wedged — that is how a second instance
-          # finds it — so `status` is the one probe that reports the phase and
-          # the frame from inside the loop rather than inferring them.
-          if [ -S /run/raba.sock ]; then
-              said=$(raba-ctl status 2>&1 | tr '\n' ' ')
-              printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime)" "$said" \
-                  >> /run/raba-watch-status.log
-              # The console the splash says it holds, photographed while it
-              # still holds it. Reading it after the boot works only where the
-              # instance was killed and left the art behind; where the splash
-              # ends properly it hands the console back and clears it, and by
-              # then there is nothing to find.
-              held=$(printf '%s' "$said" | sed -n 's/.*terminal: \([0-9]*\).*/\1/p')
-              if [ -n "$held" ] && [ "$held" != 0 ]; then
-                  echo "$held" > /run/raba-watch-tty
-                  if cat "/dev/vcs$held" > /run/raba-held.new 2>/dev/null; then
-                      held_ink=$(tr -cd '[:graph:]' < /run/raba-held.new | wc -c)
-                      if [ "$held_ink" -gt "$(cat /run/raba-held-ink 2>/dev/null || echo 0)" ]
-                      then
-                          echo "$held_ink" > /run/raba-held-ink
-                          mv /run/raba-held.new /run/raba-held.txt
-                      fi
-                  fi
-              fi
-          fi
-          # Written every pass, not at the end: the post-boot checks run while
-          # this is still sampling, and a verdict that arrives after they have
-          # read it is no verdict at all.
-          echo "$best" > /run/raba-watch-ink
-          sleep 0.1
-      done
-      echo "$best" > /run/raba-watch-ink
+UNITS
+        indented "${root}/integration/tests/distro/watch.sh"
+        cat << 'WATCHUNIT'
   - path: /etc/systemd/system/raba-watch.service
     content: |
       [Unit]
@@ -367,7 +288,7 @@ runcmd:
   - touch /var/lib/raba-installed
   - [sh, -c, "echo raba-test-rebooting > /dev/console"]
   - systemctl reboot
-WATCH
+WATCHUNIT
     } > "${work}/seed/user-data"
 
     # Look at it before a VM has to. cloud-init does not fail a boot over a
@@ -408,6 +329,22 @@ WATCH
     rm -f "$monitor"
     mkfifo "$monitor"
 
+    # Ctrl-C has to take the guest with it. Each distribution runs in its own
+    # subshell, so this trap belongs to that subshell and is undone when the
+    # next one starts. Without it an interrupted run leaves a headless qemu
+    # photographing a screen nobody is watching into target/ — a gigabyte and a
+    # half of frames, found days later.
+    # Not `local`: an EXIT trap runs after the function has returned, when its
+    # locals are already gone, and reading one there is an unbound variable
+    # under `set -u` rather than a cleanup.
+    qemu_pid=
+    monitor_path="$monitor"
+    cleanup_guest() {
+        [ -n "$qemu_pid" ] && kill "$qemu_pid" 2> /dev/null
+        rm -f "$monitor_path"
+    }
+    trap cleanup_guest EXIT INT TERM
+
     local display=(-display none)
     [ "$show_console" = 1 ] && display=()
     local accel=(-cpu max)
@@ -428,6 +365,7 @@ WATCH
         -monitor stdio \
         < "$monitor" > "${work}/monitor.log" 2>&1 &
     local qemu=$!
+    qemu_pid=$qemu
 
     # Held open for the life of the loop: qemu quits the monitor at EOF.
     exec 3> "$monitor"
@@ -471,12 +409,13 @@ WATCH
     fi
     exec 3>&-
     wait "$qemu" 2> /dev/null || true
+    qemu_pid=
 
     # --- what came back ------------------------------------------------------
 
     local serial="${work}/serial.log"
     local tap="${work}/tap.log"
-    local plan failures drew
+    local plan failures
     [ -s "$serial" ] || die "${distro}: the guest said nothing at all"
 
     # The guest's TAP arrives through the journal, so each line comes wrapped in
@@ -540,7 +479,10 @@ WATCH
         # carried on without, leaving a machine sitting at a login prompt doing
         # nothing for the whole timeout. That happened, cost forty minutes, and
         # the cause was a colon inside an unquoted YAML scalar.
-        if ! grep -qa 'raba-test-rebooting' "$tap"; then
+        if grep -qa 'raba-test-install-failed' "$tap"; then
+            echo "distro-test: the install script failed. Where:" >&2
+            grep -a 'raba-test-install-failed' "$tap" | tail -3 | sed 's/^/#   /' >&2
+        elif ! grep -qa 'raba-test-rebooting' "$tap"; then
             echo "distro-test: it never got as far as installing. The seed:" >&2
             grep -aiE 'cloud-init.*(error|traceback|failed|invalid|yaml)' "$tap" \
                 | tail -5 | sed 's/^/#   /' >&2
@@ -569,6 +511,11 @@ WATCH
 
 status=0
 for distro in "${distros[@]}"; do
-    one_distro "$distro" || status=1
+    # In a subshell, so that `die` inside it ends that distribution and not the
+    # run. It exits, because a failed download or a missing payload has to stop
+    # the function right there — and without the subshell that exit took the
+    # other two distributions with it, in a loop written precisely to keep
+    # going.
+    ( one_distro "$distro" ) || status=1
 done
 exit "$status"

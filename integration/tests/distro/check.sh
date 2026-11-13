@@ -150,12 +150,6 @@ if [ -s /run/raba-watch.log ]; then
         | uniq -c | awk '{printf "%s x%s  ", $2, $1}')"
 fi
 
-# The splash itself, as the kernel had it: the characters that were on the
-# console RABA took, read out of /dev/vcs by the harness's watcher while it was
-# happening. This is the assertion the screenshots were supposed to make and
-# could not — a console with no KMS driver under it is drawn correctly and
-# photographs black, because the emulator is still rendering a video mode the
-# guest stopped using.
 # Every console the kernel has, and what is on it, at the moment the checks run.
 # Reading this costs nothing and answers "was anything ever drawn anywhere" when
 # the watcher comes back empty-handed.
@@ -178,21 +172,28 @@ if [ -s /run/raba-watch.err ]; then
     sed 's/^/#   watcher: /' /run/raba-watch.err
 fi
 
-# The console RABA actually drew on, named by RABA: the last `terminal:` the
-# daemon reported about itself, or the one the state file remembers. Asking
-# "which console has the most on it" instead — an earlier version of this —
-# gets you the boot log on tty1 every time, three thousand characters of it,
-# and a check that passes on a machine where the splash never drew.
-# Two ways to have seen the art, and a machine will offer one or the other.
+# The console RABA actually drew on, named by RABA, and what was on it.
 #
-# While it was drawing: the watcher asked RABA which terminal it held and read
-# that console there and then. This is the only way on a machine where the
-# splash ends properly, because ending properly means handing the console back
-# and clearing it.
+# This is the assertion the screenshots were supposed to make and could not: a
+# console with no KMS driver under it is drawn correctly and photographs black,
+# because the emulator is still rendering a video mode the guest stopped using.
+# The characters are read out of /dev/vcs instead, which is the kernel's own
+# copy of the screen.
 #
-# After the fact: on an initramfs that does not kill its own processes, the
-# instance is still holding its terminal when the checks run, and the art is
-# still on it. The state file names the terminal.
+# Named by RABA, because asking "which console has the most on it" — an earlier
+# version of this — gets you the boot log on tty1 every time, three thousand
+# characters of it, and a check that passes on a machine where the splash never
+# drew. Two ways to have been told, and a machine offers one or the other:
+#
+#   while it was drawing   The watcher asked RABA which terminal it held and
+#                          read that console there and then. The only way on a
+#                          machine where the splash ends properly, because
+#                          ending properly means handing the console back and
+#                          clearing it.
+#   after the fact         On an initramfs that does not kill its own
+#                          processes, the instance is still holding its
+#                          terminal when the checks run and the art is still on
+#                          it. The state file names the terminal.
 splash_tty=$(cat /run/raba-watch-tty 2>/dev/null)
 ink=$(cat /run/raba-held-ink 2>/dev/null || echo 0)
 art=/run/raba-held.txt
@@ -247,7 +248,12 @@ echo "# --- units ---"
 systemctl list-units --no-legend --no-pager 'raba-*' 2>/dev/null | sed 's/^/#   /'
 # /sys, not fgconsole(1): that one is in a package a cloud image may not have.
 echo "# active terminal now: $(cat /sys/class/tty/tty0/active 2> /dev/null || echo unknown)"
-echo "# still running: $(pgrep -a raba | tr '\n' ';' || echo nothing)"
+# `-x`, because without it this matches raba-check — the script printing the
+# line — and every healthy run has reported the harness as a surviving splash.
+# The `|| echo nothing` that used to be on the end could never fire either:
+# `tr` succeeds on empty input, so the fallback was unreachable.
+still=$(pgrep -ax raba | tr '\n' ';')
+echo "# still running: ${still:-nothing}"
 raba-ctl ping > /dev/null 2>&1
 echo "# raba-ctl ping says: $?"
 

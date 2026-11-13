@@ -5,7 +5,13 @@
 #
 # The cargo that comes from apt is the one that matters: if it is older than the
 # MSRV, that is the finding, and it shows up as this script failing loudly.
-set -x
+# `-e`, not just `-x`. cloud-init's runcmd does not stop at a failed entry: a
+# build that died halfway was followed by `touch /var/lib/raba-installed` and a
+# reboot, and the guest came back presenting itself as installed. Stopping here
+# puts the failing command last in the serial log instead of burying it under
+# the cascade, and the marker gives the host something to grep for.
+set -ex
+trap 'echo "raba-test-install-failed: line ${LINENO}: ${BASH_COMMAND}" > /dev/console' ERR
 
 # A screen the host can photograph; see raba-test-console.
 /usr/local/bin/raba-test-console

@@ -18,7 +18,9 @@ tap() {
     else
         failed=$((failed + 1))
         echo "not ok ${count} - $2"
-        [ -n "${3:-}" ] && echo "#   $3"
+        if [ -n "${3:-}" ]; then
+            echo "#   $3"
+        fi
     fi
 }
 

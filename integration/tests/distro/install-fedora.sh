@@ -2,7 +2,13 @@
 # First boot, Fedora: same as Debian, with dnf and dracut. The dracut module
 # needs no configuration — its own check() decides whether to be included — so
 # the only step after `make install` is regenerating the image.
-set -x
+# `-e`, not just `-x`. cloud-init's runcmd does not stop at a failed entry: a
+# build that died halfway was followed by `touch /var/lib/raba-installed` and a
+# reboot, and the guest came back presenting itself as installed. Stopping here
+# puts the failing command last in the serial log instead of burying it under
+# the cascade, and the marker gives the host something to grep for.
+set -ex
+trap 'echo "raba-test-install-failed: line ${LINENO}: ${BASH_COMMAND}" > /dev/console' ERR
 
 # A screen the host can photograph; see raba-test-console.
 /usr/local/bin/raba-test-console

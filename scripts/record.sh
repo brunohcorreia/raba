@@ -80,6 +80,17 @@ monitor="${work}/record.in"
 rm -f "$monitor"
 mkfifo "$monitor"
 
+# Ctrl-C has to take the virtual machine with it. Without this an interrupted
+# run leaves a headless qemu holding two gigabytes and writing screenshots into
+# target/ with nobody watching — which has happened, and the evidence was a
+# gigabyte and a half of frames found later.
+qemu=
+cleanup() {
+    [ -n "$qemu" ] && kill "$qemu" 2> /dev/null
+    rm -f "$monitor"
+}
+trap cleanup EXIT INT TERM
+
 accel=(-cpu max)
 [ -w /dev/kvm ] && accel=(-enable-kvm -cpu host)
 
@@ -114,6 +125,7 @@ done
 exec 3>&-
 kill "$qemu" 2> /dev/null
 wait "$qemu" 2> /dev/null
+qemu=
 rm -f "$monitor" "$disk"
 
 count=$(find "$frames" -name '*.ppm' -size +0 | wc -l)
@@ -132,17 +144,23 @@ echo "record: ${count} frames"
 # need to. The same classifier picks the range here: the splash, plus a second
 # of the quiet console on either side so that the thing it replaces and the
 # thing that replaces it are both visible.
-range=$(python3 -I - "$frames" "$fps" <<'PYTHON'
+# The classifier's path is passed in rather than written here: this script
+# resolves $root precisely so that it can be run from anywhere, and a bare
+# "scripts/screen-colours.py" undid that for the one step that needed it most.
+range=$(python3 -I - "$frames" "$fps" "${root}/scripts/screen-colours.py" <<'PYTHON'
 import importlib.util, pathlib, sys
 
-here = pathlib.Path(__file__).resolve().parent if "__file__" in dir() else pathlib.Path(".")
-spec = importlib.util.spec_from_file_location("sc", "scripts/screen-colours.py")
+spec = importlib.util.spec_from_file_location("sc", sys.argv[3])
 classifier = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(classifier)
 
 frames = sorted(pathlib.Path(sys.argv[1]).glob("*.ppm"))
 fps = int(sys.argv[2])
-kinds = [classifier.look(f)[0] for f in frames]
+# `look` returns None for anything that is not a readable PPM, and the last
+# frame of a recording is written while qemu is being killed — so one truncated
+# or empty file at the end used to take the whole run down with a TypeError.
+looked = [classifier.look(f) for f in frames]
+kinds = [seen[0] if seen else "blank" for seen in looked]
 
 # The longest *run* of centred frames, not every centred frame there is. A login
 # prompt with one short line on it classifies as centred too, so taking the span

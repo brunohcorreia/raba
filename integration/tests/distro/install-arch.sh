@@ -1,7 +1,13 @@
 #!/bin/bash
 # First boot, Arch: install the packages the PKGBUILD produced, the way the
 # .install message tells a person to, then reboot into the result.
-set -x
+# `-e`, not just `-x`. cloud-init's runcmd does not stop at a failed entry: a
+# build that died halfway was followed by `touch /var/lib/raba-installed` and a
+# reboot, and the guest came back presenting itself as installed. Stopping here
+# puts the failing command last in the serial log instead of burying it under
+# the cascade, and the marker gives the host something to grep for.
+set -ex
+trap 'echo "raba-test-install-failed: line ${LINENO}: ${BASH_COMMAND}" > /dev/console' ERR
 
 # A screen the host can photograph; see raba-test-console.
 /usr/local/bin/raba-test-console

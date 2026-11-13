@@ -83,7 +83,13 @@ tap() {
     else
         failed=$((failed + 1))
         echo "not ok ${count} - $2"
-        [ -n "${3:-}" ] && echo "#   $3"
+        # An `if`, not `[ ... ] && echo`. This runs under `set -e`, and the
+        # AND-list is the last command in the function: a `tap 1` called with
+        # no third argument would return non-zero, end the script mid-suite,
+        # and leave no plan line behind to say that it had.
+        if [ -n "${3:-}" ]; then
+            echo "#   $3"
+        fi
     fi
 }
 

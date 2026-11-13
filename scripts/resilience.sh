@@ -195,13 +195,19 @@ fi
 # Each case is a word on a small vfat disk the guest reads before the splash
 # starts. The same trick as the cloud-init seed: the host chooses what to break
 # without ever editing the guest's filesystem.
+# Writes the path to stdout, so every failure in here has to be checked by the
+# caller rather than announced from inside. `die` cannot do the job: this runs
+# in a command substitution, where `exit 1` ends the subshell and nothing else
+# — the assignment gets an empty string, the extra disk is silently left off
+# the command line, and the guest boots with no case to apply. A whole case
+# then passes without ever having been sabotaged, which is the same shape as
+# the `socket-in-the-way` bug and just as quiet.
 case_disk() {
     local name="$1" disk="${work}/case.img"
     rm -f "$disk" "${work}/case"
-    echo "$name" > "${work}/case"
-    mkfs.vfat -n RABACASE -C "$disk" 64 > /dev/null 2>&1 \
-        || die "could not make the case disk"
-    mcopy -i "$disk" "${work}/case" :: || die "could not write the case disk"
+    echo "$name" > "${work}/case" || return 1
+    mkfs.vfat -n RABACASE -C "$disk" 64 > /dev/null 2>&1 || return 1
+    mcopy -i "$disk" "${work}/case" :: > /dev/null 2>&1 || return 1
     echo "$disk"
 }
 
@@ -212,7 +218,8 @@ if [ "$run_sabotage" = 1 ]; then
     echo "# sabotage"
     for name in "${CASES[@]}"; do
         [ -n "$only_case" ] && [ "$only_case" != "$name" ] && continue
-        disk="$(case_disk "$name")"
+        disk="$(case_disk "$name")" || die "could not make the case disk for ${name}"
+        [ -n "$disk" ] || die "the case disk for ${name} came back empty"
         broken="${work}/broken.qcow2"
         rm -f "$broken"
         qemu-img create -f qcow2 -F qcow2 -b "$installed" "$broken" > /dev/null \

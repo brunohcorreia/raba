@@ -55,9 +55,11 @@ case "$case_name" in
         # A download that stopped halfway, or a filesystem that lost a block.
         # The decoder has a failure table for this; what is under test here is
         # that a boot survives it.
+        # `truncate` alone: it both shortens a longer file and extends a
+        # shorter one, which is the whole of what the `dd ... count=0 seek=100
+        # conv=notrunc` that used to sit in front of it did.
         for theme in /usr/share/raba/themes/*.raba; do
             [ -f "$theme" ] || continue
-            dd if=/dev/zero of="$theme" bs=1 count=0 seek=100 conv=notrunc 2>/dev/null
             truncate -s 100 "$theme" 2>/dev/null
         done
         applied "case truncated-art: every theme cut to 100 bytes"
