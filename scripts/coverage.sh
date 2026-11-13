@@ -128,7 +128,10 @@ ignore=(--ignore-filename-regex='(/\.cargo/registry/|/rustc/|/tests?/|/tests\.rs
 common=("${objects[@]}" --instr-profile="${out}/all.profdata" "${ignore[@]}")
 
 if [ -n "$show" ]; then
-    llvm-cov show "${common[@]}" --show-line-counts-or-regions --use-color "$show"
+    # `--sources`, not a bare path: with every binary passed as `--object`, a
+    # trailing positional is read as one more object and llvm-cov answers "not
+    # recognized as a valid object file" about a `.rs` file.
+    llvm-cov show "${common[@]}" --show-line-counts-or-regions --use-color --sources "$show"
     exit 0
 fi
 

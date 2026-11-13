@@ -555,20 +555,31 @@ fn generate_command(args: &[String]) -> Result<(), String> {
                 index = index.saturating_add(1);
                 output = Some(PathBuf::from(value));
             }
+            // Refused, not defaulted. These four read `.unwrap_or(<the
+            // default>)` until a test asked what `--columns 70000` did: the
+            // answer was an 80-column canvas and not a word about it, while
+            // `convert --columns` three hundred lines up refused the same
+            // input. A person typing a number that does not fit has made a
+            // mistake worth hearing about, and the same flag answering
+            // differently in two verbs is worse than either answer.
             "--columns" => {
-                spec.columns = u16::try_from(number(args.get(index), "--columns")?).unwrap_or(80);
+                spec.columns = u16::try_from(number(args.get(index), "--columns")?)
+                    .map_err(|_| "--columns is too large")?;
                 index = index.saturating_add(1);
             }
             "--lines" => {
-                spec.lines = u16::try_from(number(args.get(index), "--lines")?).unwrap_or(25);
+                spec.lines = u16::try_from(number(args.get(index), "--lines")?)
+                    .map_err(|_| "--lines is too large")?;
                 index = index.saturating_add(1);
             }
             "--frames" => {
-                spec.frames = u16::try_from(number(args.get(index), "--frames")?).unwrap_or(60);
+                spec.frames = u16::try_from(number(args.get(index), "--frames")?)
+                    .map_err(|_| "--frames is too large")?;
                 index = index.saturating_add(1);
             }
             "--delay" => {
-                spec.delay_ms = u16::try_from(number(args.get(index), "--delay")?).unwrap_or(80);
+                spec.delay_ms = u16::try_from(number(args.get(index), "--delay")?)
+                    .map_err(|_| "--delay is too large")?;
                 index = index.saturating_add(1);
             }
             "--seed" => {
