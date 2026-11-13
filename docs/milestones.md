@@ -368,13 +368,31 @@ clamp an out-of-range `CUP`. See [development.md](development.md).
 
 ## M4 — Lifecycle
 
-- Control socket: `0600`, root-owned, `SO_PEERCRED` check rejecting non-root
-- `raba-ctl`: `quit`, `deactivate`, `reactivate`, `message`, `ping`, `status`
-- Message sanitisation — no caller bytes reach a terminal
-- `/run/raba.state`, resumable: being killed stops being an event
-- Phases: boot loop → outro → handoff, with `MaxDuration`
-- Timeout **reveals the console** rather than exiting
-- Conflict detection in the binary, not in service files
+M3 made RABA able to draw on a console and give it back. M4 is everything that
+decides *when* — the part somebody else has to be able to drive.
+
+| # | What | Status |
+|---|---|---|
+| 1 | `docs/protocol.md`: the wire protocol, written before either end of it | done |
+| 2 | Message sanitisation — no caller bytes reach a terminal | done |
+| 3 | The phase machine, pure and testable: boot loop → outro → handoff | done |
+| 4 | Control socket: `0600`, root-owned, `SO_PEERCRED` rejecting non-root | |
+| 5 | `raba-ctl`: `quit`, `deactivate`, `reactivate`, `message`, `ping`, `status` | |
+| 6 | `/run/raba.state`, resumable: being killed stops being an event | |
+| 7 | `raba` as a daemon: phases, `MaxDuration`, signals | |
+| 8 | Timeout **reveals the console** rather than exiting | |
+| 9 | Conflict detection in the binary, not in service files | |
+
+### The order is a dependency order
+
+The protocol is written first because both ends are written against it and a
+protocol discovered by implementing a client against a server is a protocol with
+no second implementation. Sanitisation comes before the socket that needs it,
+rather than after, because it is the mitigation for the highest-severity finding
+in [security.md](security.md) — `message` draws attacker-chosen text on a console
+as root, and a convincing fake `login:` prompt is a credential harvester. And the
+phase machine is pure, so it is finished and tested on the host before any of it
+is reachable from a socket.
 
 ---
 

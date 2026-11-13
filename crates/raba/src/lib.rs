@@ -7,6 +7,10 @@
 //! `crates/raba-vmtest` — and a test that has to go through the command line can
 //! only check that the program did not crash.
 //!
+//! [`lifecycle`] is here for the opposite reason: it is pure, and exposing it
+//! makes it reachable from `cargo test` on a host with no console at all.
+//!
 //! See `docs/development.md` on the tiers.
 
+pub mod lifecycle;
 pub mod vt;

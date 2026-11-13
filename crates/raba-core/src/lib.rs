@@ -15,6 +15,7 @@
 
 pub mod format;
 pub mod glyph;
+pub mod message;
 pub mod render;
 pub mod surface;
 
@@ -23,5 +24,6 @@ pub mod testing;
 
 pub use format::{decode, encode, DecodeError, Frame, Movie, Op, Palette, Scaling};
 pub use glyph::{is_safe, Safety};
+pub use message::sanitise;
 pub use render::{apply, to_ansi, to_ansi_into, Cell, Grid};
 pub use surface::{Size, Surface};

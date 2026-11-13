@@ -157,7 +157,7 @@ one. Each belongs in a document and in a test.
 | `.dur` subset accepted | [dur-support.md](dur-support.md) |
 | config keys and defaults | `man 5 raba.conf` |
 | `raba-ctl` commands and exit codes | `man 1 raba-ctl` |
-| control socket wire protocol | `docs/protocol.md` (to write) |
+| control socket wire protocol | [protocol.md](protocol.md) |
 | theme recipe schema | `man 5 raba-theme` |
 | exit code 0 always | this document |
 
