@@ -356,3 +356,134 @@ fn a_durdraw_file_with_a_title_and_no_artist_is_credited_to_unknown() {
     assert!(said.contains("heraldry"), "{said:?}: the title survives the round trip");
     assert!(said.contains("unknown"), "{said:?}: no artist is `unknown`, not an empty string");
 }
+
+// --- where the output goes when nobody says ----------------------------------
+
+#[test]
+fn a_conversion_with_no_output_path_lands_beside_its_input() {
+    // `raba-gen convert arch.ans` writing `arch.raba` in the same directory is
+    // the whole command line most people ever type.
+    let scratch = Scratch::new("convert-default-out");
+    let art = scratch.write("arch.txt", "hello\n");
+    let output = gen(&["convert", utf8(&art)]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(scratch.path("arch.raba").exists(), "nothing was written beside the input");
+}
+
+#[test]
+fn a_generated_animation_with_no_output_path_is_named_after_what_it_generates() {
+    // There is no input file to sit beside, so the name comes from the
+    // generator — its canonical name and not the alias that was typed, so
+    // `generate life` and `generate gameoflife` write the same file rather
+    // than two copies of it.
+    let scratch = Scratch::new("generate-default-out");
+    let ran = Command::new(env!("CARGO_BIN_EXE_raba-gen"))
+        .args(["generate", "life", "--columns", "20", "--lines", "8", "--frames", "4"])
+        .current_dir(&scratch.0)
+        .output()
+        .expect("running raba-gen");
+    assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+    assert!(scratch.path("gameoflife.raba").exists(), "nothing was written for `life`");
+    assert!(!scratch.path("life.raba").exists(), "the alias was used as the file name");
+}
+
+#[test]
+fn a_second_dur_file_beside_a_conversion_or_a_generation_fails_the_same_way() {
+    // The .raba is written first in all three verbs; `build` is covered above
+    // and these are the other two.
+    let scratch = Scratch::new("also-dur-others");
+    let art = scratch.write("art.txt", "hi\n");
+    let blocked = scratch.directory("taken.dur");
+    refused(&gen(&["convert", utf8(&art), "--also-dur", utf8(&blocked)]), &["taken.dur"]);
+    refused(
+        &gen(&[
+            "generate",
+            "life",
+            "--columns",
+            "20",
+            "--lines",
+            "8",
+            "--also-dur",
+            utf8(&blocked),
+        ]),
+        &["taken.dur"],
+    );
+}
+
+// --- the checker ---------------------------------------------------------------
+
+#[test]
+fn checking_a_file_that_is_not_there_names_it() {
+    let scratch = Scratch::new("check-missing");
+    refused(&gen(&["--check", utf8(&scratch.path("gone.raba"))]), &["gone.raba", "No such file"]);
+}
+
+#[test]
+fn checking_something_that_is_not_a_raba_file_says_so_rather_than_crashing() {
+    let scratch = Scratch::new("check-junk");
+    let junk = scratch.write("junk.raba", "this is not a theme at all");
+    refused(&gen(&["--check", utf8(&junk)]), &["junk.raba"]);
+}
+
+#[test]
+fn an_unknown_option_to_check_is_refused_rather_than_read_as_a_filename() {
+    // Otherwise `--check --verbose thing.raba` reads `--verbose` as the path,
+    // then reads `thing.raba` over it, and the typo goes unmentioned.
+    refused(&gen(&["--check", "--verbose", "thing.raba"]), &["--verbose"]);
+}
+
+// --- numbers that are not numbers ----------------------------------------------
+
+#[test]
+fn every_numeric_option_in_every_verb_says_which_one_was_not_a_number() {
+    let scratch = Scratch::new("nan");
+    let art = scratch.write("art.txt", "hi\n");
+    let recipe = scratch.recipe("thing", "##\n");
+    let cases: Vec<(Vec<&str>, &str)> = vec![
+        (vec!["convert", utf8(&art), "--fg", "scarlet"], "--fg"),
+        (vec!["convert", utf8(&art), "--bg", "scarlet"], "--bg"),
+        (vec!["convert", utf8(&art), "--also-dur", "--dur-version", "seven"], "--dur-version"),
+        (vec!["build", utf8(&recipe), "--also-dur", "--dur-version", "seven"], "--dur-version"),
+        (vec!["generate", "life", "--also-dur", "--dur-version", "seven"], "--dur-version"),
+        (vec!["generate", "life", "--lines", "tall"], "--lines"),
+        (vec!["generate", "life", "--frames", "many"], "--frames"),
+        (vec!["generate", "life", "--delay", "soon"], "--delay"),
+        (vec!["generate", "life", "--seed", "random"], "--seed"),
+    ];
+    for (args, flag) in cases {
+        refused(&gen(&args), &[flag]);
+    }
+}
+
+#[test]
+fn an_unknown_option_to_generate_is_refused() {
+    refused(&gen(&["generate", "life", "--sparkles"]), &["--sparkles"]);
+}
+
+// --- a recipe the builder cannot build -----------------------------------------
+
+#[test]
+fn a_recipe_whose_art_will_not_fit_a_canvas_is_refused_with_the_recipe_named() {
+    // The art parses and the recipe parses; it is putting them together that
+    // fails. The message has to name the recipe, because that is the file the
+    // author will open.
+    let scratch = Scratch::new("too-big");
+    let wide = "#".repeat(1500);
+    scratch.write("huge.txt", format!("{wide}\n"));
+    let recipe = scratch.write("huge.toml", "[logo]\nsource = \"file:huge.txt\"\n");
+    refused(&gen(&["build", utf8(&recipe)]), &["huge.toml"]);
+}
+
+#[test]
+fn a_spinner_whose_period_does_not_divide_the_frame_count_is_refused() {
+    let scratch = Scratch::new("period");
+    scratch.write("art.txt", "##\n");
+    let recipe = scratch.write(
+        "art.toml",
+        "[logo]\nsource = \"file:art.txt\"\n[spinner]\nstyle = \"dots\"\nperiod = 7\n\
+         [canvas]\nframes = 20\n",
+    );
+    let output = gen(&["build", utf8(&recipe)]);
+    assert!(!output.status.success(), "a period that does not divide was accepted");
+    assert!(stderr(&output).contains("art.toml"), "{}", stderr(&output));
+}
