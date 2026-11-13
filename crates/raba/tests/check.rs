@@ -306,9 +306,14 @@ fn a_flag_that_needs_a_value_and_has_none_says_which_flag() {
 /// A theme with a character no console font has, for the two commands that are
 /// supposed to notice.
 fn theme_with_an_undrawable_glyph(scratch: &Scratch, name: &str) -> PathBuf {
+    theme_of(scratch, name, '\u{1f600}')
+}
+
+/// A one-line theme made entirely of `ch`.
+fn theme_of(scratch: &Scratch, name: &str, ch: char) -> PathBuf {
     let mut grid = Grid::new(2, 1, raba_core::Palette::Ansi16).expect("a grid");
-    grid.set(0, 0, Cell { ch: '\u{1f600}', fg: 7, bg: 0 });
-    grid.set(1, 0, Cell { ch: '\u{1f600}', fg: 7, bg: 0 });
+    grid.set(0, 0, Cell { ch, fg: 7, bg: 0 });
+    grid.set(1, 0, Cell { ch, fg: 7, bg: 0 });
     let ops: Vec<raba_core::Op> = grid
         .cells()
         .iter()
@@ -599,4 +604,49 @@ fn a_configuration_file_too_large_to_be_one_is_refused_by_size() {
     let output = raba(&scratch, &["--check"]);
     let text = stdout(&output);
     assert!(text.contains("past the"), "a 80 KB configuration was read:\n{text}");
+}
+
+#[test]
+fn preview_tells_a_glyph_that_is_merely_unreliable_apart_from_one_that_cannot_draw() {
+    // `é` is in the kernel's built-in font and missing from some fonts that
+    // replace it, so art using it works until somebody runs `setfont`. That is
+    // a different warning from an emoji, which never draws anywhere, and a
+    // contributor deciding whether to redraw their art needs to know which one
+    // they have.
+    let scratch = Scratch::new("preview-unreliable");
+    let path = theme_of(&scratch, "accented", '\u{e9}');
+    let output = raba(&scratch, &["--preview", path.to_str().expect("utf-8"), "--loops", "1"]);
+    assert!(output.status.success(), "a preview refused to play");
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("may not draw after setfont"), "{said}");
+    assert!(!said.contains("will not draw on a console"), "{said}: the wrong warning");
+}
+
+#[test]
+fn check_passes_a_theme_whose_glyphs_are_only_unreliable() {
+    // Only `Unsafe` is an exit code. Refusing every CP437 accented letter
+    // would refuse most of the ANSI art this project exists to play.
+    let scratch = Scratch::new("check-unreliable");
+    theme_of(&scratch, "accented", '\u{e9}');
+    scratch.write("raba.conf", "[Boot]\nTheme=accented\n");
+    let output = raba(&scratch, &["--check"]);
+    assert!(output.status.success(), "{}", stdout(&output));
+}
+
+#[test]
+fn tty_auto_on_the_command_line_means_the_same_as_not_saying_which() {
+    // `--tty auto` is how a command line overrides a `Tty=7` in the file back
+    // to "whichever is free". Silently keeping the 7 would make the flag a
+    // no-op in the one case it is for.
+    let scratch = Scratch::new("tty-auto");
+    theme(&scratch, "thing");
+    scratch.write("raba.conf", "[Boot]\nTheme=thing\nTty=7\n");
+
+    let fixed = raba(&scratch, &["--check"]);
+    assert!(stdout(&fixed).contains("tty7"), "{}", stdout(&fixed));
+
+    let auto = raba(&scratch, &["--check", "--tty", "auto"]);
+    assert!(auto.status.success(), "{}", stdout(&auto));
+    assert!(!stdout(&auto).contains("tty7"), "--tty auto left Tty=7 in place:\n{}", stdout(&auto));
+    assert!(stdout(&auto).contains("auto"), "{}", stdout(&auto));
 }

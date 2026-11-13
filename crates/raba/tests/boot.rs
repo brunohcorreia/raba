@@ -1110,3 +1110,127 @@ fn both_ways_of_being_displaced_name_what_happened() {
     assert!(Displaced::Switched(4).to_string().contains("tty4"));
     assert!(Displaced::Graphics.to_string().contains("graphics mode"));
 }
+
+/// Every answer this program can give about a boot, as the line that goes in
+/// the log.
+///
+/// The one thing anybody has to debug a splash that did not appear is this
+/// sentence in `journalctl -b`. "not drawing" and "stopped drawing" are
+/// different problems — the first never took a screen, the second took one and
+/// let go — and a line that does not say which sends the reader to the wrong
+/// half of the system.
+#[test]
+fn every_outcome_says_whether_it_ever_drew_and_why_it_stopped() {
+    let cases: Vec<(Outcome, Vec<&str>)> = vec![
+        (Outcome::Finished, vec!["finished"]),
+        (Outcome::Yielded(conflict::Conflict::Plymouthd(42)), vec!["not drawing", "plymouth"]),
+        (Outcome::NoTerminal(Error::NoFreeTerminal), vec!["not drawing", "every virtual terminal"]),
+        (
+            Outcome::NoTheme("/usr/share/raba/arch.raba: No such file".to_owned()),
+            vec!["not drawing", "arch.raba"],
+        ),
+        (
+            Outcome::CannotDraw("the console reports 0 columns".to_owned()),
+            vec!["stopped drawing", "0 columns"],
+        ),
+        (Outcome::Displaced(Displaced::Switched(2)), vec!["stopped", "tty2"]),
+    ];
+    for (outcome, wanted) in cases {
+        let said = outcome.to_string();
+        for fragment in wanted {
+            assert!(said.contains(fragment), "{outcome:?} says {said:?}, without {fragment:?}");
+        }
+    }
+}
+
+#[test]
+fn a_theme_larger_than_a_raba_may_be_is_refused_without_being_read_into_memory() {
+    // The guard is on the metadata and not on the bytes, which is the point:
+    // this file is 17 MB and reading it to find that out is the thing being
+    // avoided. Sparse, so the test costs no disk.
+    let scratch = Scratch::new("huge");
+    let huge = scratch.path("huge.raba");
+    let file = std::fs::File::create(&huge).expect("creating");
+    file.set_len(17 * 1024 * 1024).expect("a sparse file");
+    drop(file);
+
+    let why = raba::boot::read_movie(&huge).expect_err("a 17 MB theme is refused");
+    assert!(why.contains("huge.raba"), "{why}");
+    assert!(why.contains("larger than"), "{why}");
+}
+
+#[test]
+fn sigusr1_starts_the_outro_the_same_way_the_quit_command_does() {
+    use std::os::unix::thread::JoinHandleExt as _;
+
+    // Documented in man 8 raba, for a boot script with no socket client: the
+    // signal and `raba-ctl quit` must mean the same thing, or the documented
+    // one is the one nobody tests.
+    let scratch = Scratch::new("sigusr1");
+    let mut settings = scratch.settings();
+    let outro = scratch.path("outro.raba");
+    std::fs::write(&outro, raba_core::encode(&frames_of(&['X', 'Y']))).expect("writing the outro");
+    settings.outro = Some(outro);
+    settings.max_duration = Duration::from_millis(150);
+    let console = Fake::new();
+    let mut running = Running::start(settings, console.clone());
+
+    until("a boot frame", || !console.log().frames.is_empty());
+
+    let thread = running.thread.take().expect("the loop is running");
+    // SAFETY: as in the SIGTERM test above — a live thread id, and a signal
+    // `Signals::arm` blocked on that thread, so it queues rather than kills.
+    let sent = unsafe { libc::pthread_kill(thread.as_pthread_t(), libc::SIGUSR1) };
+    assert_eq!(sent, 0, "sending SIGUSR1 to the loop thread");
+
+    let outcome = running
+        .outcome
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the loop ended within ten seconds");
+    thread.join().expect("the loop thread did not panic");
+
+    assert!(matches!(outcome, Outcome::Finished), "{outcome:?}");
+    let written = console.written();
+    assert!(written.windows(1).any(|w| w == b"X"), "SIGUSR1 did not start the outro");
+    // And unlike SIGTERM, this is the end of the animation and not a handoff:
+    // the console goes back.
+    assert_eq!(console.log().restored, 1, "the console was not handed back");
+}
+
+#[test]
+fn an_outro_that_cannot_be_read_is_skipped_rather_than_taking_the_boot_down_with_it() {
+    // The outro is decoration at the very end of a boot. A theme that is
+    // missing stops the splash before it starts, because there is nothing to
+    // draw; an *outro* that is missing costs an animation nobody will miss,
+    // and refusing to finish over it would hold the screen.
+    let scratch = Scratch::new("outro-missing");
+    let mut settings = scratch.settings();
+    settings.outro = Some(scratch.path("not-here.raba"));
+    let console = Fake::new();
+    let running = Running::start(settings, console.clone());
+
+    until("a boot frame", || !console.log().frames.is_empty());
+    assert_eq!(running.ask("quit"), "+OK\n");
+
+    let outcome = running.finish();
+    assert!(matches!(outcome, Outcome::Finished), "{outcome:?}");
+    assert_eq!(console.log().restored, 1, "the console was not handed back");
+}
+
+#[test]
+fn an_outro_that_is_not_a_raba_file_is_skipped_the_same_way() {
+    let scratch = Scratch::new("outro-junk");
+    let mut settings = scratch.settings();
+    let outro = scratch.path("outro.raba");
+    std::fs::write(&outro, b"this is not a theme").expect("writing junk");
+    settings.outro = Some(outro);
+    let console = Fake::new();
+    let running = Running::start(settings, console.clone());
+
+    until("a boot frame", || !console.log().frames.is_empty());
+    running.ask("quit");
+
+    let outcome = running.finish();
+    assert!(matches!(outcome, Outcome::Finished), "{outcome:?}");
+    assert_eq!(console.log().restored, 1);
+}
