@@ -12,6 +12,10 @@
 # `install` returns 0 on every path. `integration/tests/dracut-build.sh` runs
 # this file against a stub of dracut that aborts where dracut aborts.
 
+# shellcheck disable=SC2154
+# $initdir, $moddir and $systemdsystemunitdir are dracut's, set before it
+# sources this file. A module that assigned them would be a module that broke.
+
 # Is there anything to install? 0 yes, 1 no.
 check() {
     # `raba-setup` is as required as `raba`: without it there is no way to
