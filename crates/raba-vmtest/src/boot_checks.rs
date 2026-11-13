@@ -673,3 +673,148 @@ pub fn the_kill_switch_touches_nothing(report: &mut Report) {
         Ok(())
     });
 }
+
+/// `SIGTERM` is `switch_root`, and the whole handoff turns on it.
+///
+/// systemd kills everything in the initramfs before pivoting to the real root.
+/// RABA blocks the signal, acts on it at a frame boundary, writes down where it
+/// was, and — this is the part — **does not hand the console back**. The art
+/// stays on the screen it was drawn on, the display stays where it is, and the
+/// instance started after the pivot adopts both. That is what makes the pivot a
+/// pause instead of a flash of black, and it is promised in `docs/early-boot.md`
+/// and in `integration/systemd/raba-initrd.service`.
+///
+/// A unit test proves it against a fake console. This proves it against a real
+/// one, which is the only place "the screen still has the art on it" means
+/// anything.
+pub fn a_terminated_instance_leaves_the_screen_as_it_is(report: &mut Report) {
+    report.check("SIGTERM hands the terminal over without clearing it", || {
+        let control = control()?;
+        let home = active(&control)?;
+        let mut first = start(&["--timeout", "0"]).map_err(|e| format!("starting raba: {e}"))?;
+
+        let outcome = (|| {
+            let taken = wait_for_the_splash(&control, home, &mut first)?;
+            wait_until("a state file", || Path::new(STATE).exists())?;
+            std::thread::sleep(Duration::from_millis(120));
+
+            let pid = rustix::process::Pid::from_raw(
+                i32::try_from(first.id()).map_err(|_| "a pid that does not fit")?,
+            )
+            .ok_or("a pid of zero")?;
+            rustix::process::kill_process(pid, rustix::process::Signal::TERM)
+                .map_err(|e| format!("SIGTERM: {e}"))?;
+
+            // It exits of its own accord, and exits 0: a splash that fails on
+            // the way out of an initramfs is a failed unit in the journal of
+            // every boot.
+            wait_until("raba to act on SIGTERM", || matches!(first.try_wait(), Ok(Some(_))))?;
+            let status = first.wait().map_err(|e| format!("reaping: {e}"))?;
+            if !status.success() {
+                return Err(format!("raba exited {status} on SIGTERM"));
+            }
+
+            // Not handed back. Both halves matter: the display is still on the
+            // splash's terminal, and the terminal is still in text mode with
+            // the art on it rather than cleared.
+            let now = active(&control)?;
+            if now != taken {
+                return Err(format!("the display went home to tty{now} instead of staying"));
+            }
+            let text = std::fs::read_to_string(STATE)
+                .map_err(|e| format!("the successor has nothing to resume from: {e}"))?;
+            if !text.contains(&format!("terminal={taken}")) {
+                return Err(format!("the state file does not name tty{taken}: {text:?}"));
+            }
+            println!("# SIGTERM on tty{taken}, state left behind: {} bytes", text.len());
+
+            // And the successor picks it up, on the same terminal, with the
+            // screen never having changed hands.
+            let mut second =
+                start(&["--timeout", "0"]).map_err(|e| format!("restarting raba: {e}"))?;
+            let outcome = (|| {
+                wait_until("the successor", || {
+                    std::fs::read_to_string(STATE).is_ok_and(|now| now != text)
+                })?;
+                let resumed =
+                    field(&std::fs::read_to_string(STATE).unwrap_or_default(), "terminal")?;
+                if resumed != u64::from(taken) {
+                    return Err(format!("the successor took tty{resumed}, not tty{taken}"));
+                }
+                if active(&control)? != taken {
+                    return Err("the handoff moved the display".to_owned());
+                }
+                let (code, _) = ctl(&["quit", "--wait"])?;
+                if code != 0 {
+                    return Err(format!("quit exited {code}"));
+                }
+                Ok(())
+            })();
+            clean_up(&mut second);
+            outcome
+        })();
+
+        clean_up(&mut first);
+        wait_until("the display to come home", || active(&control) == Ok(home))?;
+        outcome
+    });
+}
+
+/// A compositor taking the same terminal, which is how this ends on a machine
+/// with no display manager.
+///
+/// Switching the display elsewhere is one way to lose the screen and is checked
+/// above. The other is a program putting *this* terminal into graphics mode —
+/// what a Wayland compositor started on the console does, and the case the
+/// project cares most about getting right, since holding the screen from boot
+/// until the compositor's first frame is the whole point. RABA has to notice,
+/// stop drawing, and leave the mode alone: a splash that writes text at a
+/// terminal in `KD_GRAPHICS` corrupts whatever is being scanned out of it.
+pub fn the_splash_leaves_when_the_terminal_goes_into_graphics_mode(report: &mut Report) {
+    report.check("raba stops when its own terminal enters graphics mode", || {
+        let control = control()?;
+        let home = active(&control)?;
+        let mut child = start(&["--timeout", "0"]).map_err(|e| format!("starting raba: {e}"))?;
+
+        let outcome = (|| {
+            let taken = wait_for_the_splash(&control, home, &mut child)?;
+            let screen = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(format!("/dev/tty{taken}"))
+                .map_err(|e| format!("opening tty{taken}: {e}"))?;
+
+            ioctl::set_mode(&screen, ioctl::KD_GRAPHICS)
+                .map_err(|e| format!("KDSETMODE KD_GRAPHICS: {e}"))?;
+            println!("# tty{taken} put into graphics mode under raba");
+
+            let noticed = Instant::now();
+            wait_until("raba to notice graphics mode", || matches!(child.try_wait(), Ok(Some(_))))?;
+            println!("# raba exited {:?} after the mode changed", noticed.elapsed());
+
+            let status = child.wait().map_err(|e| format!("reaping: {e}"))?;
+            if !status.success() {
+                return Err(format!("raba exited {status}, and it exits 0 or it is a bug"));
+            }
+            // It must not have put the terminal back into text mode on the way
+            // out: the compositor owns that now.
+            let mode = ioctl::get_mode(&screen).map_err(|e| format!("KDGETMODE: {e}"))?;
+            if mode != ioctl::KD_GRAPHICS {
+                return Err("raba pulled the terminal back into text mode".to_owned());
+            }
+            if active(&control)? != taken {
+                return Err("raba moved the display away from the new owner".to_owned());
+            }
+
+            // Tidy up after the compositor this check is pretending to be.
+            ioctl::set_mode(&screen, ioctl::KD_TEXT)
+                .map_err(|e| format!("KDSETMODE KD_TEXT: {e}"))?;
+            Ok(())
+        })();
+
+        clean_up(&mut child);
+        let _ = ioctl::activate(&control, home);
+        let _ = ioctl::wait_active(&control, home);
+        outcome
+    });
+}
