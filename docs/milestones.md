@@ -737,7 +737,8 @@ the whole test suite below them cover RABA failing *at its own job*: art that do
 decode, a state file somebody wrote by hand, a second instance, the screen being taken
 away, SIGKILL at `switch_root` — which `panic = "abort"` makes the same case as a panic,
 so that one is covered by construction. What none of them covered is RABA costing
-somebody their computer, which is the first thing `notas/ideia.md` says must never
+somebody their computer, which is the first thing the project's founding rule says must
+never
 happen, and what a power cut does to a machine in the middle of all this.
 
 Explicitly **not** in it: LUKS passphrase in the splash, the progress overlay, the

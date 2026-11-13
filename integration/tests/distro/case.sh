@@ -10,7 +10,7 @@
 # upgrade that removed a file, a half-written download, a configuration edited
 # in anger at two in the morning. The assertion is never that RABA works
 # afterwards. It is that the computer still boots, which is the first promise in
-# notas/ideia.md and the one that matters more than any splash.
+# CONTRIBUTING.md, rule 1, and the one that matters more than any splash.
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 

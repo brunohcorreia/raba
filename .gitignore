@@ -53,3 +53,9 @@ __pycache__/
 
 # cargo-fuzz keeps its own lockfile
 /fuzz/Cargo.lock
+
+# The original Portuguese design notes. They stay on the author's machine —
+# they are where the project's one unbreakable rule is written down — but they
+# are not documentation, are not maintained, and were wrong wherever they
+# disagreed with docs/. git history still has them.
+/notas/

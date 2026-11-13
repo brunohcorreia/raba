@@ -296,7 +296,7 @@ which makes automated visual regression possible — compare against a known-goo
 ### Tier 3c — power cuts and sabotage
 
 Tier 3b asks whether a real distribution installs this and draws. This asks the first
-promise in `notas/ideia.md`:
+promise, the one in [CONTRIBUTING.md](../CONTRIBUTING.md) that predates the code:
 
 > no pior caso, se quebrar, nao podemos impedir o computador de dar boot
 

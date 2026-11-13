@@ -66,7 +66,14 @@ removed.
 
 ### Four rules that are not up for discussion
 
-1. **Never prevent a boot.** `raba` exits 0 on every error. A missing theme, an
+1. **Never prevent a boot.** The project's founding constraint, written in the author's
+   first notes before a line of code existed:
+
+   > no pior caso, se quebrar, nao podemos impedir o computador de dar boot
+   >
+   > *in the worst case, if it breaks, we cannot stop the computer from booting*
+
+   `raba` exits 0 on every error. A missing theme, an
    unreadable file, an absent console: all of them are "draw nothing and leave". The
    only thing that may be fatal is a flag a human typed wrong at a prompt.
 2. **Always give the terminal back.** On every exit path, including a panic — the

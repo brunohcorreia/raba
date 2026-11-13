@@ -2,7 +2,8 @@
 # Tier 3c: what happens to a machine when RABA, or the power, fails.
 #
 # Tier 3b (scripts/distro-test.sh) asks whether a real distribution installs
-# this and draws. This asks the question the project's own notes put first:
+# this and draws. This asks the question that predates the code — CONTRIBUTING.md,
+# rule 1:
 #
 #     "no pior caso, se quebrar, nao podemos impedir o computador de dar boot"
 #
