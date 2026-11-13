@@ -6,6 +6,13 @@
 # source it already has — so what is packaged is this tree rather than a
 # published tag that may not exist yet.
 #
+# Which is also why `--skipchecksums` is here. The recipe pins the sha256 of
+# the published tarball, as an AUR recipe must; the tarball this builds is the
+# working tree under the same name, and it will never have that digest. The
+# check being skipped is the one this substitution deliberately breaks, and
+# nothing else: `makepkg -f` in packaging/aur/raba, which is what the release
+# procedure in docs/packaging.md actually runs, still verifies it.
+#
 # Usage:
 #   packaging/tests/package.sh           build and check
 #   packaging/tests/package.sh --check   run the suite inside the build too
@@ -57,7 +64,7 @@ cp "${recipe}/PKGBUILD" "${recipe}/raba.install" "$work/"
     --exclude ./.git --exclude ./target --exclude ./notas . )
 
 echo "package-test: makepkg"
-makepkg_args=(--noconfirm --nodeps --force)
+makepkg_args=(--noconfirm --nodeps --force --skipchecksums)
 [ "$run_check" = 1 ] || makepkg_args+=(--nocheck)
 if ! (cd "$work" && makepkg "${makepkg_args[@]}" > makepkg.log 2>&1); then
     sed 's/^/#   /' "${work}/makepkg.log" | tail -40 >&2
