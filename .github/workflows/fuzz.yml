@@ -15,5 +15,12 @@ jobs:
       - run: cargo install cargo-fuzz
       # The parser reads untrusted input as root, early in boot. This is the
       # highest-value fuzz target in the project. See docs/security.md.
+      #
+      # RUSTUP_TOOLCHAIN rather than `cargo +nightly`, because rust-toolchain.toml
+      # pins stable for everything else in this repository and a toolchain file
+      # beats an installed default. Without it cargo-fuzz builds with stable and
+      # dies on its own `-Z sanitizer=address`.
       - run: cargo fuzz run parse -- -max_total_time=1800
         working-directory: .
+        env:
+          RUSTUP_TOOLCHAIN: nightly

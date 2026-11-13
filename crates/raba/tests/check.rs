@@ -13,12 +13,49 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
-use std::path::{Path, PathBuf};
+use raba_core::{Cell, Grid, Movie};
+use std::path::PathBuf;
 use std::process::{Command, Output};
 
-/// The repository's own themes, which are real `.raba` files.
-fn themes() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes")
+/// A real `.raba`, written into the sandbox.
+///
+/// Generated rather than taken from `themes/`: those are built by
+/// `scripts/build-themes.sh` and `*.raba` is in `.gitignore`, so a fresh
+/// checkout — CI's, and a new contributor's — has none. A test that passes only
+/// on a machine where somebody has already run the build script is a test that
+/// fails for everybody else, which is how this one was found.
+fn theme(scratch: &Scratch, name: &str) {
+    let mut grid = Grid::new(8, 2, raba_core::Palette::Ansi16).expect("a grid");
+    for column in 0..8 {
+        grid.set(column, 0, Cell { ch: '#', fg: 7, bg: 0 });
+    }
+    let ops: Vec<raba_core::Op> = grid
+        .cells()
+        .iter()
+        .enumerate()
+        .map(|(index, cell)| raba_core::Op {
+            cell: u32::try_from(index).expect("a small index"),
+            ch: cell.ch,
+            fg: cell.fg,
+            bg: cell.bg,
+        })
+        .collect();
+    let movie = Movie {
+        columns: grid.columns(),
+        lines: grid.lines(),
+        palette: grid.palette(),
+        scaling: raba_core::Scaling::Crop,
+        looping: true,
+        frames: vec![raba_core::Frame {
+            delay_ms: 10,
+            op_start: 0,
+            op_count: u16::try_from(ops.len()).expect("a small frame"),
+        }],
+        ops,
+    };
+    std::fs::create_dir_all(scratch.path("themes")).expect("a themes directory");
+    std::fs::write(scratch.path(&format!("themes/{name}.raba")), raba_core::encode(&movie))
+        .expect("writing a theme");
 }
 
 struct Scratch(PathBuf);
@@ -58,7 +95,7 @@ fn raba(scratch: &Scratch, args: &[&str]) -> Output {
         .arg("--defaults")
         .arg(scratch.path("raba.defaults"))
         .arg("--themes")
-        .arg(themes())
+        .arg(scratch.path("themes"))
         .arg("--cmdline")
         .arg(scratch.path("cmdline"))
         .arg("--os-release")
@@ -79,6 +116,7 @@ fn stdout(output: &Output) -> String {
 #[test]
 fn a_configuration_that_names_a_real_theme_checks_out() {
     let scratch = Scratch::new("good");
+    theme(&scratch, "arch");
     scratch.write("raba.conf", "[Boot]\nTheme=arch\nTimeout=20\n");
     let output = raba(&scratch, &["--check"]);
     let report = stdout(&output);
@@ -128,6 +166,7 @@ fn a_theme_that_is_not_a_theme_is_a_failed_check() {
 #[test]
 fn the_kill_switch_stops_before_anything_is_touched() {
     let scratch = Scratch::new("kill");
+    theme(&scratch, "arch");
     scratch.write("raba.conf", "[Boot]\nTheme=arch\n");
     scratch.write("cmdline", "root=/dev/sda2 quiet raba.enable=0\n");
     let output = raba(&scratch, &[]);
@@ -141,6 +180,7 @@ fn the_kill_switch_stops_before_anything_is_touched() {
 fn debug_writes_the_report_to_the_log_and_draws_nothing() {
     let scratch = Scratch::new("debug");
     let log = scratch.path("raba.log");
+    theme(&scratch, "arch");
     scratch.write("raba.conf", &format!("[Boot]\nTheme=arch\n[Log]\nFile={}\n", log.display()));
     scratch.write("cmdline", "quiet raba.debug=1\n");
     let output = raba(&scratch, &[]);

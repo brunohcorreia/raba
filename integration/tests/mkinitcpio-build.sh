@@ -169,10 +169,13 @@ install_setup() {
         else
             # No real binary: a stub that answers the two questions the hook
             # asks. Keeps this script runnable on its own.
+            # It refuses the same thing the real one refuses — a theme that
+            # is not there — or case 5 below would be testing the stub.
+            printf 'theme=%q\n' "$sandbox/themes/generic.raba"
+            printf '[ -f "$theme" ] || exit 1\n'
             printf 'case "$1" in\n'
-            printf '  --freeze) printf "[Boot]\\nTheme=%s\\n" %q ;;\n' \
-                "$sandbox/themes/generic.raba"
-            printf '  --print-files) printf "%%s\\n" %q ;;\n' "$sandbox/themes/generic.raba"
+            printf '  --freeze) printf "[Boot]\\nTheme=%%s\\n" "$theme" ;;\n'
+            printf '  --print-files) printf "%%s\\n" "$theme" ;;\n'
             printf '  *) exit 2 ;;\n'
             printf 'esac\n'
         fi
