@@ -60,16 +60,20 @@ install() {
 
     if dracut_module_included "systemd"; then
         unit_dir="${systemdsystemunitdir:-/usr/lib/systemd/system}"
-        if [[ -f "$unit_dir/raba-start.service" ]]; then
-            inst_simple "$unit_dir/raba-start.service"
+        # raba-initrd.service and not raba-start.service: systemd carries
+        # unit state across switch_root, so the real root would never start a
+        # unit of the same name that had already run in here. See
+        # integration/systemd/raba-initrd.service.
+        if [[ -f "$unit_dir/raba-initrd.service" ]]; then
+            inst_simple "$unit_dir/raba-initrd.service"
             # Wanted from inside the image only, by hand rather than through
             # `systemctl enable`: one symlink, no host state, nothing that needs
             # systemd to be runnable on the machine building the image.
             mkdir -p "$initdir/$unit_dir/sysinit.target.wants"
-            ln -sf ../raba-start.service \
-                "$initdir/$unit_dir/sysinit.target.wants/raba-start.service"
+            ln -sf ../raba-initrd.service \
+                "$initdir/$unit_dir/sysinit.target.wants/raba-initrd.service"
         else
-            dwarning "raba: raba-start.service is missing; this image gets no splash"
+            dwarning "raba: raba-initrd.service is missing; this image gets no splash"
         fi
     elif [[ -f "$moddir/raba-start.sh" ]]; then
         # `pre-trigger`: udev is running, so whatever console driver is going to

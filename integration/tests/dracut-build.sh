@@ -269,10 +269,14 @@ make_sandbox
 module_list='systemd udev-rules'
 run_module
 expect 'a systemd image is the same module' assert_no_fatal
-expect 'the unit goes in' called "inst $sandbox/units/raba-start.service"
+expect 'the unit goes in' called "inst $sandbox/units/raba-initrd.service"
 expect 'and nothing sources a shell hook' not_called 'inst_hook*'
 expect 'the unit is wanted from inside the image' \
-    test -L "$initdir/$systemdsystemunitdir/sysinit.target.wants/raba-start.service"
+    test -L "$initdir/$systemdsystemunitdir/sysinit.target.wants/raba-initrd.service"
+# Its own name, so that the real root still starts raba-start.service after
+# switch_root. See integration/systemd/raba-initrd.service.
+expect 'and not the real root'"'"'s unit name' \
+    test ! -e "$initdir/$systemdsystemunitdir/raba-start.service"
 clean_sandbox
 
 # 3. The program is not installed at all.

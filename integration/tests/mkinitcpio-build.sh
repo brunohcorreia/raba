@@ -289,9 +289,14 @@ make_sandbox
 define_add_systemd_unit
 run_hook
 check 'a systemd initramfs is the same hook' assert_no_build_error
-check 'the unit goes in' called 'add_systemd_unit raba-start.service'
+check 'the unit goes in' called 'add_systemd_unit raba-initrd.service'
 check 'wanted from inside the image' \
-    called 'add_symlink /usr/lib/systemd/system/sysinit.target.wants/raba-start.service ../raba-start.service'
+    called 'add_symlink /usr/lib/systemd/system/sysinit.target.wants/raba-initrd.service ../raba-initrd.service'
+# The name is the point. systemd carries unit state across switch_root, so an
+# image carrying raba-start.service would stop the real root from ever starting
+# its own copy — measured on an Arch guest as a splash that ended at 3.98s and
+# six seconds of boot log after it.
+check 'and not the real root\'"'"'s unit name' not_called 'add_systemd_unit raba-start.service'
 check 'and no runtime hook, which systemd would never run' not_called 'add_runscript*'
 clean_sandbox
 

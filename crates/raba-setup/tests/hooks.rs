@@ -84,6 +84,16 @@ fn the_systemd_units_say_what_the_documentation_says_they_say() {
     // reads usefully in `systemctl status`. See docs/coexistence.md.
     assert!(start.contains("ConditionPathExists=!/run/plymouth.pid"), "{start}");
 
+    // The initramfs unit: the same job under a name of its own, because systemd
+    // carries unit state across switch_root and would not start a second unit
+    // of the same name in the real root. Everything above has to hold for it
+    // too, plus the marker that keeps it inside an image.
+    let initrd = integration("systemd/raba-initrd.service");
+    assert_eq!(directives(&initrd, "ExecStart"), ["/usr/bin/raba"]);
+    assert_eq!(directives(&initrd, "WantedBy"), ["sysinit.target"]);
+    assert!(initrd.contains("ConditionPathExists=/etc/initrd-release"), "{initrd}");
+    assert!(initrd.contains("ConditionKernelCommandLine=!raba.enable=0"), "{initrd}");
+
     for name in ["systemd/raba-quit.service", "systemd/raba-quit-wait.service"] {
         let unit = integration(name);
         let exec = directives(&unit, "ExecStart");

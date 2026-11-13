@@ -1,10 +1,14 @@
 # The splash, started by systemd.
 #
-# Used in two places with one file: inside a systemd initramfs, where the
-# mkinitcpio hook drops a sysinit.target.wants symlink into the image, and on
-# the real root, where you enable it yourself. Both can run on the same boot —
-# the second one finds the first still drawing, and declines. See
-# crates/raba/src/conflict.rs.
+# The real root's unit, and only that: the initramfs gets raba-initrd.service,
+# which is a separate file for a reason written down in it. Both run on the same
+# boot, one after the other — and on an initramfs that does not kill its own
+# processes, at the same time, where this one finds the other still drawing and
+# declines. See crates/raba/src/conflict.rs.
+#
+# Started here, it usually finds /run/raba.state and continues the animation the
+# initramfs instance was in the middle of, on the terminal that instance was
+# using, without the screen changing hands.
 [Unit]
 Description=RABA boot splash
 Documentation=man:raba(8) man:raba.conf(5)

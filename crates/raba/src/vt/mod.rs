@@ -518,6 +518,26 @@ impl Surface for Vt {
     }
 }
 
+impl Vt {
+    /// Let go without putting anything back.
+    ///
+    /// For the one case where restoring would be wrong: this process is being
+    /// terminated at `switch_root` and another instance is about to continue
+    /// the same animation on the same terminal. The screen should not change
+    /// hands at all, so the display stays where it is, the art stays on it, and
+    /// kernel messages stay pointed away — all of which the successor inherits
+    /// by adopting this terminal.
+    ///
+    /// The same state a `SIGKILL` leaves, reached deliberately. If nothing
+    /// resumes, what is left is a console showing a still picture with the
+    /// kernel's messages going elsewhere, which is exactly what a killed splash
+    /// already leaves behind and what `raba-ctl quit` and the next `raba` both
+    /// know how to clean up.
+    pub const fn forget(&mut self) {
+        self.restored = true;
+    }
+}
+
 impl Drop for Vt {
     /// The ordinary exit path, and the one that covers an early `return`.
     ///

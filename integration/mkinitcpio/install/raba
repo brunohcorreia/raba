@@ -66,7 +66,10 @@ build() {
     # shellcheck disable=SC2154  # _d_hooks is mkinitcpio's own, and is how
     # add_runscript itself finds the file the elif branch checks for.
     if command -v add_systemd_unit > /dev/null; then
-        units=('raba-start.service')
+        # The initramfs gets its own unit name. systemd carries unit state
+        # across switch_root, so a unit that ran here would never be started
+        # again in the real root. See integration/systemd/raba-initrd.service.
+        units=('raba-initrd.service')
         for unit in "${units[@]}"; do
             # The same lookup `add_systemd_unit` does, because the thing being
             # checked is whether that call is about to fail. RABA_UNIT_PATH is a

@@ -105,17 +105,31 @@ For systemd's status output, add `systemd.show_status=false`.
 
 ### systemd
 
-Three units, modelled on Plymouth's:
+Four units, modelled on Plymouth's:
 
 | unit | role |
 |---|---|
-| `raba-start.service` | starts RABA, if the initramfs did not |
+| `raba-initrd.service` | the splash inside a systemd initramfs; the image hooks install it, you never enable it |
+| `raba-start.service` | the splash on the real root, continuing what the initramfs started |
 | `raba-quit.service` | sends `quit` once the system is up |
 | `raba-quit-wait.service` | blocks until RABA has exited |
 
 ```sh
 sudo systemctl enable raba-start.service raba-quit.service raba-quit-wait.service
 ```
+
+The first two are the same program under two unit names, and the second name is not
+cosmetic. systemd carries unit state across `switch_root`: a unit that was active in
+the initramfs is still active in the real root, its start job is already satisfied, and
+nothing ever starts it again. With one name for both, an Arch guest measured a splash
+from 1.35s to 3.98s and then six seconds of boot log before the login prompt — the real
+root's copy never ran, because as far as systemd was concerned it already had.
+
+What happens instead: `switch_root` sends `SIGTERM`, the initramfs instance writes the
+terminal and the frame to `/run/raba.state` and leaves the art on the screen rather than
+handing the console back, and `raba-start.service` — a unit this system has not seen
+before — starts, adopts that terminal and carries on from that frame. The screen never
+changes hands. See `docs/early-boot.md`.
 
 ### OpenRC, runit, s6, dinit
 

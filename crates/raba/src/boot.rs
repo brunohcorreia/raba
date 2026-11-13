@@ -187,6 +187,10 @@ struct Session<'a> {
     /// A sanitised `message`, redrawn under the animation on every frame.
     message: Option<String>,
     resume: Option<State>,
+    /// A termination signal arrived. On a systemd machine that means
+    /// `switch_root`, which is an interruption and not an ending: see
+    /// [`Session::finish`].
+    interrupted: bool,
     /// The console size the current player was built for. A console that
     /// changes size under us is a console that was replaced, and everything
     /// drawn before that is gone.
@@ -214,6 +218,7 @@ impl<'a> Session<'a> {
             waiters: Vec::new(),
             message: None,
             resume,
+            interrupted: false,
             screen: None,
             started: Instant::now(),
             outro_started: None,
@@ -230,10 +235,14 @@ impl<'a> Session<'a> {
         }
         while !self.life.phase().is_done() {
             if let Some(signal) = self.signals.as_mut().and_then(Signals::poll) {
-                self.advance(match signal {
-                    Signal::Terminate => Event::Terminate,
+                let event = match signal {
+                    Signal::Terminate => {
+                        self.interrupted = true;
+                        Event::Terminate
+                    }
                     Signal::Quit => Event::Quit,
-                });
+                };
+                self.advance(event);
                 continue;
             }
             self.serve();
@@ -601,12 +610,30 @@ impl<'a> Session<'a> {
 
     /// Everything that has to be true after RABA stops.
     fn finish(&mut self) {
-        self.release();
-        // Removed rather than left: a state file outliving the instance that
-        // wrote it is a later instance resuming an animation that already
-        // finished. The freshness check would catch it; not writing a trap is
-        // better than catching one.
-        state::discard(&self.settings.state);
+        // Two endings, and they are not the same thing.
+        //
+        // Interrupted: a termination signal, which on a systemd machine is
+        // `switch_root` and nothing else. The animation is not over, this
+        // process is. So the state is written down — terminal and frame, saved
+        // before anything is released, because releasing is what destroys both
+        // — and the terminal is left exactly as it stands, art and all, for
+        // whoever starts next. Restoring it here would hand back a console,
+        // flash a boot log, and make the successor take it again: three visible
+        // events in the gap this whole design exists to close.
+        //
+        // Finished: the splash is over, somebody asked for the screen, and a
+        // state file outliving the instance that wrote it is a later instance
+        // resuming an animation that already ended. The freshness check would
+        // catch it; not writing a trap is better than catching one.
+        if self.interrupted {
+            self.save();
+            if let Some(mut vt) = self.vt.take() {
+                vt.forget();
+            }
+        } else {
+            self.release();
+            state::discard(&self.settings.state);
+        }
         self.listener = None;
         if let Some(signals) = self.signals.as_mut() {
             signals.disarm();

@@ -1,0 +1,46 @@
+# The splash inside a systemd initramfs.
+#
+# The same job as raba-start.service and deliberately not the same *name*, which
+# is the whole reason this file exists.
+#
+# systemd carries its unit state across switch_root: a unit that was active in
+# the initramfs is still active in the real root, so the start job for it is
+# already satisfied and nothing starts it again. With one name for both, the
+# sequence measured on an Arch guest was: splash at 1.35s, systemd terminates
+# the initrd's processes at switch_root, `raba-start.service: Deactivated
+# successfully` at 3.98s — and then nothing, six seconds of boot log, and a
+# login prompt. The real root's copy of the unit never ran, because as far as
+# systemd was concerned it already had.
+#
+# Under a different name, the real root's raba-start.service is a unit this
+# system has never seen. It starts normally after switch_root, finds the state
+# file the interrupted instance wrote, adopts the same terminal and carries the
+# animation on from the frame it reached. See docs/early-boot.md.
+#
+# Installed into the image by the mkinitcpio and dracut hooks. Nothing enables
+# this on a real root, and ConditionPathExists below makes sure of it.
+[Unit]
+Description=RABA boot splash (initramfs)
+Documentation=man:raba(8) man:raba.conf(5)
+DefaultDependencies=no
+After=systemd-vconsole-setup.service
+Wants=systemd-vconsole-setup.service
+# Only ever inside an initramfs. /etc/initrd-release is systemd's own marker for
+# that, and it is the check every initrd unit uses.
+ConditionPathExists=/etc/initrd-release
+ConditionKernelCommandLine=!raba.enable=0
+ConditionVirtualization=!container
+ConditionPathExists=!/run/plymouth.pid
+IgnoreOnIsolate=true
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/raba
+# SIGTERM here is switch_root. raba writes down the terminal and the frame,
+# leaves the art on the screen rather than handing the console back, and exits;
+# the instance in the real root picks all three up. See crates/raba/src/boot.rs,
+# `Session::finish`.
+TimeoutStopSec=5
+
+[Install]
+WantedBy=sysinit.target
