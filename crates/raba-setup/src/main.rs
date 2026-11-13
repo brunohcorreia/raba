@@ -35,12 +35,14 @@
 //! getting it wrong is a machine that does not boot. See `docs/packaging.md`.
 
 mod machine;
+#[cfg(test)]
+mod tests;
 mod theme;
 
 use machine::{Advice, Currency, Generator, Root, Tpm};
 use raba::config;
-use std::path::PathBuf;
-use std::process::{Command, ExitCode};
+use std::path::{Path, PathBuf};
+use std::process::{Command, ExitCode, ExitStatus};
 
 const USAGE: &str = "\
 raba-setup - set up and verify a RABA installation
@@ -77,12 +79,67 @@ and the command; you run them.
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    match run(&args) {
+    match run(&mut ThisMachine, &args) {
         Ok(code) => code,
         Err(message) => {
             eprintln!("raba-setup: {message}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// The four things this program does *to* a machine, rather than decides.
+///
+/// # Why a trait with one implementation
+///
+/// Everything below this line used to be unreachable from a test. Not because
+/// it was complicated — the decisions are small and the error messages are the
+/// point of them — but because reaching any of them meant being root on a
+/// machine with a TPM-sealed disk, answering a prompt on a terminal, and
+/// letting `mkinitcpio -P` run for thirty seconds. So the half of this program
+/// that can cost somebody a boot was the half nothing ever ran.
+///
+/// The gate that makes that true is deliberate and stays exactly where it is:
+/// `permission` refuses any `--root` that is not the running system, before it
+/// looks at anything. This trait does not move that check or weaken it — it
+/// moves the *machine* behind an interface, so that a test can hand the real
+/// code a machine with a sealed disk, a missing `raba` in `HOOKS`, or an
+/// `mkinitcpio` that exits 1, and read what it says.
+///
+/// There is one implementation in the shipped binary, [`ThisMachine`], and it
+/// is four lines long. The second one is in `tests.rs` and is compiled out.
+trait Host {
+    /// Look at the machine: generators, hooks, images, TPM.
+    fn survey(&mut self, root: &Root) -> machine::Survey;
+    /// Ask the person at the keyboard whether to go ahead anyway.
+    fn confirm(&mut self, devices: &[String]) -> bool;
+    /// Run somebody else's program and wait for it.
+    fn run(&mut self, program: &str, arguments: &[&str]) -> Result<ExitStatus, String>;
+    /// Replace one of our own files.
+    fn write(&mut self, path: &Path, text: &str) -> Result<(), String>;
+}
+
+/// The real one.
+struct ThisMachine;
+
+impl Host for ThisMachine {
+    fn survey(&mut self, root: &Root) -> machine::Survey {
+        machine::survey(root)
+    }
+
+    fn confirm(&mut self, devices: &[String]) -> bool {
+        agreed(devices)
+    }
+
+    fn run(&mut self, program: &str, arguments: &[&str]) -> Result<ExitStatus, String> {
+        Command::new(program)
+            .args(arguments)
+            .status()
+            .map_err(|why| format!("running {program}: {why}"))
+    }
+
+    fn write(&mut self, path: &Path, text: &str) -> Result<(), String> {
+        write_config(path, text)
     }
 }
 
@@ -100,7 +157,7 @@ enum Action {
     SetTheme(String),
 }
 
-fn run(args: &[String]) -> Result<ExitCode, String> {
+fn run(host: &mut dyn Host, args: &[String]) -> Result<ExitCode, String> {
     let mut action = Action::DryRun;
     let mut places = config::Places::default();
     let mut root = Root::default();
@@ -151,10 +208,10 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
         Action::Freeze => freeze(&places),
         Action::PrintFiles => print_files(&places),
-        Action::DryRun => Ok(dry_run(&root, &places)),
-        Action::Apply => apply(&root, &places, yes),
-        Action::SetTheme(name) => set_theme(&root, &places, yes, &name),
-        Action::Check => Ok(check(&root, &places)),
+        Action::DryRun => Ok(dry_run(host, &root, &places)),
+        Action::Apply => apply(host, &root, &places, yes),
+        Action::SetTheme(name) => set_theme(host, &root, &places, yes, &name),
+        Action::Check => Ok(check(host, &root, &places)),
     }
 }
 
@@ -212,8 +269,8 @@ fn complain(startup: &config::Startup) {
 /// should stay that way: everything it would do is printed first, in the order
 /// it would happen, with the one thing that can cost you a boot — a TPM-sealed
 /// disk — printed before the step that breaks it.
-fn dry_run(root: &Root, places: &config::Places) -> ExitCode {
-    let survey = machine::survey(root);
+fn dry_run(host: &mut dyn Host, root: &Root, places: &config::Places) -> ExitCode {
+    let survey = host.survey(root);
     let startup = config::start(places);
 
     println!("configuration:");
@@ -357,8 +414,8 @@ fn source_times(startup: &config::Startup) -> Vec<Option<u64>> {
 // ----------------------------------------------------------------- check ----
 
 /// Is the image current? The question a package's post-install asks.
-fn check(root: &Root, places: &config::Places) -> ExitCode {
-    let survey = machine::survey(root);
+fn check(host: &mut dyn Host, root: &Root, places: &config::Places) -> ExitCode {
+    let survey = host.survey(root);
     let startup = config::start(places);
     let Some(frozen) = startup.freeze() else {
         println!("raba-setup: no theme resolved; there is nothing to put in an image");
@@ -389,6 +446,7 @@ fn check(root: &Root, places: &config::Places) -> ExitCode {
 // ----------------------------------------------------------------- apply ----
 
 /// The answer to "may I change this machine?"
+#[derive(Debug)]
 enum Permission {
     /// Yes, and this is the machine to do it to.
     Granted(Box<machine::Survey>),
@@ -417,6 +475,7 @@ enum Permission {
 /// machine that command is for — it checks the name it was given instead,
 /// before it gets here.
 fn permission(
+    host: &mut dyn Host,
     root: &Root,
     places: &config::Places,
     yes: bool,
@@ -428,7 +487,7 @@ fn permission(
     if !root.is_the_running_system() {
         return Err("--root is for inspecting, not for rebuilding somebody else's boot".to_owned());
     }
-    let survey = machine::survey(root);
+    let survey = host.survey(root);
     if survey.generators.is_empty() {
         return Ok(Permission::NothingToRebuild);
     }
@@ -449,7 +508,7 @@ fn permission(
     }
     if let Tpm::Sealed(devices) = &survey.tpm {
         tpm_advice(&survey.tpm);
-        if !yes && !agreed(devices) {
+        if !yes && !host.confirm(devices) {
             return Ok(Permission::Refused);
         }
     }
@@ -458,16 +517,13 @@ fn permission(
 
 /// Run each generator this machine has. The only state-changing thing here, and
 /// it is somebody else's program doing it.
-fn rebuild(survey: &machine::Survey) -> Result<ExitCode, String> {
+fn rebuild(host: &mut dyn Host, survey: &machine::Survey) -> Result<ExitCode, String> {
     for generator in &survey.generators {
         let Some((program, arguments)) = generator.rebuild().split_first() else {
             continue;
         };
         println!("raba-setup: {} {}", program, arguments.join(" "));
-        let status = Command::new(program)
-            .args(arguments)
-            .status()
-            .map_err(|why| format!("running {program}: {why}"))?;
+        let status = host.run(program, arguments)?;
         if !status.success() {
             return Err(format!("{program} exited {status}; the image was not rebuilt"));
         }
@@ -481,8 +537,13 @@ fn rebuild(survey: &machine::Survey) -> Result<ExitCode, String> {
 /// The one state-changing thing this program does, and it is somebody else's
 /// program doing it. Everything that would mean editing a file we do not own is
 /// printed by the dry run instead.
-fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, String> {
-    match permission(root, places, yes, true)? {
+fn apply(
+    host: &mut dyn Host,
+    root: &Root,
+    places: &config::Places,
+    yes: bool,
+) -> Result<ExitCode, String> {
+    match permission(host, root, places, yes, true)? {
         Permission::NothingToRebuild => {
             Err("no initramfs generator found; there is nothing to rebuild".to_owned())
         }
@@ -490,7 +551,7 @@ fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, St
             println!("Nothing was changed.");
             Ok(ExitCode::FAILURE)
         }
-        Permission::Granted(survey) => rebuild(&survey),
+        Permission::Granted(survey) => rebuild(host, &survey),
     }
 }
 
@@ -510,6 +571,7 @@ fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, St
 /// resolve would otherwise produce a valid-looking configuration, a
 /// thirty-second rebuild, and an image with no splash in it.
 fn set_theme(
+    host: &mut dyn Host,
     root: &Root,
     places: &config::Places,
     yes: bool,
@@ -543,7 +605,7 @@ fn set_theme(
     // over a file that had already changed, and `--root` used to edit the
     // running system's configuration and *then* say it would not touch somebody
     // else's boot.
-    let survey = match permission(root, places, yes, false)? {
+    let survey = match permission(host, root, places, yes, false)? {
         Permission::Refused => {
             // Said here rather than by `permission`, which does not know what
             // was about to happen: the HOOKS refusal talks only about
@@ -567,7 +629,7 @@ fn set_theme(
     if after == before {
         println!("raba-setup: {} already says Theme={wanted}", places.config.display());
     } else {
-        write_config(&places.config, &after)?;
+        host.write(&places.config, &after)?;
         println!("raba-setup: {}: Theme={wanted}", places.config.display());
     }
 
@@ -576,7 +638,7 @@ fn set_theme(
     // `/etc/raba/raba.conf` is read directly by a splash started after the root
     // filesystem is mounted.
     match survey {
-        Some(survey) => rebuild(&survey),
+        Some(survey) => rebuild(host, &survey),
         None => {
             println!("raba-setup: no initramfs generator here, so nothing to rebuild.");
             println!("  The splash reads this file when your init system starts it.");
