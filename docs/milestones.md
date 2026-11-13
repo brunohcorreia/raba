@@ -382,7 +382,7 @@ decides *when* — the part somebody else has to be able to drive.
 | 7 | `raba` as a daemon: phases, `MaxDuration`, signals | done |
 | 8 | Timeout **reveals the console** rather than exiting | done |
 | 9 | Conflict detection in the binary, not in service files | done |
-| 10 | Read `raba.conf`(5) — the boot settings are command-line flags until then | |
+| 10 | Read `raba.conf`(5), the kernel command line, and `--check` | done |
 
 ### What the socket work turned up
 
@@ -432,13 +432,68 @@ tested alone and never together with a clock:
 | `quit` after `deactivate` | no outro is played onto a terminal the display manager now has |
 | killed and resumed | SIGKILL, then a second instance adopts the same terminal at the same frame, with nothing cleared in between |
 | a second instance yields | a live socket is a conflict; a socket left by a dead instance is not |
+| `Boot.Tty` from a file | the whole chain, file to frames on the terminal the file named |
+| `raba.enable=0` | the kill switch takes no terminal, binds no socket, exits 0 |
 
-### Still a flag and not a file
+### A parser that is not allowed to refuse
 
-The boot settings are named after `raba.conf`(5) — `--theme`, `--show-delay`,
-`--timeout`, `--max-duration` — and read from the command line, because there is
-no configuration parser yet and M4 never listed one. Row 10 is that, written down
-rather than left as a surprise for whoever packages this.
+`raba.conf`(5) is read by a root process, before the root filesystem is mounted,
+in a program that must exit 0. So the parser **has no failure mode**: an unknown
+key, an unknown section, a value that does not parse, a file that is not UTF-8,
+a file that is four megabytes — each is recorded and stepped over, and the
+setting keeps the value it had. A section it does not recognise is skipped
+whole, which is what lets a file written for a later version boot an earlier one.
+
+That is a lie-friendly rule, and it is paid for twice. `raba --check` reads the
+same files with the same parser and is strict: every complaint, a non-zero exit,
+and the theme actually decoded rather than merely found — at a moment when the
+user is at their keyboard instead of watching a boot. And `raba.debug=1` writes
+that same report into `Log.File`, for the case where there is no way to run a
+command on the machine at all. One report function behind both, so what is on
+the screen and what is in the log cannot drift.
+
+The layering is four deep — compiled-in defaults, the distribution's
+`raba.defaults`, the user's `raba.conf`, the kernel command line — and applied
+key by key onto one struct rather than merged at the end, so a key you did not
+set keeps the distribution's value. The kernel line sits **above both files** on
+purpose: it is the layer reachable from a bootloader on a machine that will not
+boot, and a kill switch a file could override would not be one.
+
+Two things the parser treats as hostile input even though the file is
+root-owned. `Theme=` is pasted onto a directory and opened as root, so a name is
+`[A-Za-z0-9._-]` and nothing else — `Theme=../../etc/shadow` is a complaint, not
+a read. And `ID=` out of `os-release`(5) becomes a path component the same way,
+so it gets the same check; nothing upstream validates it.
+
+### Parsed, and honestly not honoured
+
+Every key `raba.conf`(5) documents is parsed and validated, and not all of them
+do anything: there is no progress indicator and no `Handoff.Mode=clear`. Those
+keys are in one list in the code, repeated in the man page, and `--check` names
+the ones *your* file actually sets — which is the only version of that message
+worth printing. Accepting a key and quietly ignoring it is how a configuration
+file stops meaning anything, and it is why `raba-ctl progress` still answers
+`-ERR not configured` now that the configuration is in fact read.
+
+`Boot.Tty` went the other way. It was the one setting whose effect is visible
+from outside the process, and honouring it was a ten-line variation on
+`Vt::acquire` — so it is honoured, and its default changed from the `1` the man
+page claimed to `auto`, which is what the code has always done and the safer
+answer besides. Naming a terminal by number takes it whatever is on it; naming
+the one already displayed means kernel messages cannot be moved aside, because
+aside is where the user is. Both are now in the manual.
+
+### Fifteen kilobytes of Grisu
+
+The binary grew 28 KB for all of this and would have grown 43: `{}` on an `f64`
+links Grisu *and* Dragon4 and their power-of-ten tables, and the only thing it
+was buying was the way a duration is spelled in a report. `{}.{:03}s` from
+`as_secs()` and `subsec_millis()` costs nothing and reads the same.
+
+Float *parsing* stays, because `progress 0.5` is a fraction on a wire and
+`ShowDelay=0.3` is a fraction in a file. It is the shape of finding the size
+gate exists for: not a dependency and not a feature, but a formatting trait
+nobody would think to look at.
 
 ### The order is a dependency order
 

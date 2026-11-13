@@ -12,8 +12,27 @@ _/usr/share/raba/raba.defaults_
 
 # DESCRIPTION
 
-An INI-style file of *Key=Value* pairs grouped into sections. Keys are
-case-sensitive. Lines beginning with *#* are comments.
+An INI-style file of *Key=Value* pairs grouped into sections. Sections and keys
+are case-sensitive; values are not, except where they are a path or a theme name.
+Whitespace around a key or a value is not part of it.
+
+A *#* starts a comment only at the beginning of a line. One inside a value is
+part of the value, because paths contain them. The same key given twice takes
+its last value.
+
+# A BROKEN FILE STILL BOOTS
+
+*raba*(8) reads this file as root, before the root filesystem is mounted, and is
+not allowed to fail. So an unknown key, an unknown section, a value that does not
+parse, a file that is not UTF-8 and a file too large to be a configuration are
+all *noted and stepped over*, and the setting keeps the value it had. A section
+this version does not know is skipped whole, so a file written for a later
+version still boots an earlier one.
+
+The price is that a typo does nothing, silently. *raba --check* is where it stops
+being silent: it reads the same files with the same parser, prints every
+complaint and exits non-zero. Run it after editing this file — and before
+rebuilding the initramfs, which is what makes an edit take effect.
 
 Two files are read. _/usr/share/raba/raba.defaults_ holds distribution defaults and
 belongs to the package; it is replaced on upgrade and must not be edited.
@@ -51,8 +70,17 @@ initramfs and reports a mismatch.
 
 	Default: *auto*
 
-*Tty=*_n_
-	Virtual terminal to draw on. Default: *1*
+*Tty=*_n_|*auto*
+	Virtual terminal to draw on. *auto* asks the kernel for a free one, which is
+	the only setting that cannot land on top of something already in use.
+
+	A terminal named by number is taken whatever is on it — that is what naming
+	one means. Naming the terminal that is *already displayed* has one further
+	consequence: kernel messages cannot be moved aside, because aside is where
+	the user is, so they print over the animation exactly as they would with no
+	splash installed. Use *quiet loglevel=3* if that matters.
+
+	Default: *auto*
 
 *ShowDelay=*_seconds_
 	Wait this long before drawing anything. On a machine that boots faster than the
@@ -80,11 +108,15 @@ The outro plays exactly once, after *raba-ctl quit*, on the way to the display
 manager.
 
 *Enable=*_bool_
+	A boolean is *true*, *yes*, *on* or *1*, or *false*, *no*, *off* or *0*.
+
 	Default: *true*
 
 *Theme=*_name_|*auto*
 	Same resolution rules as *Boot.Theme*. With *auto*, the boot theme's name with
-	*-outro* appended is tried first.
+	*-outro* appended is looked for *beside the boot theme* — so a theme given as
+	a path has its outro looked for in the same directory rather than in the
+	system one. An outro that is not found is not an error; none plays.
 
 	Default: *auto*
 
@@ -171,7 +203,23 @@ See _docs/luks.md_ for the reasoning.
 	Default: *warn*
 
 *File=*_path_
+	Where *raba.debug=1* writes its report. Must be absolute.
+
 	Default: _/run/raba.log_
+
+# NOT YET HONOURED
+
+Every key above is parsed and validated. These are the ones this version then
+does nothing with, because the feature behind them does not exist yet:
+
+```
+Boot.FrameRateOverride   Outro.FinishFrame
+Progress.*               Handoff.Mode   Handoff.RestoreTty   Log.Level
+```
+
+They are listed rather than quietly accepted, and *raba --check* names any of
+them that your file actually sets. A configuration key that is accepted and
+ignored is a key that has stopped meaning anything.
 
 # EXAMPLE
 

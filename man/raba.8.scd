@@ -43,24 +43,52 @@ not need a GPU driver, and does not require DRM modules in the initramfs.
 	for what each means; the defaults are the same. A *--timeout* of *0* disables
 	it, which is not recommended.
 
-*--socket* _path_, *--state* _path_
-	Override _/run/raba.sock_ and _/run/raba.state_. Intended for testing.
+*--tty* _n_|*auto*
+	*Boot.Tty*: the virtual terminal to draw on, or *auto* for a free one.
 
 *--config* _path_
-	Read configuration from _path_ instead of the compiled-in location.
-	See *raba.conf*(5).
+	Read _path_ instead of _/etc/raba/raba.conf_. The distribution's
+	_raba.defaults_ is still read underneath it. See *raba.conf*(5).
 
-	Not implemented yet. Until it is, the *[Boot]* and *[Outro]* settings are
-	given as the options above.
+*--defaults* _path_, *--themes* _path_, *--cmdline* _path_, *--os-release* _path_
+	Override _/usr/share/raba/raba.defaults_, _/usr/share/raba/themes_,
+	_/proc/cmdline_ and _/etc/os-release_. Intended for testing.
 
-*--tty* _n_
-	Draw on _/dev/ttyn_. Overrides the configuration file.
+*--socket* _path_, *--state* _path_
+	Override _/run/raba.sock_ and _/run/raba.state_. Intended for testing.
 
 *--check*
 	Validate configuration and theme, report what would happen, draw nothing.
 	Exits non-zero on a problem. Safe to run on a live system.
 
+	This is the strict reading of the files the boot path reads leniently: at
+	boot an unknown key or an unparseable value is noted and stepped over, which
+	is the only behaviour that cannot stop a machine from starting, and the
+	price of it is that a typo does nothing visible. *--check* is where it
+	becomes visible, while you are at the keyboard.
+
+	It also reports keys that this version parses and does not act on — see
+	*NOT YET HONOURED* in *raba.conf*(5) — and decodes the theme, because
+	"the file exists" and "the animation will play" are different questions.
+
 *--version*, *--help*
+
+# PRECEDENCE
+
+Later lines win, key by key. A setting absent from every layer keeps the default
+documented in *raba.conf*(5).
+
+```
+compiled-in defaults
+  /usr/share/raba/raba.defaults   the distribution's
+    /etc/raba/raba.conf           yours
+      /proc/cmdline               raba.enable, raba.debug, raba.tty
+        command-line options      the ones above
+```
+
+The kernel command line sits above both files deliberately: it is the layer you
+can reach from a bootloader on a machine that will not boot, and a kill switch a
+file could override would not be one.
 
 # KERNEL COMMAND LINE
 
@@ -70,13 +98,20 @@ kernel parameters:
 
 *raba.enable=0*
 	Do nothing and exit immediately. The kill switch. Add this from your bootloader
-	if a splash problem is preventing you from booting.
+	if a splash problem is preventing you from booting. Nothing overrides it:
+	no terminal is opened and no socket is bound.
 
 *raba.debug=1*
-	Write a trace to _/run/raba.log_ and draw nothing.
+	Write the report *--check* prints to *Log.File* — _/run/raba.log_ by default
+	— and draw nothing. What to ask for when somebody says the splash did not
+	appear and there is no way to run a command on the machine while it boots.
 
 *raba.tty=*_n_
-	Draw on _/dev/ttyn_.
+	Draw on _/dev/ttyn_, overriding *Boot.Tty*.
+
+A *raba.* parameter that is not one of these is reported rather than ignored:
+*raba.enabled=0* typed at a bootloader prompt would otherwise do nothing, and
+silently.
 
 *quiet loglevel=3*
 	Not read by *raba*, but recommended. Suppresses kernel messages that would
@@ -125,7 +160,8 @@ would stall the boot, so restoration is attempted on every exit path.
 
 _/etc/raba/raba.conf_
 	Configuration. Only read when the root filesystem is available; at boot a frozen
-	copy inside the initramfs is used instead. See *raba.conf*(5).
+	copy inside the initramfs is used instead. Absent is not an error — every
+	setting has a default. See *raba.conf*(5).
 
 _/usr/share/raba/raba.defaults_
 	Distribution defaults. Do not edit; override in _/etc/raba/raba.conf_.

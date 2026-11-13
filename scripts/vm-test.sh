@@ -116,7 +116,7 @@ echo "vm-test: initramfs $(du -h "$image" | cut -f1), kernel $(basename "$kernel
 # /dev/console is where PID 1's output goes. So results leave by the serial line
 # that -serial stdio captures, while tty0 stays free to be drawn on and inspected.
 append="console=tty0 console=ttyS0 panic=-1 loglevel=3"
-[ "$self_test" = 1 ] && append="$append raba.selftest=fail"
+[ "$self_test" = 1 ] && append="$append rabatest.selftest=fail"
 
 display=(-display none)
 [ "$show_console" = 1 ] && display=()

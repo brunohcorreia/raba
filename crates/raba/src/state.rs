@@ -66,7 +66,7 @@ const LIMIT: usize = 4096;
 
 /// The kernel's `MAX_NR_CONSOLES`. A terminal number outside this is not a
 /// terminal, whatever the file says.
-const MAX_TERMINAL: u16 = 63;
+pub const MAX_TERMINAL: u16 = 63;
 
 /// What one instance leaves for the next.
 #[derive(Debug, Clone, PartialEq, Eq)]

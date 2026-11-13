@@ -193,6 +193,28 @@ impl Vt {
     /// Every failure here means "do not draw", and none of them is worth stopping
     /// a boot over. The caller's job is to report and carry on.
     pub fn acquire() -> Result<Vt, Error> {
+        Vt::start(None)
+    }
+
+    /// Take the terminal the configuration named, whatever is on it.
+    ///
+    /// `Boot.Tty=n`, and `raba.tty=n` on the kernel command line. Unlike
+    /// [`acquire`](Self::acquire) this can land on a terminal somebody is
+    /// using — which is what asking for one by number means, and why `auto` is
+    /// the default.
+    ///
+    /// # Errors
+    ///
+    /// The same as [`acquire`](Self::acquire), minus [`NoFreeTerminal`] — no
+    /// terminal is allocated — plus the terminal simply not opening.
+    ///
+    /// [`NoFreeTerminal`]: Error::NoFreeTerminal
+    pub fn take(number: u16) -> Result<Vt, Error> {
+        Vt::start(Some(number))
+    }
+
+    /// Both of the above. `wanted` is `None` for "any free one".
+    fn start(wanted: Option<u16>) -> Result<Vt, Error> {
         let control = open_console(CONTROL).map_err(Error::NoConsole)?;
 
         // Asked before anything is changed. A console in graphics mode belongs to
@@ -206,9 +228,12 @@ impl Vt {
         let state = ioctl::get_state(&control).map_err(|e| Error::Ioctl("VT_GETSTATE", e))?;
         let previous = state.active;
 
-        let number = ioctl::open_query(&control)
-            .map_err(|e| Error::Ioctl("VT_OPENQRY", e))?
-            .ok_or(Error::NoFreeTerminal)?;
+        let number = match wanted {
+            Some(number) => number,
+            None => ioctl::open_query(&control)
+                .map_err(|e| Error::Ioctl("VT_OPENQRY", e))?
+                .ok_or(Error::NoFreeTerminal)?,
+        };
 
         let path = format!("/dev/tty{number}");
         let terminal = open_console(&path).map_err(|e| Error::Open(number, e))?;
@@ -216,7 +241,15 @@ impl Vt {
         // Before the switch, not after: between `VT_ACTIVATE` and this call the
         // display would already be ours, and a message arriving in that window
         // would print on top of the first frame.
-        let kmsg = move_kernel_messages(&control, previous);
+        //
+        // `Boot.Tty` can name the terminal that is already displayed, and then
+        // there is nowhere to move the messages *to*: aside is where the user
+        // is, and the user is here. `0` means "do not move them", and they print
+        // over the art exactly as they would with no splash installed. That is
+        // what `quiet loglevel=3` is for, and `man 5 raba.conf` says so under
+        // `Boot.Tty`.
+        let aside = if number == previous { 0 } else { previous };
+        let kmsg = move_kernel_messages(&control, aside);
 
         let mut vt = Vt { control, terminal, number, previous, kmsg, restored: false };
 

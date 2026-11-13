@@ -76,6 +76,8 @@ fn main() {
     boot_checks::quit_after_deactivate_does_not_take_the_terminal_back(&mut report);
     boot_checks::a_killed_instance_is_resumed_on_the_same_terminal(&mut report);
     boot_checks::a_second_instance_yields_to_the_running_one(&mut report);
+    boot_checks::a_configuration_file_chooses_the_terminal(&mut report);
+    boot_checks::the_kill_switch_touches_nothing(&mut report);
 
     checks::a_deliberate_failure_is_reported(&mut report);
 

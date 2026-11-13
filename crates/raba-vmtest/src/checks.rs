@@ -218,10 +218,10 @@ pub fn the_real_binary_runs_against_a_console(report: &mut Report) {
 /// asserts that the run came back failed. In an ordinary run it passes.
 pub fn a_deliberate_failure_is_reported(report: &mut Report) {
     let cmdline = std::fs::read_to_string("/proc/cmdline").unwrap_or_default();
-    let asked = cmdline.split_whitespace().any(|word| word == "raba.selftest=fail");
+    let asked = cmdline.split_whitespace().any(|word| word == "rabatest.selftest=fail");
     report.check("the harness can report a failure", || {
         if asked {
-            Err("failing on purpose, because raba.selftest=fail was on the kernel command line"
+            Err("failing on purpose, because rabatest.selftest=fail was on the kernel command line"
                 .to_owned())
         } else {
             Ok(())

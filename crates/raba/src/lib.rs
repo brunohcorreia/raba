@@ -13,6 +13,7 @@
 //! See `docs/development.md` on the tiers.
 
 pub mod boot;
+pub mod config;
 pub mod conflict;
 pub mod control;
 pub mod lifecycle;

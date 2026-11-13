@@ -349,3 +349,94 @@ fn field(text: &str, key: &str) -> Result<u64, String> {
         .parse()
         .map_err(|_| format!("{key} is not a number"))
 }
+
+/// The configuration file, end to end: a `Tty=` in a file turns into frames on
+/// that terminal.
+///
+/// `Boot.Tty` is the one setting whose effect is visible from outside the
+/// process, which makes it the setting worth driving a whole file through. The
+/// parser is unit-tested and `Vt::take` is not reachable from a host test, so
+/// this is where the two meet.
+pub fn a_configuration_file_chooses_the_terminal(report: &mut Report) {
+    report.check("Boot.Tty in a file is the terminal raba draws on", || {
+        let control = control()?;
+        let home = active(&control)?;
+        // Ask the kernel which terminal is free rather than picking one: the
+        // guest's console arrangement is the kernel's business, not ours.
+        let wanted = ioctl::open_query(&control)
+            .map_err(|e| format!("VT_OPENQRY: {e}"))?
+            .ok_or("every terminal is in use")?;
+
+        let conf = "/run/raba-test.conf";
+        std::fs::write(
+            conf,
+            format!("[Boot]\nTheme={THEME}\nTty={wanted}\nTimeout=0\nShowDelay=0\n"),
+        )
+        .map_err(|e| format!("writing {conf}: {e}"))?;
+
+        // No `--theme` and no `--tty`: everything this draws with comes out of
+        // the file.
+        let mut child = Command::new(RABA)
+            .args(["--config", conf, "--socket", SOCKET, "--state", STATE])
+            .args(["--defaults", "/nonexistent", "--cmdline", "/nonexistent"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("starting raba: {e}"))?;
+
+        let outcome = (|| {
+            let taken = wait_for_the_splash(&control, home, &mut child)?;
+            if taken != wanted {
+                return Err(format!("the file said tty{wanted} and raba drew on tty{taken}"));
+            }
+            let (_, status) = ctl(&["status"])?;
+            if !status.contains(&format!("terminal: {wanted}")) {
+                return Err(format!("status disagrees with the file: {status:?}"));
+            }
+            let (code, _) = ctl(&["quit", "--wait"])?;
+            if code != 0 {
+                return Err(format!("quit exited {code}"));
+            }
+            wait_until("the display to come home", || active(&control) == Ok(home))
+        })();
+
+        clean_up(&mut child);
+        let _ = std::fs::remove_file(conf);
+        outcome
+    });
+}
+
+/// `raba.enable=0`: the switch somebody flips from a bootloader when a splash is
+/// the reason their machine will not boot.
+///
+/// Unit-tested on the host as "writes no socket"; what can only be checked here
+/// is the thing they actually care about, which is that no terminal moves.
+pub fn the_kill_switch_touches_nothing(report: &mut Report) {
+    report.check("raba.enable=0 draws nothing and takes no terminal", || {
+        let control = control()?;
+        let home = active(&control)?;
+        let cmdline = "/run/raba-test.cmdline";
+        std::fs::write(cmdline, "root=/dev/vda quiet raba.enable=0\n")
+            .map_err(|e| format!("writing {cmdline}: {e}"))?;
+
+        let status = Command::new(RABA)
+            .args(["--theme", THEME, "--socket", SOCKET, "--state", STATE])
+            .args(["--cmdline", cmdline, "--defaults", "/nonexistent", "--config", "/nonexistent"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map_err(|e| format!("starting raba: {e}"))?;
+
+        let _ = std::fs::remove_file(cmdline);
+        if !status.success() {
+            return Err(format!("a disabled raba exited {status}, and it exits 0"));
+        }
+        if active(&control)? != home {
+            return Err("a disabled raba moved the display".to_owned());
+        }
+        if Path::new(SOCKET).exists() || Path::new(STATE).exists() {
+            return Err("a disabled raba left files in /run".to_owned());
+        }
+        Ok(())
+    });
+}

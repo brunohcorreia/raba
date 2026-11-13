@@ -117,6 +117,14 @@ A table-driven test that feeds every failure mode and asserts exit code 0:
 | no `/dev/tty` | exit 0 |
 | `raba.enable=0` | exit 0 |
 | `SIGKILL` mid-frame | terminal usable afterwards |
+| config has an unknown key | exit 0, that key ignored, the rest applied |
+| config is 4 MB, or not UTF-8 | exit 0, defaults kept |
+
+Rows about configuration live in `crates/raba/tests/config.rs`; the two kernel
+parameters and `--check`'s exit codes are in `crates/raba/tests/check.rs`, which
+drives the real binary. The rule they enforce is the one that makes a lenient
+parser safe: **the boot path never refuses a file, and `raba --check` always
+does** — so a typo is still reported, at a keyboard rather than at a boot.
 
 ### Fuzzing
 

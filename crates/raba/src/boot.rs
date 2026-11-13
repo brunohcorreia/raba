@@ -67,6 +67,8 @@ pub struct Settings {
     /// `Outro.MaxDuration`. A hard ceiling: without one, a long outro becomes
     /// the boot delay this project exists to avoid.
     pub max_duration: Duration,
+    /// `Boot.Tty`. `None` is `auto`: a free terminal from `VT_OPENQRY`.
+    pub tty: Option<u16>,
     pub socket: PathBuf,
     pub state: PathBuf,
     pub places: conflict::Where,
@@ -80,6 +82,7 @@ impl Default for Settings {
             show_delay: Duration::ZERO,
             timeout: Some(Duration::from_secs(30)),
             max_duration: Duration::from_millis(1500),
+            tty: None,
             socket: PathBuf::from(crate::control::SOCKET),
             state: PathBuf::from(state::PATH),
             places: conflict::Where::default(),
@@ -113,7 +116,13 @@ impl std::fmt::Display for Outcome {
 }
 
 /// Read a theme, refusing one too large to be one before allocating for it.
-fn read_movie(path: &std::path::Path) -> Result<Movie, String> {
+///
+/// # Errors
+///
+/// Anything that means there is no animation: absent, too large, not a `.raba`.
+/// Public because `raba --check` answers the same question the daemon does and
+/// has to answer it the same way.
+pub fn read_movie(path: &std::path::Path) -> Result<Movie, String> {
     let shown = path.display();
     let metadata = std::fs::metadata(path).map_err(|e| format!("{shown}: {e}"))?;
     if metadata.len() > u64::from(raba_core::format::limits::MAX_FILE_SIZE) {
@@ -291,9 +300,11 @@ impl<'a> Session<'a> {
                 self.message = Some(raba_core::sanitise(&text, width));
                 (Reply::Ok, None)
             }
-            // `Progress.Source=ctl` is configuration, and configuration is not
-            // read yet. Refused with the reason rather than accepted and
-            // ignored, which would be a client that thinks it is working.
+            // The configuration is read now, and `Progress.Enable` is on the
+            // list of keys it parses and does not act on: there is no progress
+            // indicator to set. Refused with the reason rather than accepted
+            // and ignored, which would be a client that thinks it is working.
+            // See `config::NOT_HONOURED`.
             Command::Progress { .. } => (Reply::Failed(Rejection::NotConfigured), None),
         };
         Answer { reply, event, wait: false }
@@ -385,7 +396,12 @@ impl<'a> Session<'a> {
             // the next one is a pause rather than a flash of black.
             Some(state) => Vt::adopt(state.terminal, state.previous)?,
             None => {
-                let mut vt = Vt::acquire()?;
+                let mut vt = match self.settings.tty {
+                    // Asked for by name, and taken whatever is on it: that is
+                    // what naming one means. `Vt::acquire` is the other case.
+                    Some(number) => Vt::take(number)?,
+                    None => Vt::acquire()?,
+                };
                 // Start from a known screen, and hide the cursor so it does not
                 // blink in the middle of the art. `Vt::restore` shows it again
                 // on every exit path it can reach.
