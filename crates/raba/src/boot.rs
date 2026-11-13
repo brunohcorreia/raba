@@ -171,6 +171,10 @@ struct Session<'a> {
     /// A sanitised `message`, redrawn under the animation on every frame.
     message: Option<String>,
     resume: Option<State>,
+    /// The console size the current player was built for. A console that
+    /// changes size under us is a console that was replaced, and everything
+    /// drawn before that is gone.
+    screen: Option<Size>,
     started: Instant,
     outro_started: Option<Instant>,
     next_frame: Instant,
@@ -194,6 +198,7 @@ impl<'a> Session<'a> {
             waiters: Vec::new(),
             message: None,
             resume,
+            screen: None,
             started: Instant::now(),
             outro_started: None,
             next_frame: Instant::now(),
@@ -398,6 +403,25 @@ impl<'a> Session<'a> {
             _ => &self.boot,
         };
         let vt = self.vt.as_mut()?;
+
+        // Has the console changed under us? Early in a boot it can: with no
+        // graphics driver loaded yet the kernel binds `dummycon`, which answers
+        // every ioctl, says 80x25 and shows nothing, and fbcon replaces it the
+        // moment the driver arrives — with a blank screen at a different size.
+        // Deltas written after that land on a picture that is not there.
+        //
+        // The size changing is the signal, and `Player::resize` is the repair:
+        // it forgets what is on screen without touching where the animation has
+        // got to, so the next frame is written out in full and nothing
+        // restarts.
+        let size = vt.size();
+        if self.screen != Some(size) {
+            self.screen = Some(size);
+            if let Some(player) = self.player.as_mut() {
+                player.resize(movie, size)?;
+            }
+        }
+
         if self.player.is_none() {
             let mut player = Player::new(movie, vt.size())?;
             // The resumed frame, used once and then forgotten: the next release

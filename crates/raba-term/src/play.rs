@@ -92,6 +92,28 @@ impl Player {
         self.round
     }
 
+    /// The console is a different size than it was. Start showing it afresh.
+    ///
+    /// This is not about somebody dragging a window edge: early in a boot it is
+    /// the console being *replaced*. Until the graphics driver loads there may
+    /// be no framebuffer console at all, and the kernel binds `dummycon`, which
+    /// accepts every ioctl, reports 80x25 and displays nothing; when the driver
+    /// arrives, fbcon takes over at the panel's real size with a blank screen.
+    /// Any frame written after that is a delta against a picture that no longer
+    /// exists, so the animation would stay invisible for the rest of the boot.
+    /// On how many machines this happens depends on whether the driver is in the
+    /// initramfs, which is not something a splash gets to assume.
+    ///
+    /// Forgetting what is on screen is the whole repair: the next frame is then
+    /// written out in full. The animation does not restart — the frame, the
+    /// round and the canvas are all kept, because the viewer should see the
+    /// splash appear, not begin again.
+    pub fn resize(&mut self, movie: &Movie, screen: Size) -> Option<()> {
+        self.shown = Grid::new(screen.columns, screen.lines, movie.palette)?;
+        self.screen = screen;
+        Some(())
+    }
+
     /// Jump to a frame without drawing anything on the way.
     ///
     /// Frames carry deltas, so arriving at frame *n* means applying every frame
