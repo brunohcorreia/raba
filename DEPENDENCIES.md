@@ -14,9 +14,14 @@ crate here is code that can break a boot on someone else's release schedule.
 |---|---|---|---|
 | `raba-core` | format, layout, rendering | ours | no — it is the program |
 | `raba-term` | stdout surface, frame timing | ours | no — it is the program |
-| `rustix` | `TIOCGWINSZ`; the VT ioctls at M3 | `std` cannot make an ioctl | no — without it the size is a guess |
+| `rustix` | `TIOCGWINSZ`, the VT ioctls, `SO_PEERCRED` | `std` cannot make an ioctl, and has no peer credentials | no — without it the size is a guess |
 
 **Spent: 1 of 1,** on `rustix`, which is what the allowance was reserved for.
+
+M4 added two feature flags to it — `net` for `SO_PEERCRED` and `process` for `getuid`
+— and no crates. The socket itself is `std::os::unix::net`, which is why the control
+protocol costs nothing: the only thing `std` cannot answer is *who is on the other end*,
+and that question is the entire access check.
 
 It was unspent through M0 on the reasoning that the terminal size was "a question it
 can mostly guess" from `COLUMNS` and `LINES`. That reasoning was wrong, and a user

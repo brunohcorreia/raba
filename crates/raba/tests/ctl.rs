@@ -1,0 +1,227 @@
+//! `raba-ctl`(1) against a real socket, as a separate process.
+//!
+//! The unit tests in `control` check the grammar and the privilege boundary.
+//! This checks the thing a boot-time unit actually does: run a binary and look
+//! at its exit status. That is the whole contract from a service file's point of
+//! view, and the most important line of it — exit 0 when nothing is listening —
+//! cannot be tested any other way, because it is about a socket that is not
+//! there.
+
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+
+use raba::control::wire::{Command, Reply};
+use raba::control::Listener;
+use std::path::{Path, PathBuf};
+use std::process::{Command as Process, Output};
+use std::sync::mpsc;
+use std::time::Duration;
+
+const CTL: &str = env!("CARGO_BIN_EXE_raba-ctl");
+
+/// A directory of our own, removed afterwards.
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn new(name: &str) -> Scratch {
+        let mut path = std::env::temp_dir();
+        path.push(format!("raba-ctl-test-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).expect("scratch directory");
+        Scratch(path)
+    }
+
+    fn socket(&self) -> PathBuf {
+        self.0.join("raba.sock")
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// A server that answers `count` requests and then stops, reporting what it saw.
+///
+/// Returns once it is listening, so a client started afterwards cannot race it.
+fn serving(path: &Path, count: usize) -> mpsc::Receiver<Command> {
+    let (ready, is_ready) = mpsc::channel();
+    let (seen, was_seen) = mpsc::channel();
+    let path = path.to_path_buf();
+    std::thread::spawn(move || {
+        let listener = Listener::bind(&path).expect("binding");
+        ready.send(()).expect("announcing");
+        let mut served = 0;
+        for _ in 0..5000u32 {
+            if served >= count {
+                break;
+            }
+            let Some(mut connection) = listener.accept() else {
+                std::thread::sleep(Duration::from_millis(1));
+                continue;
+            };
+            let outcome = connection.request().expect("reading");
+            let reply = match &outcome {
+                Ok(Command::Status) => {
+                    Reply::Report(vec![("protocol", "1".to_owned()), ("phase", "boot".to_owned())])
+                }
+                Ok(Command::Message(text)) => Reply::OkWith(raba_core::sanitise(text, 40)),
+                Ok(_) => Reply::Ok,
+                Err(why) => Reply::Failed(*why),
+            };
+            connection.reply(&reply).expect("replying");
+            if let Ok(command) = outcome {
+                seen.send(command).expect("reporting");
+            }
+            served = served.saturating_add(1);
+        }
+    });
+    is_ready.recv_timeout(Duration::from_secs(5)).expect("server came up");
+    was_seen
+}
+
+fn ctl(socket: &Path, args: &[&str]) -> Output {
+    Process::new(CTL).arg("--socket").arg(socket).args(args).output().expect("running raba-ctl")
+}
+
+fn code(output: &Output) -> i32 {
+    output.status.code().expect("an exit status")
+}
+
+/// The line every boot-time unit depends on. A machine with the package
+/// installed and no RABA in its initramfs runs this on every boot.
+#[test]
+fn with_nothing_listening_every_command_but_ping_exits_zero() {
+    let scratch = Scratch::new("absent");
+    for args in [
+        vec!["quit"],
+        vec!["quit", "--wait"],
+        vec!["deactivate"],
+        vec!["reactivate"],
+        vec!["status"],
+        vec!["message", "hello"],
+    ] {
+        let output = ctl(&scratch.socket(), &args);
+        assert_eq!(code(&output), 0, "{args:?} did not exit 0 with no server");
+        assert!(output.stdout.is_empty(), "{args:?} printed {:?}", output.stdout);
+    }
+}
+
+/// And the exception, because reporting presence is the whole command.
+#[test]
+fn ping_is_the_one_command_that_fails_when_nothing_is_listening() {
+    let scratch = Scratch::new("ping-absent");
+    assert_eq!(code(&ctl(&scratch.socket(), &["ping"])), 1);
+}
+
+#[test]
+fn ping_succeeds_against_a_live_instance() {
+    let scratch = Scratch::new("ping-live");
+    let seen = serving(&scratch.socket(), 1);
+    assert_eq!(code(&ctl(&scratch.socket(), &["ping"])), 0);
+    assert_eq!(seen.recv_timeout(Duration::from_secs(5)).expect("served"), Command::Ping);
+}
+
+#[test]
+fn status_prints_the_fields_the_server_sent() {
+    let scratch = Scratch::new("status");
+    let _seen = serving(&scratch.socket(), 1);
+    let output = ctl(&scratch.socket(), &["status"]);
+    assert_eq!(code(&output), 0);
+    let text = String::from_utf8(output.stdout).expect("utf-8");
+    assert!(text.contains("protocol: 1"), "{text:?}");
+    assert!(text.contains("phase: boot"), "{text:?}");
+}
+
+/// The rest of the line, verbatim, with no quoting rules to get wrong.
+#[test]
+fn a_message_arrives_with_its_spaces_intact() {
+    let scratch = Scratch::new("message");
+    let seen = serving(&scratch.socket(), 1);
+    assert_eq!(code(&ctl(&scratch.socket(), &["message", "Checking", "filesystems"])), 0);
+    assert_eq!(
+        seen.recv_timeout(Duration::from_secs(5)).expect("served"),
+        Command::Message("Checking filesystems".to_owned())
+    );
+}
+
+/// An option-looking word after the command is part of the message, not an
+/// option, or `raba-ctl message --socket /tmp/x` would be unsendable.
+#[test]
+fn an_option_inside_a_message_stays_in_the_message() {
+    let scratch = Scratch::new("message-option");
+    let seen = serving(&scratch.socket(), 1);
+    assert_eq!(code(&ctl(&scratch.socket(), &["message", "--socket", "--help"])), 0);
+    assert_eq!(
+        seen.recv_timeout(Duration::from_secs(5)).expect("served"),
+        Command::Message("--socket --help".to_owned())
+    );
+}
+
+/// A newline in a message would end the request early and leave the remainder
+/// looking like a second command. Refused before it is sent.
+#[test]
+fn a_message_cannot_smuggle_a_second_command() {
+    let scratch = Scratch::new("smuggle");
+    let output = ctl(&scratch.socket(), &["message", "hello\nquit"]);
+    assert_eq!(code(&output), 2);
+    let complaint = String::from_utf8(output.stderr).expect("utf-8");
+    assert!(complaint.contains("line break"), "{complaint:?}");
+}
+
+/// Escape sequences are the server's problem, not the client's: the message
+/// reaches the server intact and is sanitised where it is drawn.
+#[test]
+fn an_escape_sequence_travels_as_text_and_is_defused_at_the_far_end() {
+    let scratch = Scratch::new("escape");
+    let seen = serving(&scratch.socket(), 1);
+    let output = ctl(&scratch.socket(), &["message", "\u{1b}[2Jlogin:"]);
+    assert_eq!(code(&output), 0);
+    assert_eq!(
+        seen.recv_timeout(Duration::from_secs(5)).expect("served"),
+        Command::Message("\u{1b}[2Jlogin:".to_owned())
+    );
+    // The server echoed what it would draw.
+    let echoed = String::from_utf8(output.stdout).expect("utf-8");
+    assert!(!echoed.contains('\u{1b}'), "{echoed:?}");
+    assert!(echoed.contains("[2Jlogin:"), "{echoed:?}");
+}
+
+#[test]
+fn a_refusal_from_the_server_is_exit_one_and_a_word_on_stderr() {
+    let scratch = Scratch::new("refused");
+    let _seen = serving(&scratch.socket(), 1);
+    // Parsed by the server, not by the client: the client sends it happily.
+    let mut client = std::os::unix::net::UnixStream::connect(scratch.socket()).expect("connect");
+    {
+        use std::io::Write as _;
+        client.write_all(b"progress 2.0\n").expect("write");
+    }
+    let mut reply = String::new();
+    {
+        use std::io::Read as _;
+        client.read_to_string(&mut reply).expect("read");
+    }
+    assert_eq!(reply, "-ERR bad argument\n");
+}
+
+#[test]
+fn a_bad_command_line_is_a_usage_error_without_touching_the_socket() {
+    let scratch = Scratch::new("usage");
+    for args in [vec!["fly"], vec!["quit", "--soon"], vec!["progress", "later"]] {
+        let output = ctl(&scratch.socket(), &args);
+        assert_eq!(code(&output), 2, "{args:?}");
+    }
+}
+
+/// `--wait` returns when the server's socket closes, which is what happens when
+/// the process holding it stops existing. No pid file and no polling.
+#[test]
+fn quit_with_wait_returns_when_the_instance_is_gone() {
+    let scratch = Scratch::new("wait");
+    let _seen = serving(&scratch.socket(), 1);
+    let started = std::time::Instant::now();
+    let output = ctl(&scratch.socket(), &["quit", "--wait"]);
+    assert_eq!(code(&output), 0);
+    assert!(started.elapsed() < Duration::from_secs(5), "waited {:?}", started.elapsed());
+}

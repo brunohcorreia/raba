@@ -376,12 +376,33 @@ decides *when* — the part somebody else has to be able to drive.
 | 1 | `docs/protocol.md`: the wire protocol, written before either end of it | done |
 | 2 | Message sanitisation — no caller bytes reach a terminal | done |
 | 3 | The phase machine, pure and testable: boot loop → outro → handoff | done |
-| 4 | Control socket: `0600`, root-owned, `SO_PEERCRED` rejecting non-root | |
-| 5 | `raba-ctl`: `quit`, `deactivate`, `reactivate`, `message`, `ping`, `status` | |
+| 4 | Control socket: `0600`, root-owned, `SO_PEERCRED` rejecting non-root | done |
+| 5 | `raba-ctl`: `quit`, `deactivate`, `reactivate`, `message`, `ping`, `status` | done |
 | 6 | `/run/raba.state`, resumable: being killed stops being an event | |
 | 7 | `raba` as a daemon: phases, `MaxDuration`, signals | |
 | 8 | Timeout **reveals the console** rather than exiting | |
 | 9 | Conflict detection in the binary, not in service files | |
+
+### What the socket work turned up
+
+Two things that were wrong in the plan rather than in the code.
+
+**`umask` is the wrong tool for a private socket.** The mode has to be right from the
+instant the socket is reachable, and `bind` then `chmod` leaves a window — so the
+obvious fix is to set `umask` around the bind. It is per *process*, so it races
+anything else running at the time, and RABA's own test suite found that within minutes:
+several tests binding at once left the process umask at whichever one finished last,
+and directories created afterwards came out with no execute bit. The socket is now
+bound at `raba.sock.new`, chmodded, and `rename`d into place. Atomic, same inode, and
+it replaces a stale socket in the same step.
+
+**`reject any uid != 0` is the right rule written down wrong.** It is what
+[security.md](security.md) says, and taken literally it means a user running `raba` as
+themselves could not control their own instance while root could. The check is "the
+peer is the user that bound the socket", which at boot *is* "root only" and is correct
+everywhere else. It also made the check testable: a hardcoded zero cannot be exercised
+by a test suite that is not root, and an access check nobody can run is an access check
+nobody knows works.
 
 ### The order is a dependency order
 

@@ -37,7 +37,14 @@ the line is parsed as space-separated arguments. For `message` the rest of the l
 **the message, verbatim**, spaces and all — so no quoting rules exist to get wrong.
 
 A request cannot contain a newline, because a newline ends it. A message is therefore
-one line by construction rather than by validation.
+one line by construction rather than by validation. `raba-ctl` refuses to send one as
+well, so a message with a line break in it is a usage error on the near side of the
+socket rather than a silently truncated command on the far side.
+
+**Send one line and nothing after it.** The server reads up to the newline and stops;
+bytes after it are never read, and closing a socket with unread bytes in it sends a
+reset, which can destroy the reply that was already written. A client that sends two
+commands on one connection may not get an answer to either.
 
 | request | meaning |
 |---|---|
@@ -91,6 +98,7 @@ process it belonged to stops existing.
 | `-ERR missing argument` | a command that needs one did not get one |
 | `-ERR bad argument` | a `progress` fraction that is not a number in `0.0..=1.0` |
 | `-ERR not drawing` | `message` or `progress` while deactivated |
+| `-ERR not configured` | `progress` without `Progress.Source=ctl` |
 
 An error is a reply; the connection still closes normally afterwards.
 
@@ -99,14 +107,30 @@ An error is a reply; the connection still closes normally afterwards.
 Two independent checks, and both of them, which is the mitigation for
 [security.md](security.md) finding 1:
 
-1. The socket is mode `0600`, owned by `root:root`, in a root-owned directory.
+1. The socket is mode `0600`, owned by whoever runs RABA — `root:root` at boot — in a
+   root-owned directory.
 2. The server reads `SO_PEERCRED` on every accepted connection and **closes it with no
-   reply at all** unless the peer's `uid` is 0.
+   reply at all** unless the peer is that same user.
 
 Permissions alone are not enough if a directory is ever mis-created by a package or an
-initramfs generator, and a `uid` check alone would let a mode-`0666` socket be probed.
-The second check is silent on purpose: a refused peer learns that something is
+initramfs generator, and an ownership check alone would let a mode-`0666` socket be
+probed. The second check is silent on purpose: a refused peer learns that something is
 listening, which it already knew from `connect`, and nothing else.
+
+[security.md](security.md) words the rule as "reject any `uid != 0`". *The same user* is
+that rule where it matters — at boot RABA is root, so root is the only peer it admits —
+and it is the right rule in the case that sentence did not have in mind, somebody
+running the binary as themselves. A hardcoded zero would make a user's own instance
+controllable by root and not by the user. It is also what makes the check reachable from
+the test suite without a second account, and an access check nobody can run is an access
+check nobody knows works.
+
+The mode is set before the socket is reachable, not after. Binding and then `chmod`
+leaves a window; `umask` closes the window but is per *process*, so setting and
+restoring it around a `bind` races everything else in the program — RABA's own test
+suite caught exactly that. The socket is therefore bound at `raba.sock.new`, chmodded,
+and `rename`d into place, which is atomic, keeps the same inode the listener is attached
+to, and replaces a socket left behind by a dead instance in the same step.
 
 ### Why this matters more than it looks
 
@@ -140,8 +164,11 @@ absent, which is the normal case on a machine where RABA is not installed in the
 initramfs.
 
 A socket file left behind by a dead instance gives `ECONNREFUSED`, which is the same
-case and the same answer. The server unlinks and re-creates the socket on startup rather
-than trusting one it finds.
+case and the same answer. The server replaces the socket on startup rather than trusting
+one it finds.
+
+`ping` is the exception to all of this: reporting whether an instance is running is the
+entire command, so it exits non-zero when nothing is listening.
 
 ## Versioning
 

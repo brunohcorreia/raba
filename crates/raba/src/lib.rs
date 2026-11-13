@@ -12,5 +12,6 @@
 //!
 //! See `docs/development.md` on the tiers.
 
+pub mod control;
 pub mod lifecycle;
 pub mod vt;
