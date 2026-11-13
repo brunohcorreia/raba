@@ -83,18 +83,21 @@ cargo build --release -p raba-gen >/dev/null
 
 bin="${root}/target/${target}/release"
 [ -x "${bin}/raba-vmtest" ] || die "raba-vmtest did not build"
+[ -x "${bin}/raba-ctl" ] || die "raba-ctl did not build"
 [ -x "${bin}/raba" ] || die "raba did not build"
 
 # A fixture to play. Generated rather than committed: it has to match whatever
 # the format currently is, and a stale one would fail for the wrong reason.
 rm -rf "$work"
-mkdir -p "${work}/root"/{dev,proc,sys,fixtures}
+mkdir -p "${work}/root"/{dev,proc,run,sys,fixtures}
 "${root}/target/release/raba-gen" generate matrix \
     --columns 80 --lines 25 --frames 8 --delay 10 \
     -o "${work}/root/fixtures/vmtest.raba" >/dev/null
 
 install -m 755 "${bin}/raba-vmtest" "${work}/root/init"
 install -m 755 "${bin}/raba" "${work}/root/raba"
+# M4: the daemon checks drive the real client against the real daemon.
+install -m 755 "${bin}/raba-ctl" "${work}/root/raba-ctl"
 
 ( cd "${work}/root" && find . -print0 | cpio --null --create --format=newc --quiet ) \
     | gzip -1 > "$image"

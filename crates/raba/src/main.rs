@@ -16,13 +16,28 @@ const USAGE: &str = "\
 raba - ASCII boot splash
 
 usage:
-    raba --preview <file.raba> [--loops <n>]
+    raba --theme <file.raba> [options]      draw on a virtual terminal
+    raba --preview <file.raba> [--loops n]  draw on this terminal
 
-options:
-    --preview <file>   play a .raba on this terminal
-    --loops <n>        how many times to play it; 0 is forever (default 3)
-    --version          print the version and the format version
-    --help             print this
+preview:
+    --preview <file>       play a .raba on this terminal
+    --loops <n>            how many times to play it; 0 is forever (default 3)
+
+boot:
+    --theme <file>         the animation to loop while the system boots
+    --outro <file>         played once on quit; absent means no outro
+    --show-delay <secs>    wait this long before drawing anything (default 0)
+    --timeout <secs>       reveal the console after this long; 0 disables
+                           (default 30)
+    --max-duration <secs>  hard ceiling on the outro (default 1.5)
+    --socket <path>        control socket (default /run/raba.sock)
+    --state <path>         resume file (default /run/raba.state)
+
+    --version              print the version and the format version
+    --help                 print this
+
+the boot options are named after raba.conf(5) and will be read from it once
+there is a configuration parser; until then they are given here.
 ";
 
 fn main() -> ExitCode {
@@ -36,9 +51,22 @@ fn main() -> ExitCode {
     }
 }
 
+/// Seconds, as `raba.conf`(5) spells them: a number, possibly fractional.
+///
+/// `Duration::from_secs_f64` panics on a negative or a NaN, and this is a
+/// number from a command line — so the fallible spelling, and the error goes to
+/// the user rather than to a backtrace.
+fn seconds(value: &str, what: &str) -> Result<std::time::Duration, String> {
+    let parsed: f64 = value.parse().map_err(|_| format!("{what}: {value} is not a number"))?;
+    std::time::Duration::try_from_secs_f64(parsed)
+        .map_err(|_| format!("{what}: {value} is not a length of time"))
+}
+
 fn run(args: &[String]) -> Result<(), String> {
     let mut file: Option<&str> = None;
     let mut loops: u32 = 3;
+    let mut settings = raba::boot::Settings::default();
+    let mut theme: Option<&str> = None;
     let mut index = 0;
 
     while let Some(arg) = args.get(index) {
@@ -66,15 +94,75 @@ fn run(args: &[String]) -> Result<(), String> {
                 index = index.saturating_add(1);
                 loops = value.parse().map_err(|_| format!("--loops: {value} is not a number"))?;
             }
+            "--theme" => {
+                let value = args.get(index).ok_or("--theme needs a file")?;
+                index = index.saturating_add(1);
+                theme = Some(value);
+            }
+            "--outro" => {
+                let value = args.get(index).ok_or("--outro needs a file")?;
+                index = index.saturating_add(1);
+                settings.outro = Some(value.into());
+            }
+            "--show-delay" => {
+                let value = args.get(index).ok_or("--show-delay needs a number")?;
+                index = index.saturating_add(1);
+                settings.show_delay = seconds(value, "--show-delay")?;
+            }
+            "--timeout" => {
+                let value = args.get(index).ok_or("--timeout needs a number")?;
+                index = index.saturating_add(1);
+                let length = seconds(value, "--timeout")?;
+                // Zero disables it, which `raba.conf`(5) documents and does not
+                // recommend: a boot that stalls then shows nothing for ever.
+                settings.timeout = (!length.is_zero()).then_some(length);
+            }
+            "--max-duration" => {
+                let value = args.get(index).ok_or("--max-duration needs a number")?;
+                index = index.saturating_add(1);
+                settings.max_duration = seconds(value, "--max-duration")?;
+            }
+            "--socket" => {
+                let value = args.get(index).ok_or("--socket needs a path")?;
+                index = index.saturating_add(1);
+                settings.socket = value.into();
+                settings.places.socket = value.into();
+            }
+            "--state" => {
+                let value = args.get(index).ok_or("--state needs a path")?;
+                index = index.saturating_add(1);
+                settings.state = value.into();
+            }
             other => return Err(format!("unknown option {other}\n\n{USAGE}")),
         }
     }
 
+    if let Some(theme) = theme {
+        if file.is_some() {
+            return Err("--preview and --theme are different programs".to_owned());
+        }
+        settings.theme = theme.into();
+        boot(&settings);
+        return Ok(());
+    }
     let Some(file) = file else {
         print!("{USAGE}");
         return Ok(());
     };
     preview(file, loops)
+}
+
+/// The boot path, which exits 0 whatever happened.
+///
+/// Every outcome here is a reason not to draw, and none of them is worth
+/// stopping a boot over: the alternative to a splash is no splash, and the
+/// alternative to a boot is nothing at all. The reason goes to stderr, which
+/// early in boot is the console log. See `man 8 raba` on exit status.
+fn boot(settings: &raba::boot::Settings) {
+    let outcome = raba::boot::run(settings);
+    if !matches!(outcome, raba::boot::Outcome::Finished) {
+        eprintln!("raba: {outcome}");
+    }
 }
 
 fn preview(path: &str, loops: u32) -> Result<(), String> {

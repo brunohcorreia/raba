@@ -379,9 +379,10 @@ decides *when* — the part somebody else has to be able to drive.
 | 4 | Control socket: `0600`, root-owned, `SO_PEERCRED` rejecting non-root | done |
 | 5 | `raba-ctl`: `quit`, `deactivate`, `reactivate`, `message`, `ping`, `status` | done |
 | 6 | `/run/raba.state`, resumable: being killed stops being an event | done |
-| 7 | `raba` as a daemon: phases, `MaxDuration`, signals | |
-| 8 | Timeout **reveals the console** rather than exiting | |
-| 9 | Conflict detection in the binary, not in service files | |
+| 7 | `raba` as a daemon: phases, `MaxDuration`, signals | done |
+| 8 | Timeout **reveals the console** rather than exiting | done |
+| 9 | Conflict detection in the binary, not in service files | done |
+| 10 | Read `raba.conf`(5) — the boot settings are command-line flags until then | |
 
 ### What the socket work turned up
 
@@ -403,6 +404,41 @@ peer is the user that bound the socket", which at boot *is* "root only" and is c
 everywhere else. It also made the check testable: a hardcoded zero cannot be exercised
 by a test suite that is not root, and an access check nobody can run is an access check
 nobody knows works.
+
+### The daemon is a `for` loop
+
+One loop, three sources of events, no threads and no async runtime. Signals are
+blocked and polled with `sigtimedwait`; the listener is non-blocking and polled;
+the only thing that sleeps is the gap between frames, sliced at 10ms so a `quit`
+is acted on promptly rather than at the end of a frame that may be holding for a
+second. A control socket is exactly the shape of problem people reach for an
+async runtime to solve, and it turned out to be a `for` loop — which is the one
+thing [DEPENDENCIES.md](../DEPENDENCIES.md) says to watch for.
+
+Almost nothing in it decides anything. The phase machine decides, `wire` parses,
+`state` validates, and what is left here has a clock, a socket and a console and
+does what it is told. That is why the six end-to-end checks found nothing: by the
+time they ran, every decision in them had already been unit-tested somewhere that
+did not need a virtual machine.
+
+Six checks, running the **real binaries** — `/raba` as a child and `/raba-ctl` as
+its client — because the phase machine, the socket and the VT layer had each been
+tested alone and never together with a clock:
+
+| | what it proves |
+|---|---|
+| draw, answer, hand back | the whole `quit --wait` handoff, including that the state file and socket do not outlive the instance |
+| a timeout reveals | the console comes back and the process **keeps running**, which is the half an `exit` gets wrong |
+| `quit` after `deactivate` | no outro is played onto a terminal the display manager now has |
+| killed and resumed | SIGKILL, then a second instance adopts the same terminal at the same frame, with nothing cleared in between |
+| a second instance yields | a live socket is a conflict; a socket left by a dead instance is not |
+
+### Still a flag and not a file
+
+The boot settings are named after `raba.conf`(5) — `--theme`, `--show-delay`,
+`--timeout`, `--max-duration` — and read from the command line, because there is
+no configuration parser yet and M4 never listed one. Row 10 is that, written down
+rather than left as a surprise for whoever packages this.
 
 ### The order is a dependency order
 

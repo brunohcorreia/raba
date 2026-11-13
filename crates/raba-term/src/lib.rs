@@ -18,5 +18,5 @@
 pub mod play;
 pub mod surface;
 
-pub use play::{clear, play, DEFAULT_DELAY_MS};
+pub use play::{clear, play, Player, DEFAULT_DELAY_MS};
 pub use surface::{detect_size, StdoutSurface};

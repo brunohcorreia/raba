@@ -30,9 +30,28 @@ not need a GPU driver, and does not require DRM modules in the initramfs.
 	terminal, does not require root, and changes no system state. This is the
 	intended way to work on art.
 
+*--theme* _file.raba_
+	Loop _file.raba_ on a virtual terminal until something says to stop. This is
+	the boot mode.
+
+*--outro* _file.raba_
+	Play _file.raba_ once on *quit*, bounded by *--max-duration*. Absent means no
+	outro.
+
+*--show-delay* _seconds_, *--timeout* _seconds_, *--max-duration* _seconds_
+	*Boot.ShowDelay*, *Boot.Timeout* and *Outro.MaxDuration*. See *raba.conf*(5)
+	for what each means; the defaults are the same. A *--timeout* of *0* disables
+	it, which is not recommended.
+
+*--socket* _path_, *--state* _path_
+	Override _/run/raba.sock_ and _/run/raba.state_. Intended for testing.
+
 *--config* _path_
 	Read configuration from _path_ instead of the compiled-in location.
 	See *raba.conf*(5).
+
+	Not implemented yet. Until it is, the *[Boot]* and *[Outro]* settings are
+	given as the options above.
 
 *--tty* _n_
 	Draw on _/dev/ttyn_. Overrides the configuration file.
@@ -83,6 +102,15 @@ status. *raba --check* is the command that reports problems by exit status.
 
 *SIGUSR1*
 	Begin the outro animation, as though *raba-ctl quit* had been called.
+
+These are *blocked* rather than handled: no signal handler runs, and the frame
+loop asks the kernel once a frame whether one is pending. A signal is therefore
+acted on at a frame boundary, where the terminal is in a known state.
+
+The block is lifted the moment the first signal arrives, so a *second* *SIGTERM*
+is delivered the ordinary way and ends the process at once. A *raba* that was
+somehow stuck would otherwise ignore the signal, and nothing in a boot splash is
+allowed to need *SIGKILL*.
 
 A terminated instance is resumed rather than restarted: *raba* records its terminal,
 frame index and phase in _/run/raba.state_ on every frame, and a later instance that

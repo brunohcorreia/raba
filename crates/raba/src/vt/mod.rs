@@ -233,6 +233,61 @@ impl Vt {
         Ok(vt)
     }
 
+    /// Take over a terminal a previous instance was already using.
+    ///
+    /// The resume path. `/run/raba.state` names a terminal and a frame; this is
+    /// the half that picks the terminal back up, and the point of it is that
+    /// **nothing is cleared**. The screen is still showing the last frame the
+    /// dead instance drew, so continuing from the next one looks like a pause
+    /// rather than a flash of black. Acquiring a fresh terminal instead would
+    /// make every `switch_root` visible.
+    ///
+    /// # Errors
+    ///
+    /// The same reasons as [`acquire`](Self::acquire), minus the ones that only
+    /// apply to allocating — there is nothing to allocate.
+    pub fn adopt(terminal: u16, previous: u16) -> Result<Vt, Error> {
+        let control = open_console(CONTROL).map_err(Error::NoConsole)?;
+
+        let mode = ioctl::get_mode(&control).map_err(|e| Error::Ioctl("KDGETMODE", e))?;
+        if mode == ioctl::KD_GRAPHICS {
+            return Err(Error::ScreenIsTaken);
+        }
+
+        let path = format!("/dev/tty{terminal}");
+        let file = open_console(&path).map_err(|e| Error::Open(terminal, e))?;
+
+        // Kernel messages were moved aside by the instance that died, and there
+        // is no way left to find out what the redirect was before that — the
+        // process that knew is gone. If it still points where we would have put
+        // it, take it as ours and put back the kernel's default on the way out.
+        // `0` is a guess, and it is the only defensible one: it is what the
+        // kernel boots with and what anything that has not touched it has.
+        let kmsg = ioctl::kmsg_redirect(&control)
+            .ok()
+            .filter(|current| u16::from(*current) == previous)
+            .map(|_| 0u8);
+
+        let mut vt =
+            Vt { control, terminal: file, number: terminal, previous, kmsg, restored: false };
+
+        // Usually a no-op: the display is already here, which is why the screen
+        // still shows the last frame. It is asked for anyway, because "usually"
+        // is not a thing to leave a boot resting on.
+        let state = ioctl::get_state(&vt.control).map_err(|e| Error::Ioctl("VT_GETSTATE", e))?;
+        if state.active != terminal {
+            if let Err(errno) = ioctl::activate(&vt.control, terminal) {
+                let _ = vt.restore();
+                return Err(Error::Ioctl("VT_ACTIVATE", errno));
+            }
+            if let Err(errno) = ioctl::wait_active(&vt.control, terminal) {
+                let _ = vt.restore();
+                return Err(Error::Ioctl("VT_WAITACTIVE", errno));
+            }
+        }
+        Ok(vt)
+    }
+
     /// Which terminal was taken. `/dev/tty<this>`.
     #[must_use]
     pub fn number(&self) -> u16 {

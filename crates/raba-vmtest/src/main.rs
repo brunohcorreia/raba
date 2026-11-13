@@ -27,6 +27,7 @@
 // only because `main` is allowed to be the one place that stops.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+mod boot_checks;
 mod checks;
 mod hold;
 mod report;
@@ -68,6 +69,13 @@ fn main() {
     vt_checks::the_terminal_is_deallocated_afterwards(&mut report);
     vt_checks::kernel_messages_are_moved_aside_and_put_back(&mut report);
     vt_checks::being_killed_mid_frame_leaves_a_usable_terminal(&mut report);
+    // M4: the daemon, driving all of the above from the real binaries.
+    boot_checks::run_directory_exists(&mut report);
+    boot_checks::the_daemon_draws_answers_and_hands_back(&mut report);
+    boot_checks::a_timeout_reveals_the_console_without_exiting(&mut report);
+    boot_checks::quit_after_deactivate_does_not_take_the_terminal_back(&mut report);
+    boot_checks::a_killed_instance_is_resumed_on_the_same_terminal(&mut report);
+    boot_checks::a_second_instance_yields_to_the_running_one(&mut report);
 
     checks::a_deliberate_failure_is_reported(&mut report);
 
