@@ -3,6 +3,13 @@
 <p align="center">A tiny boot splash that plays ASCII animations, then gets out of the way.</p>
 
 <p align="center">
+  <a href="https://github.com/brunohcorreia/raba/actions/workflows/ci.yml"><img src="https://github.com/brunohcorreia/raba/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-GPL--3.0--or--later-blue" alt="GPL-3.0-or-later"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.1.0-informational" alt="0.1.0"></a>
+  <a href="CONTRIBUTING.md#testing"><img src="https://img.shields.io/badge/booted%20in%20VMs-Arch%20%C2%B7%20Debian%20%C2%B7%20Fedora-success" alt="Arch, Debian and Fedora"></a>
+</p>
+
+<p align="center">
   <img src="docs/images/boot.gif" alt="An Arch Linux virtual machine booting: the console goes quiet, the Arch logo animates in ASCII with a spinner under it, and the screen is handed back." width="720">
 </p>
 
@@ -31,6 +38,36 @@ come up.</sub></p>
 
 ---
 
+> [!IMPORTANT]
+> ## Written with AI assistance
+>
+> **Most of the code, tests and documentation in this repository were written by a
+> large language model, working with a human who reviewed, directed and accepted
+> every change.** It is said here rather than buried in a commit trailer because you
+> are about to decide whether to run this as root in your initramfs, and that is a
+> decision you should make knowing how it was built.
+>
+> What that is worth, and what it is not:
+>
+> - **Every claim in this README that can be tested, is.** The splash is installed,
+>   booted and checked in real virtual machines on three distributions on every
+>   change, through five power cuts and seven sabotage cases. Nothing here is
+>   asserted because it looked right — `docs/milestones.md` records what each run
+>   found, including the times the test was wrong rather than the code.
+> - **A model does not know what it does not know.** The gaps are listed above and in
+>   `docs/milestones.md`, in the same words, because an honest list of what is
+>   unproven is the only part of this a reader cannot verify for themselves in an
+>   afternoon.
+> - **Review it as you would review anybody's code.** `crates/raba-core` is pure and
+>   fuzzed; `crates/raba` is the part that runs as root and is where review is worth
+>   most. [docs/security.md](docs/security.md) is the threat model and names its own
+>   worst finding.
+>
+> If this is a reason not to install it, that is a reasonable position and
+> `raba.enable=0` exists either way.
+
+---
+
 ## Try it
 
 No root, no initramfs, no virtual machine. Everything below runs in an ordinary
@@ -46,11 +83,6 @@ and gaming — Ubuntu, Debian, Mint, Fedora, Arch, CachyOS, SteamOS, Omarchy, Ka
 Tails, Qubes, Pop!_OS, Manjaro, RHEL and its rebuilds, Raspberry Pi OS and the rest.
 Art and colours are taken from fastfetch. [themes/README.md](themes/README.md) says how
 they were chosen and how to add another, which needs no Rust.
-
-That is [M0](docs/milestones.md#m0--see-a-logo-animate): a logo and a spinner,
-animating, so the project's one untested assumption can be looked at rather than
-argued about. If ASCII art at console cell size does not look good enough, that is
-worth finding out for the price of a weekend.
 
 Build a theme of your own. A recipe is about ten lines of TOML next to the art:
 
@@ -325,15 +357,19 @@ failure is the most serious class of bug this project can have.
 
 ## Contributing
 
-Themes are the easiest and most welcome contribution: a recipe is about ten lines.
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Themes are the easiest and most welcome contribution: a recipe is about ten lines and
+no Rust. The gaps worth a larger one are named in
+[CONTRIBUTING.md](CONTRIBUTING.md#what-is-not-covered-yet) — a runit or OpenRC machine
+that somebody has actually booted would be the most valuable thing anyone could send.
 
-All boot testing happens in virtual machines. Never test a splash change on a machine
-you need.
+**All boot testing happens in virtual machines. Never test a splash change on a machine
+you need to boot.** [CONTRIBUTING.md](CONTRIBUTING.md) has the seven harnesses and what
+each one costs; none of them needs root on your machine.
 
-## License
+## Licence
 
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+GPL-3.0-or-later. See [LICENSE](LICENSE). Copyleft on purpose: a boot splash that a
+distribution ships should stay something its users can read and change.
 
 Distribution logos are trademarks of their respective projects and are included on the
 same basis as neofetch, fastfetch and similar tools. If you hold a mark and would like

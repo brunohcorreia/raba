@@ -20,13 +20,18 @@
 /man/*.8
 !/man/*.scd
 
-# Test environment
+# Test environment. Everything a VM run leaves behind lands in target/, which is
+# already ignored; these catch a stray copy anywhere else.
 *.qcow2
 *.img
-!tests/vm/**/*.img.sha256
 *.ppm
-/tests/vm/images/
-/tests/vm/work/
+
+# Python bytecode. The scripts in scripts/ are imported by other scripts — the
+# frame classifier is used by both the distribution tests and the recorder — and
+# importing a module writes a .pyc next to it. Two of them reached a commit
+# before this line existed.
+__pycache__/
+*.pyc
 
 # Build and packaging output
 *.pkg.tar.*

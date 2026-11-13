@@ -142,19 +142,24 @@ dimensions, frame count.
 Rendering regressions should be caught in milliseconds, not by booting something.
 
 ```
-tests/golden/
-  arch-v7.dur          fixture
-  arch-v7.expected     rendered grid, as text
-  arch-v8.dur          same art, format 8
-  arch-v8.expected     must be byte-identical to v7's output
+themes/golden/            one .txt per shipped theme: the rendered grid
+crates/raba-gen/tests/golden.rs
 ```
 
-That last pair is the regression test for the v7/v8 colour map transposition. A Durdraw
-release that changes the format again should turn this red before any user sees it.
+A theme is built, drawn through the real renderer, and read back with the terminal model
+into a grid; that grid is what is recorded, for all fifty-one themes. **The grid is
+golden, not the byte stream** — an optimisation that emits shorter escape sequences for
+the same picture should not churn fifty files, and a diff of characters and colour
+indices is one a person can actually read.
 
-Commit a fixture for every format version, colour format and encoding claimed as
-supported in [dur-support.md](dur-support.md). **The support table and the fixture
-directory should be the same list.** If a row has no fixture, the claim is untested.
+The v7/v8 colour-map transposition is covered the same way, in
+`crates/raba-gen/tests/dur.rs`: the same artwork in both formats has to produce the same
+grid. A Durdraw release that changes the format again turns that red before any user
+sees it.
+
+Commit a case for every format version, colour format and encoding claimed as supported
+in [dur-support.md](dur-support.md). **The support table and the tests are the same
+list.** A row with no test is an untested claim.
 
 ---
 
