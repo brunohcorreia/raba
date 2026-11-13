@@ -134,7 +134,8 @@ one_distro() {
         # the command substitution and `set -e` ends the run — exit 2, no
         # message, before a single line of output. Which is what a new
         # contributor got for running this first.
-        newest_package=$(ls -t "${packages}"/*.pkg.tar.* 2> /dev/null | head -1 || true)
+        newest_package=$(find "$packages" -maxdepth 1 -name '*.pkg.tar.*' \
+            -printf '%T@ %p\n' 2> /dev/null | sort -rn | head -1 | cut -d' ' -f2-)
         if [ -z "$newest_package" ] || [ -n "$(find "$root" -type f \
                 -not -path "${root}/target/*" -not -path "${root}/.git/*" \
                 -newer "$newest_package" -print -quit 2> /dev/null)" ]; then
@@ -339,6 +340,7 @@ WATCHUNIT
     # under `set -u` rather than a cleanup.
     qemu_pid=
     monitor_path="$monitor"
+    # shellcheck disable=SC2329  # invoked by the trap below
     cleanup_guest() {
         [ -n "$qemu_pid" ] && kill "$qemu_pid" 2> /dev/null
         rm -f "$monitor_path"
@@ -434,7 +436,7 @@ WATCHUNIT
     # Did anything reach the screen, and was it ours? The classifier tells a
     # centred block of console text from a boot log and from the firmware's own
     # logo; see scripts/screen-colours.py.
-    local verdict="no screen analysis" best= drew=0
+    local verdict="no screen analysis" best='' drew=0
     if command -v python3 > /dev/null; then
         local analysis
         analysis="$(python3 -I "${root}/scripts/screen-colours.py" "${work}/shots" || true)"

@@ -231,8 +231,11 @@ output="$(timeout "$timeout_seconds" qemu-system-x86_64 \
     2>&1)"
 set -e
 
-[ "$keep" = 1 ] || rm -rf "${work}/overlay" "${work}/hooks" "${work}/themes" "${work}/etc" \
-    "${work}/build-in-ns.sh"
+# `${work:?}`, so that an unset or empty $work makes this fail rather than
+# expand to `rm -rf /etc`. It cannot be empty today; the cost of making sure it
+# stays that way is six characters.
+[ "$keep" = 1 ] || rm -rf "${work:?}/overlay" "${work:?}/hooks" "${work:?}/themes" \
+    "${work:?}/etc" "${work:?}/build-in-ns.sh"
 
 echo "$output" | grep -E '^(ok|not ok|# |1\.\.)' || true
 

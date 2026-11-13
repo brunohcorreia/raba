@@ -35,6 +35,17 @@ jobs:
       # not written in a way that does something else by accident.
       - run: sudo apt-get update && sudo apt-get install -y shellcheck
       - run: shellcheck --severity=warning integration/tests/*.sh
+      # The harness itself: scripts/, the packaging test and the per-distro
+      # scripts under integration/tests/distro. None of it ships, and that is
+      # exactly why nothing was looking at it — but a harness that fails
+      # quietly reports success for a run that never happened, which is worse
+      # than a harness that is merely broken. Read by hand once, in November
+      # 2026; six real bugs came out of it, three of which shellcheck finds.
+      - run: |
+          shellcheck --severity=warning \
+            scripts/*.sh \
+            packaging/tests/*.sh \
+            integration/tests/distro/*.sh
       # The install hook is sourced by mkinitcpio's bash, and the runtime hook
       # is run by busybox ash; neither has a shebang shellcheck can trust.
       - run: shellcheck --severity=warning --shell=bash integration/mkinitcpio/install/raba

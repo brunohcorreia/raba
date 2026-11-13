@@ -49,7 +49,8 @@ fi
 # Which initramfs, and how to look inside it.
 if command -v lsinitcpio > /dev/null; then
     family=mkinitcpio
-    image=$(ls -1t /boot/initramfs-*.img 2> /dev/null | grep -v fallback | head -1)
+    image=$(find /boot -maxdepth 1 -name 'initramfs-*.img' ! -name '*fallback*' \
+        -printf '%T@ %p\n' 2> /dev/null | sort -rn | head -1 | cut -d' ' -f2-)
     contents=$(lsinitcpio "$image" 2> /dev/null)
 elif command -v lsinitramfs > /dev/null; then
     family=initramfs-tools

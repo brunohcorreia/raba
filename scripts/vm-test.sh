@@ -67,8 +67,9 @@ find_kernel() {
     done
     # CI images name the kernel after a flavour nothing else predicts
     # (vmlinuz-6.8.0-1021-azure and the like), so fall back to whatever is there.
-    local found
-    found="$(ls -1 /boot/vmlinuz-* 2>/dev/null | head -1 || true)"
+    local found=
+    for found in /boot/vmlinuz-*; do break; done
+    [ -e "$found" ] || found=
     [ -n "$found" ] && [ -r "$found" ] && { echo "$found"; return; }
     return 1
 }

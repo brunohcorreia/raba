@@ -139,6 +139,18 @@ None of them needs root on your machine: the cloud-init seed is a FAT filesystem
 with `mkfs.vfat` and `mcopy`, and QEMU runs as you.
 [docs/development.md](docs/development.md) describes each tier and why it exists.
 
+Five of those seven are shell, and CI runs `shellcheck --severity=warning` over all of
+it — the harness as well as the hooks. That is not fussiness about style. A harness that
+fails quietly reports success for a run that never happened, and every shell mistake
+this project has had was of exactly that kind: a glob that matched nothing and killed
+the script with no message, a `die` inside a command substitution that ended the
+subshell and let an unsabotaged machine pass a sabotage case. If you touch a `.sh`, run
+it:
+
+```sh
+shellcheck --severity=warning scripts/*.sh packaging/tests/*.sh integration/tests/distro/*.sh
+```
+
 ### Iterating on art needs no VM at all
 
 ```sh
