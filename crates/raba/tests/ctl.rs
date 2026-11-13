@@ -340,3 +340,15 @@ fn an_ok_with_something_after_it_is_printed() {
         String::from_utf8_lossy(&output.stdout)
     );
 }
+
+#[test]
+fn socket_with_no_path_after_it_is_a_usage_error_and_not_a_command() {
+    // `--socket` is the last option before everything becomes the command, so
+    // getting this wrong would make `raba-ctl --socket` send the word
+    // `--socket` somewhere rather than complain.
+    let output = Process::new(CTL).arg("--socket").output().expect("running raba-ctl");
+    assert_eq!(code(&output), 2, "{output:?}");
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("--socket"), "{said:?}");
+    assert!(said.contains("path"), "{said:?}");
+}

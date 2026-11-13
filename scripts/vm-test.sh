@@ -89,26 +89,37 @@ cargo build --release -p raba-gen >/dev/null
 
 bin="${root}/target/${target}/release"
 
-# The instrumented `raba`, when asked for. Only `raba` and not the harness: a
-# process that leaves through isa-debug-exit runs no `atexit`, so PID 1 could
-# never write its own counters, while every `raba` the checks start exits the
-# ordinary way and writes them for free. Its own target directory, so an
-# ordinary run that follows a coverage run does not boot an instrumented binary
-# and wonder why the image doubled in size.
+# The instrumented binaries, when asked for: `raba`, which the checks start as
+# a child process, and the harness itself, which drives the `raba` *library*
+# directly for every check in vt_checks.
+#
+# Both, and not only `raba`, since the harness started running its checks in a
+# child of PID 1. PID 1 leaves through isa-debug-exit and runs no `atexit`, so
+# it could never write counters; its child exits the ordinary way and does.
+# Until that split existed, half of tier 3a ran, passed, and measured as
+# untested — crates/raba/src/vt read 77% while the checks exercising it were
+# green.
+#
+# Their own target directory, so an ordinary run that follows a coverage run
+# does not boot an instrumented binary and wonder why the image doubled.
 cover_out="${root}/target/coverage/vm"
 if [ "$coverage" = 1 ]; then
     command -v base64 >/dev/null || die "base64 is not installed (package: coreutils)"
-    echo "vm-test: building an instrumented raba for the guest"
+    echo "vm-test: building an instrumented raba and harness for the guest"
     rm -rf "$cover_out"
     mkdir -p "$cover_out"
     CARGO_TARGET_DIR="${root}/target/coverage/guest" \
         RUSTFLAGS="-C instrument-coverage" \
-        cargo build --release --target "$target" -p raba >/dev/null
+        cargo build --release --target "$target" -p raba -p raba-vmtest >/dev/null
     bin_covered="${root}/target/coverage/guest/${target}/release"
     [ -x "${bin_covered}/raba" ] || die "the instrumented raba did not build"
-    # The object the counters belong to: llvm-cov needs the binary that wrote a
-    # profile, and this one never existed on the host.
-    echo "${bin_covered}/raba" > "${cover_out}/objects.txt"
+    [ -x "${bin_covered}/raba-vmtest" ] || die "the instrumented harness did not build"
+    # The objects the counters belong to: llvm-cov needs the binary that wrote
+    # a profile, and neither of these ever existed on the host.
+    {
+        echo "${bin_covered}/raba"
+        echo "${bin_covered}/raba-vmtest"
+    } > "${cover_out}/objects.txt"
 fi
 
 [ -x "${bin}/raba-vmtest" ] || die "raba-vmtest did not build"
@@ -123,10 +134,11 @@ mkdir -p "${work}/root"/{dev,proc,run,sys,fixtures}
     --columns 80 --lines 25 --frames 8 --delay 10 \
     -o "${work}/root/fixtures/vmtest.raba" >/dev/null
 
-install -m 755 "${bin}/raba-vmtest" "${work}/root/init"
 if [ "$coverage" = 1 ]; then
+    install -m 755 "${bin_covered}/raba-vmtest" "${work}/root/init"
     install -m 755 "${bin_covered}/raba" "${work}/root/raba"
 else
+    install -m 755 "${bin}/raba-vmtest" "${work}/root/init"
     install -m 755 "${bin}/raba" "${work}/root/raba"
 fi
 # M4: the daemon checks drive the real client against the real daemon.

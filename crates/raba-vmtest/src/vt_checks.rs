@@ -458,3 +458,125 @@ pub fn being_killed_mid_frame_leaves_a_usable_terminal(report: &mut Report) {
         Ok(())
     });
 }
+
+/// Adopting a terminal that is not the one on screen brings the screen with it.
+///
+/// The resume path's quiet case. `/run/raba.state` names a terminal, and
+/// usually the display is already there — which is why the last frame is still
+/// visible and the handoff looks like a pause. Usually is not always: between
+/// one instance dying and the next starting, something can switch the display.
+/// `adopt` asks anyway, and if it finds the display elsewhere it brings it
+/// back, because the alternative is a splash drawing on a terminal nobody is
+/// looking at while the user sees whatever took the screen.
+pub fn adopting_a_terminal_that_is_not_on_screen_brings_the_display_back(report: &mut Report) {
+    report.check("adopt switches the display to the terminal it resumes", || {
+        let control = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty0")
+            .map_err(|e| format!("opening /dev/tty0: {e}"))?;
+        let home = ioctl::get_state(&control).map_err(|e| format!("VT_GETSTATE: {e}"))?.active;
+
+        // Take one and let it go without switching back, the way a dead
+        // instance leaves things.
+        let first = Vt::acquire().map_err(|e| format!("acquiring: {e}"))?;
+        let number = first.number();
+        let previous = first.previous();
+        drop(first);
+
+        // Put the display somewhere that is neither: this is the window
+        // between two instances, with something else having moved the screen.
+        ioctl::activate(&control, home).map_err(|e| format!("VT_ACTIVATE home: {e}"))?;
+        ioctl::wait_active(&control, home).map_err(|e| format!("VT_WAITACTIVE home: {e}"))?;
+
+        let mut adopted = Vt::adopt(number, previous).map_err(|e| format!("adopting: {e}"))?;
+        let now = ioctl::get_state(&control).map_err(|e| format!("VT_GETSTATE: {e}"))?.active;
+        let outcome = if now == number {
+            Ok(())
+        } else {
+            Err(format!("adopted tty{number} and the display stayed on tty{now}"))
+        };
+        adopted.restore().map_err(|e| format!("restoring: {e}"))?;
+        outcome
+    });
+}
+
+/// A console already in graphics mode is not adopted either.
+///
+/// `acquire` refuses it — checked above — and `adopt` has to refuse it for the
+/// same reason and separately, because it is a different function with its own
+/// copy of the check. This is the real sequence it guards: an initramfs
+/// instance dies at `switch_root`, leaving a state file, and by the time the
+/// one on the real root starts, a compositor has the screen. Resuming onto it
+/// would write text at a terminal being scanned out.
+pub fn a_console_in_graphics_mode_is_not_resumed_onto(report: &mut Report) {
+    report.check("adopt declines a console in graphics mode", || {
+        let control = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty0")
+            .map_err(|e| format!("opening /dev/tty0: {e}"))?;
+        let home = ioctl::get_state(&control).map_err(|e| format!("VT_GETSTATE: {e}"))?.active;
+
+        ioctl::set_mode(&control, ioctl::KD_GRAPHICS)
+            .map_err(|e| format!("KDSETMODE(KD_GRAPHICS): {e}"))?;
+        let outcome = Vt::adopt(home, home);
+        // Back to text before judging, so a failure here does not leave the
+        // guest's console unusable for every check after it.
+        let restored = ioctl::set_mode(&control, ioctl::KD_TEXT);
+
+        match outcome {
+            Err(raba::vt::Error::ScreenIsTaken) => {}
+            Err(other) => return Err(format!("refused, but for the wrong reason: {other}")),
+            Ok(vt) => {
+                let number = vt.number();
+                drop(vt);
+                return Err(format!("resumed onto tty{number} in graphics mode"));
+            }
+        }
+        restored.map_err(|e| format!("KDSETMODE(KD_TEXT): {e}"))
+    });
+}
+
+/// Relinquishing twice is not an error, and the second time changes nothing.
+///
+/// `relinquish` is the ending used when something else took the screen, and
+/// `Drop` calls `restore` afterwards. Both set the same flag, so the second
+/// call has to be a no-op — if it were not, a splash that noticed it had been
+/// displaced would then reach out and switch a console it no longer owns.
+pub fn relinquishing_twice_is_harmless(report: &mut Report) {
+    report.check("relinquish is idempotent and never takes the screen back", || {
+        let control = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty0")
+            .map_err(|e| format!("opening /dev/tty0: {e}"))?;
+
+        let mut vt = Vt::acquire().map_err(|e| format!("acquiring: {e}"))?;
+        let number = vt.number();
+        let elsewhere = vt.previous();
+
+        // The situation `relinquish` is for: the display has already gone
+        // somewhere else, and this is RABA noticing. Arranged rather than
+        // assumed, because `Displaced::Switched` names where the display went
+        // and `give_back` cannot free a terminal that is still on screen.
+        ioctl::activate(&control, elsewhere).map_err(|e| format!("VT_ACTIVATE: {e}"))?;
+        ioctl::wait_active(&control, elsewhere).map_err(|e| format!("VT_WAITACTIVE: {e}"))?;
+
+        vt.relinquish(raba::vt::Displaced::Switched(elsewhere))
+            .map_err(|e| format!("first relinquish: {e}"))?;
+        vt.relinquish(raba::vt::Displaced::Graphics)
+            .map_err(|e| format!("second relinquish: {e}"))?;
+        // And `Drop` is a third call by another name, this one to `restore`.
+        drop(vt);
+
+        // The display is where the other program put it. Nothing in the three
+        // endings above may pull it back to tty{number}.
+        let now = ioctl::get_state(&control).map_err(|e| format!("VT_GETSTATE: {e}"))?.active;
+        if now != elsewhere {
+            return Err(format!("the display was taken back to tty{now} from tty{elsewhere}"));
+        }
+        println!("# relinquished tty{number}; the display stayed on tty{elsewhere}");
+        Ok(())
+    });
+}

@@ -667,3 +667,43 @@ fn check_says_the_kill_switch_is_on_rather_than_reporting_a_splash_that_will_not
     assert!(text.contains("raba.enable=0"), "{text}");
     assert!(text.contains("nothing will be drawn"), "{text}");
 }
+
+#[test]
+fn every_option_that_takes_a_number_says_which_one_was_not_one() {
+    // `raba` is started by a unit file and by an initramfs hook, so a number
+    // that is not one is a typo in a file somebody edited once a year. The
+    // message has to name the option; "invalid digit found in string" does
+    // not.
+    let scratch = Scratch::new("bad-numbers");
+    theme(&scratch, "thing");
+    scratch.write("raba.conf", "[Boot]\nTheme=thing\n");
+    for (option, value) in [
+        ("--tty", "the second one"),
+        ("--show-delay", "shortly"),
+        ("--timeout", "a minute"),
+        ("--max-duration", "briefly"),
+    ] {
+        let output = raba(&scratch, &["--check", option, value]);
+        assert!(!output.status.success(), "{option} {value} was accepted");
+        let said = String::from_utf8_lossy(&output.stderr);
+        assert!(said.contains(option), "{said:?} does not name {option}");
+    }
+
+    let loops = raba(&scratch, &["--preview", "themes/thing.raba", "--loops", "many"]);
+    assert!(!loops.status.success(), "--loops many was accepted");
+    assert!(String::from_utf8_lossy(&loops.stderr).contains("--loops"), "{loops:?}");
+}
+
+#[test]
+fn previewing_a_file_that_is_not_there_or_is_not_a_theme_names_it() {
+    let scratch = Scratch::new("preview-bad");
+    let missing = scratch.path("gone.raba");
+    let gone = raba(&scratch, &["--preview", missing.to_str().expect("utf-8"), "--loops", "1"]);
+    assert!(!gone.status.success());
+    assert!(String::from_utf8_lossy(&gone.stderr).contains("gone.raba"), "{gone:?}");
+
+    let junk = scratch.write("junk.raba", "this is not a theme");
+    let refused = raba(&scratch, &["--preview", junk.to_str().expect("utf-8"), "--loops", "1"]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("junk.raba"), "{refused:?}");
+}

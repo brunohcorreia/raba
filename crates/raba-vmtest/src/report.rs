@@ -18,6 +18,23 @@ impl Report {
         Report { count: 0, failed: 0 }
     }
 
+    /// A report that carries on another one's numbering, without a second
+    /// header. The checks run in a child process — see `main` — and the two
+    /// halves have to read as one TAP stream.
+    pub fn continuing(already_run: u32) -> Report {
+        Report { count: already_run, failed: 0 }
+    }
+
+    /// How many checks have been recorded, including any inherited.
+    pub fn count(&self) -> u32 {
+        self.count
+    }
+
+    /// How many of them failed.
+    pub fn failures(&self) -> u32 {
+        self.failed
+    }
+
     /// Run a check and record it. `Err` carries the reason, which goes on the line.
     ///
     /// Takes the body rather than its result so a check can use `?` without the
