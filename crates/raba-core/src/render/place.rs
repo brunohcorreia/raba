@@ -85,12 +85,6 @@ pub fn crops(canvas: Size, size: Size) -> bool {
     canvas.columns > size.columns || canvas.lines > size.lines
 }
 
-/// The blank a cropped or padded screen is filled with.
-#[must_use]
-pub const fn padding() -> Cell {
-    Cell::BLANK
-}
-
 /// The shading ramp, in order of increasing coverage.
 ///
 /// Art built from these characters is not really text: it is a greyscale image

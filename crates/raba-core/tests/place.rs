@@ -205,3 +205,44 @@ fn best_fit_resamples_shading_art_but_only_when_it_does_not_fit() {
     assert_eq!((big.columns(), big.lines()), (5, 3));
     assert_eq!(render(&big), vec!["     ".to_string(), "  █  ".to_string(), "     ".to_string()]);
 }
+
+#[test]
+fn art_already_the_size_of_the_screen_is_handed_back_untouched() {
+    // The common case at boot on a console the theme was drawn for, and the
+    // one place `fit` must not allocate a second grid and copy cell by cell:
+    // it runs once per frame on a machine with nothing else to do yet.
+    let art = filled(8, 3, '#');
+    let same = fit(&art, Size { columns: 8, lines: 3 });
+    assert_eq!(same.cells(), art.cells());
+    assert_eq!((same.columns(), same.lines()), (8, 3));
+}
+
+#[test]
+fn resampling_to_the_same_size_keeps_the_picture_recognisable() {
+    let art = filled(8, 4, '\u{2588}');
+    let same = resample(&art, Size { columns: 8, lines: 4 });
+    assert_eq!((same.columns(), same.lines()), (8, 4));
+    assert_eq!(row(&same, 0), row(&art, 0));
+}
+
+#[test]
+fn resampling_art_with_no_cells_in_it_gives_back_a_blank_screen_rather_than_nothing() {
+    // `Grid::new(0, n, _)` is a legal grid, and art can reach here with no
+    // columns — an ANSI file of nothing but newlines, for one. The output
+    // still has to be the size that was asked for, because the caller hands
+    // it straight to the encoder.
+    let nothing = Grid::new(0, 4, Palette::Ansi16).unwrap();
+    let out = resample(&nothing, Size { columns: 6, lines: 2 });
+    assert_eq!((out.columns(), out.lines()), (6, 2));
+    assert!(out.cells().iter().all(|cell| *cell == Cell::BLANK));
+}
+
+#[test]
+fn a_screen_too_small_for_any_grid_leaves_the_art_as_it_was() {
+    // `Grid::new` refuses anything past the format's limits, and `fit` cannot
+    // return nothing — so it returns what it was given and the caller's own
+    // size check is what refuses the console. See `Outcome::CannotDraw`.
+    let art = filled(4, 2, '#');
+    let impossible = fit(&art, Size { columns: 20_000, lines: 20_000 });
+    assert_eq!((impossible.columns(), impossible.lines()), (4, 2));
+}

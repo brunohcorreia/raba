@@ -205,7 +205,29 @@ fn an_sgr_run_that_names_no_colour_answers_nothing_rather_than_guessing() {
     // colour in it, a truncated extended run, and an extended form nobody
     // defined. Guessing a colour for any of them is how art changes appearance
     // between the editor it was drawn in and the console.
-    for params in ["1", "0", "53", "38", "38;9", "38;5", "38;2;1;2", "48;5;3", "", "x"] {
+    for params in [
+        "1",
+        "0",
+        "53",
+        "48;5;3",
+        "",
+        "x",
+        "thirty-one",
+        ";",
+        // Extended, truncated at each of the places a file can be cut short.
+        "38",
+        "38;",
+        "38;9",
+        "38;5",
+        "38;5;",
+        "38;2",
+        "38;2;255",
+        "38;2;255;0",
+        "38;2;1;2",
+        // And values that are complete but do not fit a byte.
+        "38;5;300",
+        "38;2;300;0;0",
+    ] {
         assert_eq!(palette::from_sgr(params), None, "{params:?} invented a colour");
     }
 }
@@ -215,4 +237,15 @@ fn the_bright_foreground_codes_are_the_top_eight() {
     for (code, want) in [("90", 8u8), ("97", 15)] {
         assert_eq!(palette::from_sgr(code), Some(want), "{code}");
     }
+}
+
+#[test]
+fn a_complete_extended_colour_escape_is_read_the_way_a_terminal_reads_it() {
+    // The two forms art actually carries, and the whitespace a shell script
+    // that generated it leaves behind.
+    assert_eq!(palette::from_sgr("38;5;208"), Some(208));
+    assert_eq!(palette::from_sgr(" 38 ; 5 ; 208 "), Some(208));
+    assert_eq!(palette::from_sgr("38;2;0;0;0"), Some(0), "truecolour black is console black");
+    assert_eq!(palette::from_sgr("31"), Some(1));
+    assert_eq!(palette::from_sgr("37"), Some(7));
 }

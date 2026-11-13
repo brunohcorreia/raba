@@ -209,3 +209,48 @@ fn a_cell_the_grid_never_set_is_still_written() {
     assert_eq!(grid.get(0, 0), Some(&Cell::BLANK));
     assert_eq!(grid.get(2, 0), Some(&Cell::BLANK));
 }
+
+#[test]
+fn a_title_with_json_in_it_comes_back_as_itself_and_not_as_broken_json() {
+    // The writer escapes by hand — `dur.rs` would otherwise need a parallel
+    // set of `Serialize` structs kept matching it — and a missed case here is
+    // not a wrong title, it is a `.dur` no reader can open. Durdraw's own
+    // title field is free text and a theme called `C:\art\"nice"` is one
+    // Windows contributor away.
+    let movie = movie_of(2, 1, Palette::Ansi16, &[(0, '#', 7, 0), (1, '#', 7, 0)]);
+    for awkward in [
+        "a \"quoted\" title",
+        "back\\slash",
+        "two\nlines",
+        "carriage\rreturn",
+        "a\ttab",
+        "a\u{1}control\u{1f}character",
+        "ünïcödé ☃",
+        "\\\"",
+    ] {
+        let meta = durwrite::Meta {
+            name: awkward.to_owned(),
+            artist: awkward.to_owned(),
+            ..durwrite::Meta::default()
+        };
+        let bytes = durwrite::write(&movie, &meta).expect("should write");
+        let back = dur::parse(&bytes).unwrap_or_else(|why| {
+            panic!("our own output must import, and {awkward:?} did not: {why}")
+        });
+        assert_eq!(back.name, awkward, "the title did not survive");
+        assert_eq!(back.artist, awkward, "the artist did not survive");
+    }
+}
+
+#[test]
+fn a_title_that_is_only_awkward_characters_still_leaves_readable_art() {
+    let movie = movie_of(2, 1, Palette::Ansi16, &[(0, 'o', 3, 0), (1, 'k', 3, 0)]);
+    let meta = durwrite::Meta {
+        name: "\"\\\n\r\t\u{0}".to_owned(),
+        artist: String::new(),
+        ..durwrite::Meta::default()
+    };
+    let bytes = durwrite::write(&movie, &meta).expect("should write");
+    let back = dur::parse(&bytes).expect("our own output must import").movie;
+    assert_eq!(grids(&back), grids(&movie));
+}
