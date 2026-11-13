@@ -121,6 +121,50 @@ seconds, overrides it for that frame; `0` means use the global rate.
 
 RABA's `FrameRateOverride` ignores the stored rate entirely.
 
+## Writing `.dur`
+
+`raba-gen build theme.toml --also-dur` writes `theme.raba` and `theme.dur` from the
+one source. `convert` and `generate` take the same flag.
+
+This is for the handoff. RABA plays an outro and then gets out of the way, and if
+what comes next is Ly it plays its own `.dur` background. When the last frame of
+the outro *is* the first frame of that background, the transition has no seam: the
+picture stays on screen while one program replaces the other. That only works if
+both are drawing the same art, and the only way to be sure of that is for both
+files to be generated from one source rather than kept in step by hand.
+
+It writes **version 7** by default — `colorMap[column][line]`, `sizeX`/`sizeY` —
+and `--dur-version 8` writes the other orientation and the `columns`/`lines`
+spelling. Only one spelling goes in either way: the two mean the same thing, and a
+reader that accepts both (ours does, because real files mix them) sees a duplicate
+key and refuses the file.
+
+Seven is the default on evidence rather than on principle. Both `.dur` files on a
+machine running Ly 1.4.1 are version 7 — Ly's own `example.dur`, and the one a user
+had configured — and the point of writing `.dur` at all is to be read by something
+else. What we write has the same key set as `example.dur` minus `preferredFont` and
+`extra`, which that user's file also lacks and which Ly plays regardless, so both
+look optional.
+
+**This has not been run through Ly itself.** Ly is a display manager and testing it
+means a virtual machine with a real VT, which belongs with M3. Until then the claim
+is "structurally the same as the files Ly reads", not "verified in Ly".
+
+What survives the round trip is checked by test rather than assumed: a movie
+written out and read back is identical cell for cell, colours included, which is
+the only thing that catches the curses-order trap. A writer and a reader that are
+both wrong the same way agree with each other perfectly.
+
+**One thing does not survive: the `scaling` hint.** `.dur` has nowhere to put it,
+so a theme that said `crop` comes back saying `auto`. For art like a logo that is
+not a behaviour change — `auto` reads the alphabet, and a logo's alphabet is not
+the shading ramp — and there is a test saying so. Inventing a key in somebody
+else's format to carry it would be worse than losing it.
+
+Note also that `.dur` stores whole screens. A movie that is cheap as `.raba`
+because only a spinner moves is not cheap as `.dur`, which is the trade that
+format makes and the reason `.raba` exists at all.
+
 ## Sharing art with Ly
 
 ```lua

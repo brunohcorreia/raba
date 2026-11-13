@@ -33,7 +33,7 @@ raba-gen - build and convert .raba animations
 
 *--check* _file.raba_
 
-*raba-gen* convert _input.dur_ [*-o* _out.raba_] [*--preview*]
+*raba-gen* convert _input_ [*-o* _out.raba_] [*--preview*]
 
 *raba-gen* generate _animation_ [*-o* _out.raba_] [*--preview*]
 
@@ -43,8 +43,13 @@ raba-gen - build and convert .raba animations
 
 *raba-gen* produces *.raba* animations, which is the only format *raba*(8) plays.
 
-*build* composes a logo, a spinner and optional text from a recipe. *convert* imports an
-existing animation — *.dur* from Durdraw, *.ans* ANSI art, or plain text.
+*build* composes a logo, a spinner and optional text from a recipe. *convert* imports art that already
+exists — *.dur* from Durdraw, *.ans* ANSI art, or plain text. ANSI art is read by
+imitating a terminal rather than by parsing, which is the only correct reading of a
+format that is a recording of what was sent to a screen; see *docs/ansi-support.md*.
+
+*$1*..*$9* colour markers are a recipe feature and mean nothing to *convert*: in a file
+written for something else, a dollar sign is a dollar sign.
 
 It exists because hand-drawing a spinner across twenty frames for fifty distributions
 is not maintainable. A recipe is about ten lines of TOML and is what you contribute
@@ -104,13 +109,34 @@ whatever it likes while *raba*(8) depends on nothing.
 	times through. Nothing is left on disk. *raba --preview* _file.raba_ plays a
 	theme that has already been built.
 
-*--also-dur* _path_
-	Additionally write a *.dur* alongside the *.raba*. Useful when something else — a
-	display manager that plays its own animation, say — should show matching art.
-	Not implemented yet; it arrives with *convert*.
+*--also-dur* [_path_]
+	Additionally write a *.dur*, so that something else — a display manager that
+	plays its own animation — can show matching art. Both files are produced from
+	one source, which is the point: when the last frame of RABA's outro is the first
+	frame of what the display manager shows, the handoff has no seam.
+
+	With no _path_, the file goes beside the output with a *.dur* extension. Give one
+	when something else decides where the file lives; Ly reads from */etc/ly*.
 
 *--dur-version* _7_|_8_
-	Format version for *--also-dur*. Default: *7*, which more readers accept.
+	Format version for *--also-dur*. Default: *7*. The versions differ in the colour
+	map's orientation — *colorMap[column][line]* in 7, *colorMap[line][column]* in 8 —
+	and in the key names, *sizeX*/*sizeY* against *columns*/*lines*. Seven is the
+	default on evidence rather than on principle: it is what Ly 1.4.1 ships as its own
+	*example.dur*, and the point of writing *.dur* at all is to be read.
+
+*--format* _dur_|_ansi_|_text_
+	Override what *convert* thinks the input is. The extension is a hint, not a
+	promise: *.nfo* and *.asc* are sometimes plain CP437 and sometimes full of escape
+	sequences, so a file that is not obviously one thing is examined, and *convert*
+	says which importer it chose. See *docs/ansi-support.md*.
+
+*--columns* _n_
+	Width to lay ANSI art out at. Default *80*, the width a DOS terminal had. A SAUCE
+	record that states a width overrides both.
+
+*--fg* _n_, *--bg* _n_
+	Colours for imported plain text. Default *7* on *0*, the console's own.
 
 *--allow-unsafe-glyphs*
 	Downgrade the glyph check from an error to a warning. The resulting theme may
@@ -154,6 +180,9 @@ enlarges the first frame, which is the only one stored in full.
 raba-gen build themes/arch.toml -o arch.raba
 raba-gen build themes/arch.toml --preview
 raba-gen convert art.dur -o art.raba
+raba-gen convert art.ans -o art.raba
+raba-gen convert banner.txt -o banner.raba --fg 10
+raba-gen build themes/arch.toml --also-dur /etc/ly/arch.dur
 raba-gen --list-logos 'void|artix'
 raba-gen --check /usr/share/raba/themes/cachyos.raba
 ```

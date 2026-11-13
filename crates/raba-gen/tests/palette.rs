@@ -103,6 +103,12 @@ fn backgrounds_keep_their_hue_when_they_lose_their_brightness() {
     assert_eq!(clamp_background(9), 1);
     assert_eq!(clamp_background(12), 4);
     assert_eq!(clamp_background(15), 7);
+    // Above the sixteen there is no blink bit to avoid: the cube's 240 is a grey,
+    // not a bright anything. Folding it in gave `(240 - 8) & 7` = 0, which turned
+    // every 256-colour background black.
+    for index in [16u8, 17, 128, 232, 240, 255] {
+        assert_eq!(clamp_background(index), index, "the 256-colour cube is untouched");
+    }
     for index in 0u8..8 {
         assert_eq!(clamp_background(index), index, "the low eight are untouched");
     }

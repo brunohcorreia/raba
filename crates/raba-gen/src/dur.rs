@@ -123,15 +123,7 @@ struct DurFrame {
     color_map: Vec<Vec<Vec<i64>>>,
 }
 
-/// A converted file, with what the converter had to decide along the way.
-#[derive(Debug)]
-pub struct Imported {
-    pub movie: Movie,
-    pub name: String,
-    pub artist: String,
-    /// Anything a person should know: a guessed orientation, a clamped colour.
-    pub notes: Vec<String>,
-}
+pub use crate::import::Imported;
 
 /// Durdraw index to a palette index.
 fn colour(raw: i64, sixteen: bool) -> u8 {

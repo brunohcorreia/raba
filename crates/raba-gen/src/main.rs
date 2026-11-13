@@ -6,6 +6,7 @@ use raba_core::glyph::{self, audit, Safety};
 use raba_core::Movie;
 use raba_gen::build::{build, spinners, Recipe};
 use raba_gen::dur;
+use raba_gen::durwrite;
 use raba_gen::generate::{generate, Kind, Spec};
 use raba_gen::logos;
 use raba_gen::recipe::{self, ArtSource};
@@ -22,7 +23,7 @@ raba-gen - build and convert .raba animations
 
 usage:
     raba-gen build <recipe.toml> [-o <out.raba>] [--preview]
-    raba-gen convert <art.dur> [-o <out.raba>] [--preview]
+    raba-gen convert <art> [-o <out.raba>] [--preview]
     raba-gen generate <kind> [-o <out.raba>] [--preview]
     raba-gen --check <file.raba>
     raba-gen --list-logos [pattern]
@@ -30,6 +31,11 @@ usage:
 options:
     -o <path>              output file (default: the recipe's name with .raba)
     --preview              play the result here instead of writing a file
+    --also-dur [path]      also write a .dur, for a display manager that plays one
+    --dur-version 7|8      which Durdraw version to write (default 7)
+    --format dur|ansi|text override what convert thinks the input is
+    --columns N            width to lay ANSI art out at (default 80; SAUCE wins)
+    --fg N --bg N          colours for plain text (default 7 on 0)
     --columns N --lines N  canvas for generate (default 80x25)
     --frames N --delay MS  length and frame time for generate
     --seed N               generator seed; the same seed gives the same file
@@ -37,6 +43,10 @@ options:
     --allow-unsafe-glyphs  downgrade the glyph check from an error to a warning
     --version              print the version and the format version
     --help                 print this
+
+convert reads Durdraw .dur, ANSI art .ans, and plain text. It works out which from
+the file rather than only from its name, so a .nfo full of escape sequences is read
+as ANSI art. $1..$9 colour markers are a recipe feature and mean nothing to convert.
 
 A recipe is about ten lines of TOML and is what you contribute when you add a
 theme; the .raba file is a build artifact. See man 1 raba-gen and man 5 raba-theme.
@@ -81,12 +91,22 @@ fn build_command(args: &[String]) -> Result<(), String> {
     let mut output: Option<PathBuf> = None;
     let mut allow_unsafe = false;
     let mut preview = false;
+    let mut also_dur = AlsoDur::default();
     let mut index = 0;
 
     while let Some(arg) = args.get(index) {
         index = index.saturating_add(1);
         match arg.as_str() {
             "--preview" => preview = true,
+            "--also-dur" => index = index.saturating_add(also_dur.take(args, index)),
+            "--dur-version" => {
+                let number = u32::try_from(number(args.get(index), "--dur-version")?)
+                    .ok()
+                    .and_then(durwrite::Version::from_number)
+                    .ok_or("--dur-version is 7 or 8")?;
+                index = index.saturating_add(1);
+                also_dur.version = number;
+            }
             "-o" | "--out" => {
                 let value = args.get(index).ok_or("-o needs a path")?;
                 index = index.saturating_add(1);
@@ -195,6 +215,8 @@ fn build_command(args: &[String]) -> Result<(), String> {
     }
 
     std::fs::write(&output, &bytes).map_err(|e| format!("{}: {e}", output.display()))?;
+    let name = recipe_path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+    write_also_dur(&also_dur, &output, &built.movie, name, "")?;
     println!(
         "{}: {}x{}, {} frames, {} ops, {} bytes",
         output.display(),
@@ -211,18 +233,178 @@ fn build_command(args: &[String]) -> Result<(), String> {
 ///
 /// Nothing on the boot path reads `.dur`; this is the only place gzip and JSON
 /// appear, and they never leave build time. See `docs/dur-support.md`.
+/// Write a `.dur` as well, for a display manager that plays its own animation.
+///
+/// Both files come from one source, which is the whole point: a RABA outro whose
+/// last frame is the first frame of what the display manager shows hands off with
+/// no seam, and two files kept in step by hand would not stay in step.
+fn write_also_dur(
+    also: &AlsoDur,
+    output: &Path,
+    movie: &raba_core::Movie,
+    name: &str,
+    artist: &str,
+) -> Result<(), String> {
+    let Some(path) = also.path(output) else { return Ok(()) };
+    let meta =
+        durwrite::Meta { name: name.to_owned(), artist: artist.to_owned(), version: also.version };
+    let bytes = durwrite::write(movie, &meta).map_err(|e| format!("{}: {e}", path.display()))?;
+    std::fs::write(&path, &bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+    println!("{}: {} bytes, Durdraw v{}", path.display(), bytes.len(), also.version.number());
+    Ok(())
+}
+
+/// Whether to write a `.dur` as well, where, and in which version.
+#[derive(Debug, Default, Clone)]
+struct AlsoDur {
+    wanted: bool,
+    /// Where to put it. A display manager reads from a path of its own choosing —
+    /// Ly looks in `/etc/ly` — so this cannot always be next to the `.raba`.
+    explicit: Option<PathBuf>,
+    version: durwrite::Version,
+}
+
+impl AlsoDur {
+    /// Where the file goes, or `None` if it was not asked for.
+    fn path(&self, output: &Path) -> Option<PathBuf> {
+        if !self.wanted {
+            return None;
+        }
+        Some(self.explicit.clone().unwrap_or_else(|| output.with_extension("dur")))
+    }
+
+    /// Read `--also-dur [path]`, returning how many arguments it consumed.
+    ///
+    /// The path is optional because the common case is "beside the `.raba`" and
+    /// the two being the same art is the point; naming them separately is for when
+    /// something else decides where the file has to live.
+    fn take(&mut self, args: &[String], at: usize) -> usize {
+        self.wanted = true;
+        match args.get(at) {
+            Some(value) if !value.starts_with('-') => {
+                self.explicit = Some(PathBuf::from(value));
+                1
+            }
+            _ => 0,
+        }
+    }
+}
+
+/// An option's numeric value, or a message naming the option that was wrong.
+fn number(value: Option<&String>, what: &str) -> Result<u64, String> {
+    value
+        .ok_or_else(|| format!("{what} needs a value"))?
+        .parse::<u64>()
+        .map_err(|e| format!("{what}: {e}"))
+}
+
+/// Which importer to run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Format {
+    Dur,
+    Ansi,
+    Text,
+}
+
+impl Format {
+    fn named(name: &str) -> Option<Format> {
+        match name.to_ascii_lowercase().as_str() {
+            "dur" | "durdraw" => Some(Format::Dur),
+            "ansi" | "ans" => Some(Format::Ansi),
+            "text" | "txt" | "plain" => Some(Format::Text),
+            _ => None,
+        }
+    }
+
+    const fn name(self) -> &'static str {
+        match self {
+            Format::Dur => "dur",
+            Format::Ansi => "ansi",
+            Format::Text => "text",
+        }
+    }
+}
+
+/// Whether the extension alone settles the question.
+fn named_by_extension(path: &str) -> bool {
+    matches!(
+        Path::new(path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "dur" | "ans" | "ansi"
+    )
+}
+
+/// Work out what a file is, from its name and then from its contents.
+///
+/// The extension is a hint and not a promise. `.nfo` and `.asc` are sometimes
+/// plain CP437 and sometimes full of escape sequences, and the only way to know is
+/// to look — so a file that contains a CSI introducer is ANSI art whatever it is
+/// called. `--format` overrides all of this for the case where the guess is wrong.
+fn detect(path: &str, bytes: &[u8]) -> Format {
+    let extension = Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    match extension.as_str() {
+        "dur" => Format::Dur,
+        "ans" | "ansi" => Format::Ansi,
+        _ if bytes.starts_with(&[0x1f, 0x8b]) => Format::Dur,
+        _ if bytes.windows(2).any(|pair| pair == [0x1b, b'[']) => Format::Ansi,
+        _ => Format::Text,
+    }
+}
+
 fn convert_command(args: &[String]) -> Result<(), String> {
     let mut input: Option<&str> = None;
     let mut output: Option<PathBuf> = None;
     let mut allow_unsafe = false;
     let mut preview = false;
+    let mut also_dur = AlsoDur::default();
+    let mut format: Option<Format> = None;
+    let mut columns = raba_gen::ansi::DEFAULT_COLUMNS;
+    let (mut fg, mut bg) = (7u8, 0u8);
     let mut index = 0;
 
     while let Some(arg) = args.get(index) {
         index = index.saturating_add(1);
         match arg.as_str() {
             "--preview" => preview = true,
+            "--also-dur" => index = index.saturating_add(also_dur.take(args, index)),
+            "--dur-version" => {
+                let number = u32::try_from(number(args.get(index), "--dur-version")?)
+                    .ok()
+                    .and_then(durwrite::Version::from_number)
+                    .ok_or("--dur-version is 7 or 8")?;
+                index = index.saturating_add(1);
+                also_dur.version = number;
+            }
             "--allow-unsafe-glyphs" => allow_unsafe = true,
+            "--format" => {
+                let value = args.get(index).ok_or("--format needs dur, ansi or text")?;
+                index = index.saturating_add(1);
+                format =
+                    Some(Format::named(value).ok_or_else(|| {
+                        format!("unknown format {value:?}; known: dur, ansi, text")
+                    })?);
+            }
+            "--columns" => {
+                columns = u16::try_from(number(args.get(index), "--columns")?)
+                    .map_err(|_| "--columns is too large")?;
+                index = index.saturating_add(1);
+            }
+            "--fg" => {
+                fg = u8::try_from(number(args.get(index), "--fg")?).map_err(|_| "--fg is 0-255")?;
+                index = index.saturating_add(1);
+            }
+            "--bg" => {
+                bg = u8::try_from(number(args.get(index), "--bg")?).map_err(|_| "--bg is 0-255")?;
+                index = index.saturating_add(1);
+            }
             "-o" | "--out" => {
                 let value = args.get(index).ok_or("-o needs a path")?;
                 index = index.saturating_add(1);
@@ -235,9 +417,29 @@ fn convert_command(args: &[String]) -> Result<(), String> {
         }
     }
 
-    let input = input.ok_or("convert needs a .dur file")?;
+    let input = input.ok_or("convert needs a file")?;
     let bytes = std::fs::read(input).map_err(|e| format!("{input}: {e}"))?;
-    let imported = dur::parse(&bytes).map_err(|e| format!("{input}: {e}"))?;
+    let format = format.unwrap_or_else(|| {
+        let guessed = detect(input, &bytes);
+        // Said out loud when the extension did not decide it, because reading a
+        // file as the wrong format gives a picture rather than an error, and a
+        // wrong picture is much harder to diagnose than a refusal.
+        if !named_by_extension(input) {
+            eprintln!("raba-gen: {input}: read as {} (--format overrides)", guessed.name());
+        }
+        guessed
+    });
+    let imported = match format {
+        Format::Dur => dur::parse(&bytes).map_err(|e| format!("{input}: {e}"))?,
+        Format::Ansi => {
+            let options = raba_gen::ansi::Options { columns };
+            raba_gen::ansi::parse(&bytes, &options).map_err(|e| format!("{input}: {e}"))?
+        }
+        Format::Text => {
+            let options = raba_gen::text::Options { fg, bg };
+            raba_gen::text::parse(&bytes, &options).map_err(|e| format!("{input}: {e}"))?
+        }
+    };
 
     for note in &imported.notes {
         eprintln!("raba-gen: {input}: {note}");
@@ -298,6 +500,7 @@ fn convert_command(args: &[String]) -> Result<(), String> {
 
     let output = output.unwrap_or_else(|| Path::new(input).with_extension("raba"));
     std::fs::write(&output, &bytes_out).map_err(|e| format!("{}: {e}", output.display()))?;
+    write_also_dur(&also_dur, &output, movie, &imported.name, &imported.artist)?;
     println!(
         "{}: {}x{}, {} frames, {} ops, {} bytes",
         output.display(),
@@ -317,6 +520,7 @@ fn convert_command(args: &[String]) -> Result<(), String> {
 /// what the project's rule asks for: authoring time may compute anything, run
 /// time only plays frames.
 fn generate_command(args: &[String]) -> Result<(), String> {
+    let mut also_dur = AlsoDur::default();
     let mut kind: Option<Kind> = None;
     let mut output: Option<PathBuf> = None;
     // Default to the terminal rather than to 80x25. A generated animation is
@@ -328,40 +532,42 @@ fn generate_command(args: &[String]) -> Result<(), String> {
     let mut preview = false;
     let mut index = 0;
 
-    let number = |args: &[String], at: usize, what: &str| -> Result<u64, String> {
-        args.get(at)
-            .ok_or_else(|| format!("{what} needs a value"))?
-            .parse::<u64>()
-            .map_err(|e| format!("{what}: {e}"))
-    };
-
     while let Some(arg) = args.get(index) {
         index = index.saturating_add(1);
         match arg.as_str() {
             "--preview" => preview = true,
+            "--also-dur" => index = index.saturating_add(also_dur.take(args, index)),
+            "--dur-version" => {
+                let number = u32::try_from(number(args.get(index), "--dur-version")?)
+                    .ok()
+                    .and_then(durwrite::Version::from_number)
+                    .ok_or("--dur-version is 7 or 8")?;
+                index = index.saturating_add(1);
+                also_dur.version = number;
+            }
             "-o" | "--out" => {
                 let value = args.get(index).ok_or("-o needs a path")?;
                 index = index.saturating_add(1);
                 output = Some(PathBuf::from(value));
             }
             "--columns" => {
-                spec.columns = u16::try_from(number(args, index, "--columns")?).unwrap_or(80);
+                spec.columns = u16::try_from(number(args.get(index), "--columns")?).unwrap_or(80);
                 index = index.saturating_add(1);
             }
             "--lines" => {
-                spec.lines = u16::try_from(number(args, index, "--lines")?).unwrap_or(25);
+                spec.lines = u16::try_from(number(args.get(index), "--lines")?).unwrap_or(25);
                 index = index.saturating_add(1);
             }
             "--frames" => {
-                spec.frames = u16::try_from(number(args, index, "--frames")?).unwrap_or(60);
+                spec.frames = u16::try_from(number(args.get(index), "--frames")?).unwrap_or(60);
                 index = index.saturating_add(1);
             }
             "--delay" => {
-                spec.delay_ms = u16::try_from(number(args, index, "--delay")?).unwrap_or(80);
+                spec.delay_ms = u16::try_from(number(args.get(index), "--delay")?).unwrap_or(80);
                 index = index.saturating_add(1);
             }
             "--seed" => {
-                spec.seed = number(args, index, "--seed")?;
+                spec.seed = number(args.get(index), "--seed")?;
                 index = index.saturating_add(1);
             }
             "--palette" => {
@@ -424,6 +630,7 @@ fn generate_command(args: &[String]) -> Result<(), String> {
 
     let output = output.unwrap_or_else(|| PathBuf::from(format!("{}.raba", kind.name())));
     std::fs::write(&output, &bytes).map_err(|e| format!("{}: {e}", output.display()))?;
+    write_also_dur(&also_dur, &output, &movie, kind.name(), "raba-gen")?;
     println!(
         "{}: {}x{}, {} frames, {} ops, {} bytes",
         output.display(),

@@ -28,3 +28,10 @@ bench = false
 
 [workspace]
 members = ["."]
+
+[[bin]]
+name = "ansi"
+path = "fuzz_targets/ansi.rs"
+test = false
+doc = false
+bench = false

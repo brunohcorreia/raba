@@ -143,10 +143,15 @@ editors:
 
 ```sh
 raba-gen convert art.dur -o art.raba      # Durdraw
-raba-gen convert art.ans -o art.raba      # ANSI art
+raba-gen convert art.ans -o art.raba      # ANSI art, CP437 and SAUCE included
+raba-gen convert banner.txt -o b.raba     # plain text
 raba-gen build theme.toml -o theme.raba   # logo + spinner recipe
 raba-gen generate matrix -o matrix.raba   # no source file at all
 ```
+
+`--also-dur` writes a `.dur` beside the `.raba` from the same source, so RABA's
+outro and the animation your display manager plays can be the same art rather than
+two files kept in step by hand.
 
 Not every animation has a file. `generate` produces the ones Ly has built in —
 `doom`, `matrix`, `colormix`, `gameoflife` — as `.raba`, computed once at build time
@@ -256,7 +261,8 @@ font.
 | [docs/troubleshooting.md](docs/troubleshooting.md) | **start here if your boot broke** |
 | [docs/format.md](docs/format.md) | the `.raba` format and the converters |
 | [docs/early-boot.md](docs/early-boot.md) | starting early, and surviving `switch_root` |
-| [docs/dur-support.md](docs/dur-support.md) | importing `.dur`, and its version traps |
+| [docs/dur-support.md](docs/dur-support.md) | importing `.dur`, its version traps, and writing it back |
+| [docs/ansi-support.md](docs/ansi-support.md) | importing ANSI art and plain text |
 | [docs/generated.md](docs/generated.md) | animations with no source file, and how each loops |
 | [docs/progress.md](docs/progress.md) | progress indication, and why it is hard |
 | [docs/luks.md](docs/luks.md) | disk encryption, and why RABA stays out of it |

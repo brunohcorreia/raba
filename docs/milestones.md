@@ -170,8 +170,8 @@ flagged CachyOS about a year before the Steam survey did.
 | 3 | Fuzz target on the `.dur` parser | done |
 | 4 | Canvas placement: centre and crop when the art is not the console's size | done |
 | 5 | `generate` for animations that have no source file | done |
-| 6 | ANSI art and plain text importers | |
-| 7 | `--also-dur` for display managers that play their own animation | |
+| 6 | ANSI art and plain text importers | done |
+| 7 | `--also-dur` for display managers that play their own animation | done |
 
 ### Progress
 
@@ -203,11 +203,40 @@ Three things the real file taught that the specification did not:
 ### Placement
 
 The black hole is 240x67; a console at boot may be 80x25. `raba_core::render::place`
-centres a canvas that is smaller than the screen and crops one that is larger,
-always returning exactly screen-sized output so the encoder's absolute cursor moves
-are always in range. Drawing past the last column instead would leave the console
-scrolled, which is the one thing a splash must not do. `raba-gen convert` warns at
-build time, where the canvas can still be changed.
+always returns exactly screen-sized output, so the encoder's absolute cursor moves
+are always in range — drawing past the last column instead would leave the console
+scrolled, which is the one thing a splash must not do.
+
+What it returns depends on the art. Shading art is **resampled**, averaging the
+coverage of the block of source cells each output cell stands for; everything else
+is centred and cropped. The alphabet alone cannot decide this — a fire and a Game
+of Life board are written in the same seven characters — so the `.raba` header
+carries a `scaling` byte, `auto` guesses from the alphabet for imported art, and
+anything RABA generates states its answer outright. See
+[console-size.md](console-size.md).
+
+### Importing art nobody wrote for RABA
+
+Three importers now, and the shape of each follows from what its format actually
+is:
+
+- **`.dur`** is a document, so it is parsed. The traps are in the data: colour-map
+  orientation and curses colour order.
+- **`.ans`** is a *recording of what was sent to a screen*, so the importer is a
+  terminal — a cursor, a grid and a loop. Art that draws a shape and jumps back
+  inside it to colour it in works because the real thing works that way. The traps
+  are CP437 (not UTF-8), the control range being pictures rather than controls, and
+  bold meaning bright. See [ansi-support.md](ansi-support.md).
+- **plain text** is text. Tabs, encoding fallback, and a deliberate refusal to read
+  `$1` as anything but two characters.
+
+The extension is a hint rather than a promise, so a file that is not obviously one
+of them is examined and the choice is reported.
+
+Writing `.dur` back out (`--also-dur`) is what lets RABA's outro and Ly's
+background be the same art from one source, which is what makes the handoff
+seamless. The round trip is checked cell for cell, because a writer validated
+against its own idea of the format proves nothing.
 
 ---
 

@@ -121,10 +121,17 @@ pub fn downsample(index: u8) -> u8 {
 /// is what the author chose, and the brightness is the part the hardware will not
 /// give. Returning the same hue one shade down is the closest thing to what was
 /// asked for.
+///
+/// **Only those eight.** The rule being applied is a fact about the 16-colour
+/// attribute byte, where the high background bit is blink rather than brightness.
+/// It says nothing about the xterm-256 cube, where 240 is an ordinary grey and not
+/// a bright anything — so 16 and above pass through untouched. Folding them in as
+/// well turned every 256-colour background into one of the first eight, silently:
+/// `(240 - 8) & 7` is 0, so a grey background imported as black.
 #[must_use]
 pub fn clamp_background(index: u8) -> u8 {
-    if index >= 8 {
-        index.saturating_sub(8) & 0x07
+    if (8..16).contains(&index) {
+        index.saturating_sub(8)
     } else {
         index
     }
