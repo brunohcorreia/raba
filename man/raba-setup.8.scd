@@ -45,6 +45,25 @@ boot.
 	*lsinitrd*(1) or *bsdtar*(1). With neither, the only evidence is a
 	timestamp, and the answer says so rather than pretending.
 
+*--set-theme* _name_
+	Put _name_ in the *Boot.Theme* line of *raba.conf*(5), then do what
+	*--apply* does.
+
+	One command because doing only the first half is the mistake *raba.conf*(5)
+	warns about: *raba*(8) runs before the root filesystem is mounted and reads
+	a copy of the configuration baked into the initramfs, so editing
+	_/etc/raba/raba.conf_ changes nothing until the image is regenerated. The
+	symptom is the old logo after a reboot and the conclusion that the program
+	is broken.
+
+	_name_ is a theme in _/usr/share/raba/themes_ without the _.raba_, an
+	absolute path to a file, or *auto* for the one matching *os-release*(5). It
+	is checked before anything is written; a name that does not resolve would
+	otherwise leave a valid-looking file and an image with no splash in it.
+
+	This is the only file *raba-setup* ever writes, and it is RABA's own. Your
+	comments and your other settings are left exactly as they were.
+
 *--yes*, *-y*
 	Do not ask before rebuilding an image on a machine whose disk unlocks
 	itself.

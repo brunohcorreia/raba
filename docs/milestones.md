@@ -719,7 +719,7 @@ maintainer could package and default to". Everything that is not that waits.
 | 2 | A fallback theme in the `raba` package, so an unknown distribution still draws | done |
 | 3 | Hold the screen from boot until the compositor has drawn, with no display manager in between | half |
 | 4 | One real Arch VM, mkinitcpio + systemd, boot to login | done |
-| 5 | A machine that boots anyway: power cuts and a sabotaged install | Fedora |
+| 5 | A machine that boots anyway: power cuts and a sabotaged install | done |
 | 6 | A mistake says what it was, and the system log is left alone | done |
 | 7 | Tag 0.1.0, release notes, publish to the AUR | |
 
@@ -852,9 +852,10 @@ be the defect. Demanding a sentence from all seven cases is how a working splash
 red. The expectation is per-case now: systemd reports the missing binary, silence is the
 right answer where RABA coped, everything else owes a line in words.
 
-**Fedora: 24 of 24.** The same matrix has to pass on Arch and Debian before the row is
-done — mkinitcpio and initramfs-tools are different machines for this, and the Debian
-one has no systemd in its initramfs at all.
+**24 of 24 on all three**: Fedora, then Arch, then Debian, each installed from scratch
+for the run. The Debian one mattered most — initramfs-tools, no systemd in the image at
+all, the splash started from a shell script in `init-premount` — and it survived the
+same five cuts and the same seven sabotages as the other two.
 
 One limitation, recorded rather than hidden: the sabotage lands in the real root, after
 the initramfs instance is already drawing. The configuration cases edit a file the

@@ -28,12 +28,14 @@
 //! # What it will not do
 //!
 //! Edit `/etc/mkinitcpio.conf`, `/etc/default/grub`, or anything else belonging
-//! to another package. It prints the line and the command; you run it. A
+//! to another package. `--set-theme` edits `/etc/raba/raba.conf`, which is ours
+//! and is named in the package's `backup=`, and nothing else ever writes. It prints the line and the command; you run it. A
 //! program that rewrites somebody else's configuration file bypasses the
 //! `.pacnew` handling that exists to stop exactly that, and the failure mode of
 //! getting it wrong is a machine that does not boot. See `docs/packaging.md`.
 
 mod machine;
+mod theme;
 
 use machine::{Advice, Currency, Generator, Root, Tpm};
 use raba::config;
@@ -47,6 +49,9 @@ usage:
     raba-setup                 say what this machine needs; change nothing
     raba-setup --apply         rebuild the initramfs
     raba-setup --check         exit non-zero if the image is out of date
+    raba-setup --set-theme <name>
+                               put <name> in raba.conf and rebuild, which is
+                               the only way a theme change reaches a boot
 
     raba-setup --freeze        print the configuration an initramfs should carry
     raba-setup --print-files   print the files it should carry beside it
@@ -91,6 +96,8 @@ enum Action {
     Version,
     Freeze,
     PrintFiles,
+    /// `--set-theme <name>`: edit our own configuration, then [`Action::Apply`].
+    SetTheme(String),
 }
 
 fn run(args: &[String]) -> Result<ExitCode, String> {
@@ -116,6 +123,11 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             "--freeze" => action = Action::Freeze,
             "--print-files" => action = Action::PrintFiles,
             "--apply" => action = Action::Apply,
+            "--set-theme" => {
+                let name = args.get(index).ok_or("--set-theme needs a theme name")?;
+                index = index.saturating_add(1);
+                action = Action::SetTheme(name.clone());
+            }
             "--check" => action = Action::Check,
             "--yes" | "-y" => yes = true,
             "--root" => root = Root::new(value!("--root")),
@@ -141,6 +153,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         Action::PrintFiles => print_files(&places),
         Action::DryRun => Ok(dry_run(&root, &places)),
         Action::Apply => apply(&root, &places, yes),
+        Action::SetTheme(name) => set_theme(&root, &places, yes, &name),
         Action::Check => Ok(check(&root, &places)),
     }
 }
@@ -426,6 +439,105 @@ fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, St
     }
     println!("raba-setup: done. `raba-setup --check` confirms what is in the image.");
     Ok(ExitCode::SUCCESS)
+}
+
+/// `--set-theme <name>`: change the line, then rebuild the image.
+///
+/// The two halves are one command because doing only the first is the trap
+/// `raba.conf`(5) warns about on every reading: RABA runs before the root
+/// filesystem is mounted, so it reads a copy of the configuration baked into
+/// the initramfs, and an edit to `/etc/raba/raba.conf` changes nothing at all
+/// until the image is regenerated. A person who edits the file and reboots sees
+/// the old logo and concludes the program is broken.
+///
+/// The theme is checked before the file is touched. A name that does not resolve
+/// would otherwise produce a valid-looking configuration, a thirty-second
+/// rebuild, and an image with no splash in it.
+fn set_theme(
+    root: &Root,
+    places: &config::Places,
+    yes: bool,
+    wanted: &str,
+) -> Result<ExitCode, String> {
+    let parsed = config::Theme::parse(wanted).map_err(|why| format!("{wanted}: {why}"))?;
+    match &parsed {
+        config::Theme::Auto => {}
+        config::Theme::Named(name) => {
+            let file = places.themes.join(format!("{name}.raba"));
+            if !file.exists() {
+                return Err(format!("{}: no such theme. {}", file.display(), available(places)));
+            }
+        }
+        config::Theme::Path(path) => {
+            if !path.exists() {
+                return Err(format!("{}: no such file", path.display()));
+            }
+        }
+    }
+
+    let before = match std::fs::read_to_string(&places.config) {
+        Ok(text) => text,
+        // No file is not a failure: the setting has a compiled-in default, and
+        // somebody who removed the file still gets to change the theme.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(format!("{}: {error}", places.config.display())),
+    };
+    let after = theme::rewrite(&before, wanted);
+    if after == before {
+        println!("raba-setup: {} already says Theme={wanted}", places.config.display());
+    } else {
+        write_config(&places.config, &after)?;
+        println!("raba-setup: {}: Theme={wanted}", places.config.display());
+    }
+
+    // And now the half that makes it true at boot.
+    apply(root, places, yes)
+}
+
+/// The names a person could have meant, so the error is useful rather than only
+/// correct. Cut short: fifty logos printed at somebody who made a typo is not
+/// help.
+fn available(places: &config::Places) -> String {
+    let Ok(entries) = std::fs::read_dir(&places.themes) else {
+        return format!("Looked in {}.", places.themes.display());
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            name.strip_suffix(".raba").map(str::to_owned)
+        })
+        .collect();
+    names.sort();
+    let total = names.len();
+    if total == 0 {
+        return format!("There are no themes in {}.", places.themes.display());
+    }
+    names.truncate(8);
+    let listed = names.join(", ");
+    if total > 8 {
+        format!("{total} in {}, among them: {listed}.", places.themes.display())
+    } else {
+        format!("In {}: {listed}.", places.themes.display())
+    }
+}
+
+/// Replace the file without ever leaving a half-written one in its place: a
+/// truncated `raba.conf` is a machine whose next initramfs build has no theme.
+fn write_config(path: &std::path::Path, text: &str) -> Result<(), String> {
+    let staging = path.with_extension("conf.new");
+    std::fs::write(&staging, text).map_err(|why| format!("{}: {why}", staging.display()))?;
+    if let Some(mode) = std::fs::metadata(path).ok().map(|meta| {
+        use std::os::unix::fs::PermissionsExt as _;
+        meta.permissions().mode()
+    }) {
+        use std::os::unix::fs::PermissionsExt as _;
+        let _ = std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(mode));
+    }
+    std::fs::rename(&staging, path).map_err(|why| {
+        let _ = std::fs::remove_file(&staging);
+        format!("{}: {why}", path.display())
+    })
 }
 
 /// Ask, once, in words that say what is about to happen.

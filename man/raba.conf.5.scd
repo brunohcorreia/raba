@@ -46,7 +46,8 @@ boot. The initramfs hook reads it when the image is generated and bakes a copy i
 
 *Editing this file has no effect until the initramfs is regenerated.*
 
-Use *raba-set-theme*(8), which rebuilds the initramfs for you, or regenerate by hand:
+Use *raba-setup*(8) *--set-theme* _name_, which rebuilds the initramfs for you, or
+regenerate by hand:
 
 ```
 mkinitcpio -P          # Arch

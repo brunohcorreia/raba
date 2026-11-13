@@ -67,8 +67,8 @@ sudo update-initramfs -u
 
 ### Remember
 
-Any change to `/etc/raba/raba.conf` requires regenerating the image. `raba-set-theme`
-does both.
+Any change to `/etc/raba/raba.conf` requires regenerating the image.
+`raba-setup --set-theme <name>` does both.
 
 ---
 

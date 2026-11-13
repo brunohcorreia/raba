@@ -110,7 +110,7 @@ RABA runs before your root filesystem is mounted, so it cannot read
 was generated.
 
 ```sh
-sudo raba-set-theme <name>     # edits the config and rebuilds
+sudo raba-setup --set-theme <name>   # edits the config and rebuilds
 sudo raba-setup --check        # tells you whether the image is stale
 ```
 

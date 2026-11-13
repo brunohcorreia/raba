@@ -225,8 +225,8 @@ MaxDuration=1.5
 > [!IMPORTANT]
 > Editing this file does nothing until the initramfs is rebuilt — RABA runs before
 > your root filesystem is mounted, so it reads a copy baked into the initramfs image.
-> Use `raba-set-theme`, which rebuilds for you, or run `raba-setup --check` to find
-> out whether your initramfs is stale.
+> Use `raba-setup --set-theme <name>`, which changes the line and rebuilds for you,
+> or run `raba-setup --check` to find out whether your initramfs is stale.
 
 Full reference: `man 5 raba.conf`.
 
