@@ -1,0 +1,296 @@
+//! Owning a virtual terminal, and giving it back.
+//!
+//! This is the part of RABA where a mistake does not look like a bug report. A
+//! console left in the wrong mode is a machine whose owner sees nothing after
+//! boot and cannot type; the project's first rule is that nothing it does may stop
+//! a machine booting, and this module is where that rule is kept or broken.
+//!
+//! # The shape of the guarantee
+//!
+//! Almost everything here is about what RABA **does not do**.
+//!
+//! - **It never sets `KD_GRAPHICS`.** A process killed while a console is in
+//!   graphics mode leaves a machine with no visible console and no way back, and
+//!   `SIGKILL` cannot be caught, so no amount of cleanup code would help. RABA
+//!   draws characters, so text mode is all it ever needs: "killed mid-frame leaves
+//!   a usable terminal" is true by construction rather than by careful unwinding.
+//! - **It never touches the keyboard mode.** Same argument. A console in `K_RAW`
+//!   with nobody left to read from it is a machine you cannot type on.
+//! - **It draws on a terminal of its own**, from [`ioctl::open_query`], and never
+//!   on the one somebody is using. So anything it does leave wrong is confined to
+//!   a terminal that is about to be given back, and the terminal the user was on
+//!   is untouched apart from being switched away from.
+//!
+//! What is left to restore is therefore small: which terminal is displayed, and
+//! the terminal we borrowed. [`Vt::restore`] does both, is safe to call twice, and
+//! carries on when a step fails — a restore that gives up halfway is exactly how a
+//! console ends up stranded.
+//!
+//! # What it refuses
+//!
+//! Yielding is a feature. If another splash or a display server already owns the
+//! screen ([`ioctl::KD_GRAPHICS`]), or there is no free terminal, RABA does not
+//! draw. Two programs fighting over one console is worse than no splash at all.
+//!
+//! See `docs/early-boot.md` and `docs/coexistence.md`.
+
+pub mod ioctl;
+
+use raba_core::surface::{Size, Surface};
+use std::fmt;
+use std::fs::{File, OpenOptions};
+use std::io::{self, Write as _};
+use std::os::unix::fs::OpenOptionsExt as _;
+use std::time::{Duration, Instant};
+
+/// The terminal used to ask about and switch terminals.
+///
+/// `/dev/tty0` is "whichever terminal is current", which is what the VT ioctls
+/// want. It is not `/dev/console`: that may be a serial line, and asking a serial
+/// line to allocate a virtual terminal is a category error.
+const CONTROL: &str = "/dev/tty0";
+
+/// Open a console without adopting it as a controlling terminal.
+///
+/// `O_NOCTTY` is not a detail. RABA runs as PID 1 in an initramfs, which makes it
+/// a session leader with no controlling terminal — and a session leader that opens
+/// a terminal without this flag *acquires* it. Two consequences, both bad: the
+/// splash starts receiving the terminal's signals, and the kernel keeps a
+/// reference that makes `VT_DISALLOCATE` refuse with `EBUSY`, so the terminal is
+/// never handed back.
+const O_NOCTTY: i32 = 0o400;
+
+/// How long to keep asking for the borrowed terminal back.
+///
+/// `VT_DISALLOCATE` refuses a terminal that is still in use, and after a switch
+/// away from one the kernel releases it a moment later rather than during the
+/// switch — measured at roughly 600 microseconds on a 7.3 kernel, where an open
+/// and close with no switch in between frees it in 50. So the first attempt
+/// essentially always fails and the second essentially always succeeds.
+///
+/// Fifty milliseconds is a ceiling nothing is expected to reach, and it is spent
+/// after the display is already back where it belongs: the only thing still
+/// waiting is the terminal's few kilobytes. `crates/raba-vmtest` measures the real
+/// number on every run, so this budget stops being a guess the moment a kernel
+/// changes it.
+const RETURN_BUDGET: Duration = Duration::from_millis(50);
+const RETURN_INTERVAL: Duration = Duration::from_micros(500);
+
+/// Hand a terminal back, waiting out the kernel's brief hold on it.
+fn give_back<F: rustix::fd::AsFd>(control: F, number: u16) -> Result<(), rustix::io::Errno> {
+    let deadline = Instant::now().checked_add(RETURN_BUDGET);
+    loop {
+        match ioctl::disallocate(&control, number) {
+            Ok(()) => return Ok(()),
+            Err(rustix::io::Errno::BUSY) => {}
+            Err(other) => return Err(other),
+        }
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            return Err(rustix::io::Errno::BUSY);
+        }
+        std::thread::sleep(RETURN_INTERVAL);
+    }
+}
+
+fn open_console(path: &str) -> io::Result<File> {
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        // 0o400 on Linux. Spelled out rather than pulled from a crate so the one
+        // flag this depends on is visible next to the reason it is needed.
+        .custom_flags(O_NOCTTY)
+        .open(path)
+}
+
+/// Why RABA is not drawing.
+#[derive(Debug)]
+pub enum Error {
+    /// There is no VT subsystem to talk to, or we may not open it. On a machine
+    /// booted with `console=ttyS0` alone this is the normal case, not a fault.
+    NoConsole(io::Error),
+    /// Something already owns the screen in graphics mode.
+    ScreenIsTaken,
+    /// Every virtual terminal is in use.
+    NoFreeTerminal,
+    /// An ioctl failed.
+    Ioctl(&'static str, rustix::io::Errno),
+    /// The terminal was allocated but could not be opened.
+    Open(u16, io::Error),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoConsole(e) => write!(f, "no virtual terminal available ({CONTROL}: {e})"),
+            Self::ScreenIsTaken => {
+                write!(f, "the console is in graphics mode; something else owns the screen")
+            }
+            Self::NoFreeTerminal => write!(f, "every virtual terminal is in use"),
+            Self::Ioctl(name, errno) => write!(f, "{name}: {errno}"),
+            Self::Open(number, e) => write!(f, "/dev/tty{number}: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+/// A virtual terminal RABA has borrowed.
+#[derive(Debug)]
+pub struct Vt {
+    /// `/dev/tty0`, kept open for the duration: the switching ioctls go here.
+    control: File,
+    /// `/dev/tty<number>`, what frames are written to.
+    terminal: File,
+    number: u16,
+    /// The terminal that was displayed when we arrived, to go back to.
+    previous: u16,
+    restored: bool,
+}
+
+impl Vt {
+    /// Take a free terminal and switch the display to it.
+    ///
+    /// # Errors
+    ///
+    /// Every failure here means "do not draw", and none of them is worth stopping
+    /// a boot over. The caller's job is to report and carry on.
+    pub fn acquire() -> Result<Vt, Error> {
+        let control = open_console(CONTROL).map_err(Error::NoConsole)?;
+
+        // Asked before anything is changed. A console in graphics mode belongs to
+        // something else, and the polite thing — also the only thing that cannot
+        // make the screen worse — is to leave.
+        let mode = ioctl::get_mode(&control).map_err(|e| Error::Ioctl("KDGETMODE", e))?;
+        if mode == ioctl::KD_GRAPHICS {
+            return Err(Error::ScreenIsTaken);
+        }
+
+        let state = ioctl::get_state(&control).map_err(|e| Error::Ioctl("VT_GETSTATE", e))?;
+        let previous = state.active;
+
+        let number = ioctl::open_query(&control)
+            .map_err(|e| Error::Ioctl("VT_OPENQRY", e))?
+            .ok_or(Error::NoFreeTerminal)?;
+
+        let path = format!("/dev/tty{number}");
+        let terminal = open_console(&path).map_err(|e| Error::Open(number, e))?;
+
+        let mut vt = Vt { control, terminal, number, previous, restored: false };
+
+        // From here on a failure has to undo what has already been done, which is
+        // what `restore` is for. It is why the struct is built before the switch.
+        if let Err(errno) = ioctl::activate(&vt.control, number) {
+            let _ = vt.restore();
+            return Err(Error::Ioctl("VT_ACTIVATE", errno));
+        }
+        if let Err(errno) = ioctl::wait_active(&vt.control, number) {
+            let _ = vt.restore();
+            return Err(Error::Ioctl("VT_WAITACTIVE", errno));
+        }
+        Ok(vt)
+    }
+
+    /// Which terminal was taken. `/dev/tty<this>`.
+    #[must_use]
+    pub fn number(&self) -> u16 {
+        self.number
+    }
+
+    /// Which terminal was displayed before, and will be again.
+    #[must_use]
+    pub fn previous(&self) -> u16 {
+        self.previous
+    }
+
+    /// Whether the terminal is in text mode, which it should never not be.
+    ///
+    /// Exposed for the virtual-machine tests, which assert it across the whole
+    /// lifecycle: the claim that RABA never leaves text mode is worth checking
+    /// rather than asserting in a comment.
+    ///
+    /// # Errors
+    ///
+    /// If `KDGETMODE` fails on the borrowed terminal.
+    pub fn mode(&self) -> Result<i32, Error> {
+        ioctl::get_mode(&self.terminal).map_err(|e| Error::Ioctl("KDGETMODE", e))
+    }
+}
+
+impl Surface for Vt {
+    fn size(&self) -> Size {
+        // The console's real size, which is the screen divided by the loaded
+        // font's cell. A console that will not say falls back to 80x25 rather
+        // than to nothing: see docs/console-size.md.
+        rustix::termios::tcgetwinsize(&self.terminal)
+            .ok()
+            .filter(|winsize| winsize.ws_col > 0 && winsize.ws_row > 0)
+            .map_or(Size::FALLBACK, |winsize| Size {
+                columns: winsize.ws_col,
+                lines: winsize.ws_row,
+            })
+    }
+
+    fn present(&mut self, frame: &[u8]) -> io::Result<()> {
+        // One write, as the trait requires: a console draws whatever has arrived
+        // when it is next scheduled, so a frame delivered in pieces tears.
+        self.terminal.write_all(frame)?;
+        self.terminal.flush()
+    }
+
+    fn restore(&mut self) -> io::Result<()> {
+        if self.restored {
+            return Ok(());
+        }
+        self.restored = true;
+
+        // Every step is attempted even when an earlier one failed, and the first
+        // error is what gets reported. A restore that returns early is how a
+        // console is left on a terminal nobody can see.
+        let mut first: Option<io::Error> = None;
+        let mut note = |result: Result<(), rustix::io::Errno>| {
+            if let Err(errno) = result {
+                if first.is_none() {
+                    first = Some(io::Error::from(errno));
+                }
+            }
+        };
+
+        // Attributes first, while the terminal is still ours and still displayed:
+        // reset colours, and show the cursor in case it was hidden.
+        let _ = self.terminal.write_all(b"\x1b[0m\x1b[?25h");
+        let _ = self.terminal.flush();
+
+        note(ioctl::activate(&self.control, self.previous));
+        note(ioctl::wait_active(&self.control, self.previous));
+
+        // `VT_DISALLOCATE` refuses a terminal that is still open, so the handle
+        // goes first. Replacing it keeps `self` whole rather than needing an
+        // `Option` everywhere else.
+        if let Ok(null) = File::open("/dev/null") {
+            let open = std::mem::replace(&mut self.terminal, null);
+            drop(open);
+        }
+        // Last, and the only step whose failure is not worth much: by now the
+        // display is back where it belongs and the person in front of the machine
+        // sees the right thing. A terminal that could not be returned costs a few
+        // kilobytes until the next boot.
+        note(give_back(&self.control, self.number));
+
+        match first {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+}
+
+impl Drop for Vt {
+    /// The ordinary exit path, and the one that covers an early `return`.
+    ///
+    /// Not the only one that matters and not the one to rely on: `panic = "abort"`
+    /// in release means a panic never gets here, and `SIGKILL` never gets
+    /// anywhere. Those are handled by not needing cleanup — see the module
+    /// documentation on why nothing is left in a state that needs undoing.
+    fn drop(&mut self) {
+        let _ = self.restore();
+    }
+}

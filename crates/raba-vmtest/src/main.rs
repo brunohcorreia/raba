@@ -30,6 +30,7 @@
 mod checks;
 mod report;
 mod shutdown;
+mod vt_checks;
 
 use report::Report;
 
@@ -47,6 +48,16 @@ fn main() {
     checks::the_console_reports_a_size(&mut report);
     checks::writing_to_the_console_works(&mut report);
     checks::the_real_binary_runs_against_a_console(&mut report);
+    // The VT layer, which is what everything above exists to make testable.
+    vt_checks::a_terminal_comes_back_quickly_after_a_switch(&mut report);
+    vt_checks::a_terminal_can_be_taken_and_given_back(&mut report);
+    vt_checks::the_terminal_never_leaves_text_mode(&mut report);
+    vt_checks::frames_are_written_to_the_borrowed_terminal(&mut report);
+    vt_checks::two_instances_do_not_take_the_same_terminal(&mut report);
+    vt_checks::the_screen_being_taken_is_refused_rather_than_fought_over(&mut report);
+    vt_checks::restoring_twice_is_harmless(&mut report);
+    vt_checks::the_terminal_is_deallocated_afterwards(&mut report);
+
     checks::a_deliberate_failure_is_reported(&mut report);
 
     report.finish();

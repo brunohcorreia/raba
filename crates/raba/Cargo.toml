@@ -7,6 +7,10 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[lib]
+name = "raba"
+path = "src/lib.rs"
+
 [[bin]]
 name = "raba"
 path = "src/main.rs"
@@ -17,6 +21,7 @@ path = "src/main.rs"
 [dependencies]
 raba-core = { path = "../raba-core", version = "0.0.0" }
 raba-term = { path = "../raba-term", version = "0.0.0" }
+rustix = { version = "1", features = ["termios", "system"] }
 
 [lints]
 workspace = true

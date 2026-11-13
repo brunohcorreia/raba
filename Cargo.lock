@@ -332,6 +332,8 @@ dependencies = [
 name = "raba-vmtest"
 version = "0.0.0"
 dependencies = [
+ "raba",
+ "raba-core",
  "rustix",
 ]
 

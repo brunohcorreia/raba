@@ -18,7 +18,12 @@ repository = "https://github.com/brunohcorreia/raba"
 
 # Enforced, not aspirational. See docs/maintenance.md.
 [workspace.lints.rust]
-unsafe_code = "forbid"          # overridden to "allow" in crates/raba/src/vt only
+# "deny" and not "forbid", because `forbid` cannot be lifted and one module has to
+# lift it: `crates/raba/src/vt`, where the VT ioctls live. Everything that can keep
+# the stronger promise makes it itself, at its own crate root — raba-core,
+# raba-term and raba-gen all carry `#![forbid(unsafe_code)]`, which is where such a
+# guarantee belongs anyway. See docs/maintenance.md.
+unsafe_code = "deny"
 missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]

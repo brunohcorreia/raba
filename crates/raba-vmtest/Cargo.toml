@@ -18,6 +18,10 @@ path = "src/main.rs"
 # size gate — but it stays small anyway, because every byte is in the image that
 # has to be built before each run.
 [dependencies]
+# The thing under test. `raba` exposes its VT layer as a library for exactly this:
+# a real kernel is the only place those ioctls mean anything.
+raba = { path = "../raba", version = "0.0.0" }
+raba-core = { path = "../raba-core", version = "0.0.0" }
 rustix = { version = "1", features = ["termios", "mount", "system", "process"] }
 
 [lints]

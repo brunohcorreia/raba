@@ -4,6 +4,11 @@
 //! convenient and may be as strict and as talkative as it likes — every error here is
 //! one the boot path will never have to survive. See `docs/maintenance.md`.
 
+// This crate never needs unsafe: it is pure data transformation (raba-core),
+// a thin wrapper over std (raba-term), or a build-time tool (raba-gen). Stated
+// here rather than inherited, because a promise is worth more where it is kept.
+#![forbid(unsafe_code)]
+
 pub mod ansi;
 pub mod art;
 pub mod build;

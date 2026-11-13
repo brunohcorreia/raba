@@ -8,6 +8,11 @@
 //! live in the `raba` binary, behind a `Surface` abstraction, and are kept small
 //! enough to review line by line.
 
+// This crate never needs unsafe: it is pure data transformation (raba-core),
+// a thin wrapper over std (raba-term), or a build-time tool (raba-gen). Stated
+// here rather than inherited, because a promise is worth more where it is kept.
+#![forbid(unsafe_code)]
+
 pub mod format;
 pub mod glyph;
 pub mod render;

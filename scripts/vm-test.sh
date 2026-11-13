@@ -153,7 +153,9 @@ set -e
 
 # TAP, as the guest printed it. Anything the kernel said is left out unless it
 # failed, because a boot log around five result lines hides them.
-echo "$output" | grep -E '^(ok|not ok|# |1\.\.|TAP)' || true
+# The YAML block under a failure carries the reason, and it is indented — which
+# is exactly what a naive filter drops, leaving "not ok 14" and no way to know why.
+echo "$output" | grep -E '^(ok|not ok|# |1\.\.|TAP| +(---|\.\.\.|reason:))' || true
 
 # --- verdict -----------------------------------------------------------------
 

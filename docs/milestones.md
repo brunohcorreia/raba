@@ -249,10 +249,10 @@ this is written.**
 |---|---|---|
 | 1 | Tier 3a harness: QEMU kernel + initramfs, ~1 second per run, `isa-debug-exit` | done |
 | 2 | Pty tests for the escape encoder | done |
-| 3 | `VT_OPENQRY` to acquire a free terminal — never hardcode tty1 | |
-| 4 | Draw, and restore on **every** exit path including panic | |
-| 5 | `TIOCL_SETKMSGREDIRECT` to move kernel messages aside; restore exactly | |
-| 6 | Detect a terminal already in `KD_GRAPHICS` and yield | |
+| 3 | `VT_OPENQRY` to acquire a free terminal — never hardcode tty1 | done |
+| 4 | Draw, and restore on **every** exit path including panic | done |
+| 5 | Detect a terminal already in `KD_GRAPHICS` and yield | done |
+| 6 | `TIOCL_SETKMSGREDIRECT` to move kernel messages aside; restore exactly | |
 | 7 | `SIGKILL` mid-frame leaves a usable terminal — the test that matters most | |
 
 ### The harness, first
@@ -278,6 +278,33 @@ would be somebody's machine not booting.
 The guest needs no `unsafe`, which keeps the whole workspace inside
 `unsafe_code = "forbid"` until the VT layer genuinely needs it: `/dev/port` reaches
 `isa-debug-exit`'s I/O port through a file, and `/proc/sysrq-trigger` is the fallback.
+
+### The VT layer
+
+`crates/raba/src/vt` is the only `unsafe` in the project, which is why the workspace
+lint went from `forbid` to `deny` — `forbid` cannot be lifted — and why `raba-core`,
+`raba-term` and `raba-gen` now each carry `#![forbid(unsafe_code)]` at their own crate
+root. A promise is worth more where it is kept than where it is inherited.
+
+**Almost all of the safety is in what it does not do.** It never sets `KD_GRAPHICS`:
+a process killed while a console is in graphics mode leaves a machine with no visible
+console and no way back, and `SIGKILL` cannot be caught, so no cleanup code would help.
+It never touches the keyboard mode, for the same reason. And it draws on a terminal of
+its own from `VT_OPENQRY` rather than on the one somebody is using — so anything it does
+leave wrong is confined to a terminal that is about to be handed back, and the user's
+terminal is untouched apart from being switched away from. "Killed mid-frame leaves a
+usable terminal" is then true by construction rather than by careful unwinding.
+
+Seven checks in the guest, and the first run found two things:
+
+- **`O_NOCTTY`.** RABA is PID 1 in an initramfs, which makes it a session leader with no
+  controlling terminal — and a session leader that opens a terminal without that flag
+  *acquires* it. A splash should not be receiving a console's signals.
+- **`VT_DISALLOCATE` refuses for about 600 microseconds after a switch.** Open a terminal
+  and close it and the kernel frees it in 50µs; switch away from it first and it is busy
+  until the release completes a moment later. Every run was leaking its terminal. The fix
+  is to wait, and the guest measures the real number on each run against a 10ms line, so
+  the budget stops being a guess the moment a kernel changes it.
 
 ### Tier 2 found two bugs on its first run
 
@@ -322,6 +349,30 @@ clamp an out-of-range `CUP`. See [development.md](development.md).
 - Full-distribution VM matrix, nightly
 - Man pages built with scdoc; packaging
 - Progress overlay, `pulse` by default
+- **Measured against Plymouth**, once there is something to measure
+
+### Measured against Plymouth
+
+Raised 12 Nov 2026. The README already claims an advantage over Plymouth in initramfs
+size and in not needing a GPU driver early, and already says that Plymouth's reputation
+for slowing boot is partly a measurement artifact — `plymouth-quit-wait.service` looks
+large in `systemd-analyze blame` while most of it runs *after* the login screen is up,
+and Fedora maintainers measured ~3.5s of real cost against the 8.3s the tool reported.
+
+Having said that in the README, it would be dishonest to then benchmark RABA with the
+same sloppiness. What is worth measuring, and what each number would mean:
+
+| | why it is the honest number |
+|---|---|
+| initramfs size, with and without each | the claim that is most likely to be true, and the easiest to measure without arguing |
+| time from kernel hand-off to first frame drawn | what a person actually waits for; needs timestamps inside both, not `blame` |
+| time from "system ready" to the display manager being usable | where Plymouth's reputation comes from, and where the artifact lives |
+| boot with a slow GPU driver — `amdgpu`, `nouveau` | the case RABA is actually for: no splash at all versus a splash |
+| memory resident while drawing | small, and the least interesting |
+
+Needs the full-distribution VM matrix above, because the only measurement worth having
+is on a real distribution with a real initramfs and a real display manager — tier 3a
+cannot answer any of this. Not before M5.
 
 ---
 
