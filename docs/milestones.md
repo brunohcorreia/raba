@@ -718,11 +718,40 @@ maintainer could package and default to". Everything that is not that waits.
 | 1 | A PKGBUILD that builds and installs: `raba`, `raba-themes`, `raba-gen` | done |
 | 2 | A fallback theme in the `raba` package, so an unknown distribution still draws | done |
 | 3 | Hold the screen from boot until the compositor has drawn, with no display manager in between | done |
-| 4 | One real Arch VM, mkinitcpio + systemd, boot to login | |
+| 4 | One real Arch VM, mkinitcpio + systemd, boot to login | done |
 | 5 | Tag 0.1.0, release notes, publish to the AUR | |
 
 Explicitly **not** in it: LUKS passphrase in the splash, the progress overlay, the
 full distribution matrix, the Plymouth benchmarks. Those are M6 and later.
+
+### Row 4, and the three things it caught
+
+`scripts/distro-test.sh` installs RABA on a distribution's own cloud image the way a
+person would, reboots, runs checks inside the booted system, and photographs the screen
+through QEMU's monitor while it happens. Arch gets the packages and `mkinitcpio`;
+Debian and Fedora build from source with the cargo in their own repositories and use
+`initramfs-tools` and `dracut`, which also answers a question worth asking on its own —
+whether somebody on those distributions can build RABA today.
+
+Three things it found immediately, none of which any earlier tier could have:
+
+**A cloud image has no screen.** It boots with `console=ttyS0` and nothing else, so no
+VGA console is ever registered, `dummycon` binds, every VT ioctl succeeds and the splash
+draws somewhere nothing is displayed. Correct behaviour for a serial-only machine, and
+useless for testing a splash — so the harness adds `console=tty0` *before* the serial
+console (the last one named becomes `/dev/console`, and the TAP still has to leave by
+the serial line), and the in-guest checks now assert that a non-dummy driver is bound.
+
+**TAP arrives wrapped.** The guest's results come through the journal, so every line is
+`[   40.414569] raba-check[442]: ok 1 - …`. The first run passed all nine checks and the
+harness reported a failure, because it was looking for `^ok`.
+
+**A colour count is not evidence.** The first screen check asked whether any frame had
+more than a console's worth of black in it. It passed — on the TianoCore logo that OVMF
+draws. `scripts/screen-colours.py` now classifies instead: a bitmap with many colours is
+firmware, console text against the left margin is a boot log or a prompt, and a *centred*
+block of console text is a splash. The height test in it is not optional either, because
+QEMU's own "Guest has not initialized the display (yet)" is one line, dead centre.
 
 ### Row 3 is the Omarchy-shaped row
 

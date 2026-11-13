@@ -307,10 +307,16 @@ fn boot(startup: &config::Startup) {
         return;
     }
     let outcome = raba::boot::run(&startup.settings);
-    // Displaced is a normal ending, and a quiet one on purpose: the message
-    // would be printed on the console that something else just took.
-    if !matches!(outcome, raba::boot::Outcome::Finished | raba::boot::Outcome::Displaced(_)) {
-        eprintln!("raba: {outcome}");
+    match outcome {
+        raba::boot::Outcome::Finished => {}
+        // Quiet on the console, on purpose: the message would be printed over
+        // whatever just took the screen. Written down all the same — an exit
+        // that leaves no trace is an exit nobody can debug, and "the splash
+        // stopped early" is exactly the report that needs one.
+        ref displaced @ raba::boot::Outcome::Displaced(_) => {
+            let _ = std::fs::write(&startup.config.log.file, format!("raba: {displaced}\n"));
+        }
+        ref other => eprintln!("raba: {other}"),
     }
 }
 
