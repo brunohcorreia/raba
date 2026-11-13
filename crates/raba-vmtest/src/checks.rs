@@ -93,6 +93,49 @@ fn report_line(line: &str) {
     println!("# /proc/consoles: {line}");
 }
 
+/// The virtual terminal is backed by a driver that draws, not by `dummycon`.
+///
+/// The same class of trap as the serial one above, one layer down. `CONFIG_VT`
+/// gives a kernel 64 terminals whether or not anything can display them: when no
+/// real console driver binds, `dummycon` takes over and accepts everything while
+/// drawing nothing. Every VT ioctl would succeed, every test would pass, and the
+/// splash would be invisible on a real machine.
+///
+/// Booting with `-kernel` is exactly the case where this happens — QEMU's loader
+/// may leave the boot parameters that `vgacon` looks for unfilled — so it is
+/// checked rather than hoped for.
+pub fn the_terminal_is_backed_by_a_real_driver(report: &mut Report) {
+    report.check("the virtual terminal has a driver that can draw", || {
+        let directory = Path::new("/sys/class/vtconsole");
+        if !directory.exists() {
+            return Err("/sys/class/vtconsole does not exist".to_owned());
+        }
+        let entries = std::fs::read_dir(directory)
+            .map_err(|e| format!("reading /sys/class/vtconsole: {e}"))?;
+        let mut bound = Vec::new();
+        for entry in entries.flatten() {
+            let name = std::fs::read_to_string(entry.path().join("name")).unwrap_or_default();
+            let active = std::fs::read_to_string(entry.path().join("bind")).unwrap_or_default();
+            let name = name.trim().to_owned();
+            println!("# vtconsole: {name} bound={}", active.trim());
+            if active.trim() == "1" {
+                bound.push(name);
+            }
+        }
+        if bound.is_empty() {
+            return Err("no console driver is bound to the virtual terminal".to_owned());
+        }
+        if bound.iter().all(|name| name.contains("dummy")) {
+            return Err(format!(
+                "only dummycon is bound ({}), so a VT would accept everything and \
+                 display nothing",
+                bound.join(", ")
+            ));
+        }
+        Ok(())
+    });
+}
+
 /// `TIOCGWINSZ` on the console returns a size, and a plausible one.
 ///
 /// The same ioctl `raba-term` uses. Eighty by twenty-five is what a VGA text

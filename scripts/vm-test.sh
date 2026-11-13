@@ -65,6 +65,11 @@ find_kernel() {
     for candidate in "${candidates[@]}"; do
         [ -n "$candidate" ] && [ -r "$candidate" ] && { echo "$candidate"; return; }
     done
+    # CI images name the kernel after a flavour nothing else predicts
+    # (vmlinuz-6.8.0-1021-azure and the like), so fall back to whatever is there.
+    local found
+    found="$(ls -1 /boot/vmlinuz-* 2>/dev/null | head -1 || true)"
+    [ -n "$found" ] && [ -r "$found" ] && { echo "$found"; return; }
     return 1
 }
 kernel="$(find_kernel)" || die "no readable kernel image found.
@@ -97,14 +102,37 @@ echo "vm-test: initramfs $(du -h "$image" | cut -f1), kernel $(basename "$kernel
 
 # --- run ---------------------------------------------------------------------
 
-# console=ttyS0 puts our output on the serial line that -serial stdio captures,
-# while the emulated VGA adapter still gives the guest a real virtual terminal to
-# draw on. That split is the whole trick: tty0 is under test, ttyS0 reports on it.
-append="console=ttyS0 panic=-1 loglevel=3"
+# Both consoles, in this order, and the order matters twice.
+#
+# `console=tty0` is what makes the kernel register the VGA text console at all.
+# Without it only ttyS0 is a console, the guest has terminals that nothing draws,
+# and every VT test from M3 onward passes while proving nothing — which is what
+# the "not just a serial line" check in the guest exists to catch.
+#
+# `console=ttyS0` comes last because the last one named becomes /dev/console, and
+# /dev/console is where PID 1's output goes. So results leave by the serial line
+# that -serial stdio captures, while tty0 stays free to be drawn on and inspected.
+append="console=tty0 console=ttyS0 panic=-1 loglevel=3"
 [ "$self_test" = 1 ] && append="$append raba.selftest=fail"
 
 display=(-display none)
 [ "$show_console" = 1 ] && display=()
+
+# The CPU model, which is not a performance question here but a correctness one.
+#
+# QEMU's default `qemu64` is roughly a 2003 processor. Distributions that build
+# for x86-64-v3 or v4 — CachyOS, and increasingly others — produce kernels that
+# simply will not run on it, and the failure has no error message at all: the
+# kernel faults before it can print, `panic=-1` reboots, `-no-reboot` makes QEMU
+# exit 0, and you are left with a silent success. `-cpu max` offers everything
+# the emulator knows how to provide.
+#
+# KVM when the kernel will allow it, because a second a run is the whole premise
+# of this tier. `-cpu host` is both faster and strictly more capable.
+accel=(-cpu max)
+if [ -w /dev/kvm ]; then
+    accel=(-enable-kvm -cpu host)
+fi
 
 set +e
 output="$(timeout "$timeout_seconds" qemu-system-x86_64 \
@@ -113,6 +141,7 @@ output="$(timeout "$timeout_seconds" qemu-system-x86_64 \
     -append "$append" \
     -m 256M \
     -no-reboot \
+    "${accel[@]}" \
     "${display[@]}" \
     -serial stdio \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
@@ -152,6 +181,17 @@ esac
 
 if [ -z "$plan" ]; then
     echo "vm-test: the guest never printed a plan line — it did not reach the checks" >&2
+    # Silence plus a clean exit is the signature of a kernel that faulted before it
+    # could say anything. The usual cause is a CPU the kernel was not built for,
+    # which the accel block above is meant to prevent — so if this is what you are
+    # reading, look there first.
+    if [ -z "$(echo "$output" | tr -d '[:space:]')" ]; then
+        echo "vm-test: the guest produced no output at all. Most likely the kernel" >&2
+        echo "         faulted before printing: try RABA_VM_KERNEL with a generic" >&2
+        echo "         kernel, or check that this one runs on \"${accel[*]}\"." >&2
+    else
+        echo "$output" | tail -20 >&2
+    fi
     verdict=fail
 fi
 

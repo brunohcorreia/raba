@@ -80,9 +80,5 @@ jobs:
         # A test rig that cannot fail reports success for reasons unrelated to the
         # code, and the first anybody hears of it is when something slips through.
         run: ./scripts/vm-test.sh --self-test
-        env:
-          RABA_VM_KERNEL: /boot/vmlinuz
       - name: run the checks
         run: ./scripts/vm-test.sh
-        env:
-          RABA_VM_KERNEL: /boot/vmlinuz

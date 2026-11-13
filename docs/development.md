@@ -161,11 +161,33 @@ under `/usr/lib/modules/$(uname -r)/vmlinuz` is tried before `/boot`, because `/
 is often an ESP only root can read while that copy is the same image and world
 readable. `RABA_VM_KERNEL` overrides it.
 
-**`console=ttyS0` with an emulated VGA adapter is the trick that makes this work.**
-Results go out the serial line that `-serial stdio` captures, while the guest still has
-a real virtual terminal on the VGA side to draw on. `tty0` is under test; `ttyS0`
-reports on it. Without that split the tests would quietly be exercising a serial
-console and proving nothing about a VT.
+A run takes **0.7 seconds** on a machine with KVM.
+
+### Three things that make it work, each found by it not working
+
+**`console=tty0 console=ttyS0`, in that order.** `console=tty0` is what makes the kernel
+register the VGA text console at all — with only `console=ttyS0`, `/proc/consoles` lists
+the serial line and nothing else, and the guest has terminals that nothing draws on.
+`console=ttyS0` comes *last* because the last console named becomes `/dev/console`, which
+is where PID 1's output goes: results leave by the serial line while `tty0` stays free to
+be drawn on. Without that split the tests would quietly be exercising a serial console
+and proving nothing about a VT.
+
+**`-cpu max`, or `-cpu host` with KVM.** Not a performance choice. QEMU's default
+`qemu64` is roughly a 2003 processor, and a distribution that builds for x86-64-v3 or v4
+— CachyOS, and more over time — produces a kernel that will not run on it. The failure
+has no error message whatsoever: the kernel faults before it can print, `panic=-1`
+reboots, `-no-reboot` makes QEMU exit **0**, and the whole run looks like a silent
+success. The script says so explicitly when it sees no output at all, because the first
+time this happens it is not obvious.
+
+**Checking which driver is bound to the terminal.** `CONFIG_VT` gives a kernel 64
+terminals whether or not anything can display them. When no real console driver binds,
+`dummycon` takes over: every VT ioctl succeeds, every test passes, and the splash is
+invisible on real hardware. Booting with `-kernel` is exactly the case where this
+happens, because QEMU's loader may leave the boot parameters `vgacon` looks for unfilled.
+So the guest reads `/sys/class/vtconsole/*/name` and fails if only a dummy is bound. The
+run above reports `VGA+`, which is real 80x25 VGA text — the environment RABA targets.
 
 Nothing in the guest asks for `unsafe`. Exiting through `isa-debug-exit` normally needs
 inline assembly to reach an I/O port; writing to `/dev/port` at offset `0xf4` reaches the

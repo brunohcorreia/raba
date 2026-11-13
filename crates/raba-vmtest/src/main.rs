@@ -43,6 +43,7 @@ fn main() {
     checks::kernel_is_what_we_asked_for(&mut report);
     checks::the_console_devices_exist(&mut report);
     checks::a_virtual_terminal_is_present(&mut report);
+    checks::the_terminal_is_backed_by_a_real_driver(&mut report);
     checks::the_console_reports_a_size(&mut report);
     checks::writing_to_the_console_works(&mut report);
     checks::the_real_binary_runs_against_a_console(&mut report);
