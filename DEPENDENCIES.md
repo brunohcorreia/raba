@@ -7,16 +7,17 @@ The two binaries have opposite constraints and separate budgets.
 
 ## `raba` — the boot binary
 
-**Budget: 1 direct dependency.** It runs as root, early in boot, inside an initramfs. Every
-crate here is code that can break a boot on someone else's release schedule.
+**Budget: 2 direct dependencies.** It runs as root, early in boot, inside an initramfs.
+Every crate here is code that can break a boot on someone else's release schedule.
 
 | crate | what for | why not `std` | removable? |
 |---|---|---|---|
 | `raba-core` | format, layout, rendering | ours | no — it is the program |
 | `raba-term` | stdout surface, frame timing | ours | no — it is the program |
 | `rustix` | `TIOCGWINSZ`, the VT ioctls, `SO_PEERCRED` | `std` cannot make an ioctl, and has no peer credentials | no — without it the size is a guess |
+| `libc` | `sigprocmask`, `sigtimedwait` | `std` has no signal API at all | no — without it `SIGTERM` kills mid-frame |
 
-**Spent: 1 of 1,** on `rustix`, which is what the allowance was reserved for.
+**Spent: 2 of 2.**
 
 M4 added two feature flags to it — `net` for `SO_PEERCRED` and `process` for `getuid`
 — and no crates. The socket itself is `std::os::unix::net`, which is why the control
@@ -42,9 +43,31 @@ Not here, deliberately:
 - **no JSON parser** — `.raba` is a fixed binary layout. This is the main reason the
   format is ours.
 - **no decompression** — the gzip-bomb failure mode cannot be expressed.
-- **no async runtime** — a frame loop is a loop. Banned in `deny.toml`.
-- **no `libc`** — `rustix` reaches the kernel through `linux-raw-sys` instead, which is
-  why the boot binary builds against musl without a C toolchain.
+- **no async runtime** — a frame loop is a loop. Banned in `deny.toml`. This is the one
+  to watch, because a control socket is exactly the shape of problem people reach for
+  one to solve. RABA's is polled once a frame, beside the signals, in the loop that was
+  already there.
+
+### The second one, and what it cost
+
+The budget moved from one to two at M4, for signals. `std` has no signal API, so there
+was no version of "handle `SIGTERM`" that did not add a crate — and the alternative to
+handling it is a splash that is killed mid-frame and leaves the display on a terminal
+nobody asked to be on.
+
+`libc` rather than `signal-hook`, which would have been the obvious choice: `signal-hook`
+depends on `signal-hook-registry`, which depends on `arc-swap`, and `signal-hook` depends
+on `libc` as well. Four crates for the same work.
+
+And it costs **nothing**, which was measured rather than assumed. The release binary is
+414392 bytes with it and 414392 bytes without — the same number, because the boot binary
+is statically linked against musl and the libc these bindings bind to was already in the
+file. The crate is bindings, not code.
+
+The previous entry here read "**no `libc`** — `rustix` reaches the kernel through
+`linux-raw-sys` instead, which is why the boot binary builds against musl without a C
+toolchain". The second half is still true and is why this was cheap. The first half is
+no longer true, and is recorded as changed rather than quietly edited away.
 
 ## `raba-core` — the pure core
 

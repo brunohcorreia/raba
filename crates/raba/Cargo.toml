@@ -15,13 +15,17 @@ path = "src/lib.rs"
 name = "raba"
 path = "src/main.rs"
 
-# Dependency budget: 1 direct, now spent (rustix, via raba-term, for TIOCGWINSZ).
-# Every addition needs an entry in DEPENDENCIES.md.
+# Dependency budget: 2 direct, both spent — rustix for the ioctls and SO_PEERCRED,
+# libc for the signal mask. Every addition needs an entry in DEPENDENCIES.md.
 # No JSON, no decompression, no async runtime — that is the point of owning .raba.
 [dependencies]
 raba-core = { path = "../raba-core", version = "0.0.0" }
 raba-term = { path = "../raba-term", version = "0.0.0" }
 rustix = { version = "1", features = ["termios", "system", "net", "process", "time"] }
+# The second and last direct dependency. See DEPENDENCIES.md: `std` has no signal
+# API, and this one has no transitive dependencies and adds no bytes — musl libc
+# is already linked into the static binary.
+libc = { version = "0.2", default-features = false }
 
 [lints]
 workspace = true
@@ -31,5 +35,7 @@ workspace = true
 # the `testing` feature brings in the strict terminal model that interprets what
 # the binary wrote. See docs/development.md.
 [dev-dependencies]
+# The signal tests send signals, which needs the same bindings the module uses.
+libc = { version = "0.2", default-features = false }
 raba-core = { path = "../raba-core", version = "0.0.0", features = ["testing"] }
 rustix = { version = "1", features = ["pty", "termios", "process"] }

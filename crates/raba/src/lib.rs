@@ -14,5 +14,6 @@
 
 pub mod control;
 pub mod lifecycle;
+pub mod signals;
 pub mod state;
 pub mod vt;

@@ -62,7 +62,10 @@ acquires a JSON parser.
 **`raba` — the boot path. Target: zero dependencies beyond a syscall wrapper.** With
 `.raba` as the runtime format, there is no JSON and no decompression, so `serde_json` and
 `flate2` never enter. What remains is ioctls, termios and a socket, which is `rustix` or
-nothing.
+nothing — plus `libc`, added at M4 because `std` has no signal API and a splash that
+cannot handle `SIGTERM` is a splash killed mid-frame. It is bindings rather than code:
+the release binary is the same size with and without it, measured. Two, and the reasons
+for both are in [DEPENDENCIES.md](../DEPENDENCIES.md).
 
 **`raba-gen` — build time. Spend freely.** It never enters an initramfs and is never on
 the boot path, so `serde`, `toml`, `flate2` and a JSON parser are all fine here. A
