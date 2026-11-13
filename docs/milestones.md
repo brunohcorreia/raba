@@ -525,7 +525,7 @@ where it is supposed to run and the one place none of the tests so far have been
 | 8 | Service files for OpenRC, runit, s6 and dinit | done |
 | 9 | `raba-setup`: dry run by default, `--apply`, `--check` | done |
 | 10 | TPM2 token detected and warned about **before** the initramfs is touched | done |
-| 11 | A real mkinitcpio image, booted in QEMU, draws | |
+| 11 | A real mkinitcpio image, booted in QEMU, draws | done |
 
 ### The one rule the hook lives by
 
@@ -666,6 +666,44 @@ are allowed to be as large as they need to be in one that does not.
 It depends on `raba` as a library for exactly one thing: the configuration
 parser. The file it writes is read back by `raba` at boot, and a second
 implementation of that format would be a second set of bugs.
+
+### The last row: the real generator, the real image, a real console
+
+Everything above is tested against a stub that fails where the real mkinitcpio
+fails. Row 11 removes the stub. `scripts/image-test.sh` hands the job to
+`/usr/bin/mkinitcpio` itself, with our install hook in a `--hookdir` and a
+second hook, `rabacheck`, placed after `raba` in `HOOKS`. The image that comes
+out is the image a user gets; QEMU boots it; and the checks run from inside it
+as an ordinary runtime hook, by which time the splash has already been started
+by the hook under test. Nine TAP lines come back over the serial console: the
+frozen configuration is in the image, it names the theme by absolute path, the
+art is at that path, the splash answers `raba-ctl`, it reports the boot phase,
+it took a terminal of its own, it is writing `/run/raba.state`, `quit --wait`
+returns, and nothing answers afterwards.
+
+Two things stood in the way, and both are properties of mkinitcpio worth
+writing down because they will catch the next person:
+
+- mkinitcpio does `export PATH="/usr/bin:/bin"` on startup. A sandbox directory
+  prepended to `PATH` is discarded before a single hook runs.
+- `add_binary raba` installs the binary into the image *at the path it resolved
+  to*. Even a `raba` found somewhere else would land in the image under
+  `/home/…/target/release/`, where nothing in the image would look for it.
+
+So the test does the only thing that satisfies both: it builds inside a
+throwaway user namespace whose `/usr/bin` is an overlay with the three binaries
+on top, and runs the generator unmodified. `fakeroot` goes on top of that,
+because being root in a namespace is not being root — host-owned files appear
+as 65534 there, `cp --preserve=all` cannot chown to an id the namespace has no
+mapping for, and *every* `add_binary` would return non-zero, which is precisely
+the failure this hook exists to never cause. Nothing outside `target/` is
+touched, and a machine that forbids either piece gets a skip rather than a
+pretend pass.
+
+The first run of it was worth the whole exercise on its own: the hook did not
+find the binary, printed its warning, added nothing — and the image still
+built. The one rule the hook lives by, under the real thing, before any of the
+other nine checks could pass.
 
 ---
 

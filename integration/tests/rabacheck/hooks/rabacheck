@@ -1,0 +1,103 @@
+#!/usr/bin/ash
+# Check, from inside a real initramfs, that the splash is up.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# TAP on the console, then power off. The host side is scripts/image-test.sh.
+
+run_hook() {
+    tap_count=0
+    tap_failed=0
+
+    tap() {
+        tap_count=$((tap_count + 1))
+        if [ "$1" -eq 0 ]; then
+            echo "ok ${tap_count} - $2"
+        else
+            tap_failed=$((tap_failed + 1))
+            echo "not ok ${tap_count} - $2"
+            if [ -n "$3" ]; then
+                echo "#   $3"
+            fi
+        fi
+    }
+
+    # 1. The configuration the build hook froze, inside the image.
+    if [ -f /etc/raba/raba.conf ]; then
+        tap 0 'the frozen configuration is in the image'
+    else
+        tap 1 'the frozen configuration is in the image' 'no /etc/raba/raba.conf'
+    fi
+
+    # 2. With an absolute theme path, because `auto` cannot be resolved here.
+    theme="$(sed -n 's/^Theme=\(\/.*\)$/\1/p' /etc/raba/raba.conf 2> /dev/null | head -1)"
+    if [ -n "$theme" ]; then
+        tap 0 'it names the theme by absolute path'
+    else
+        tap 1 'it names the theme by absolute path' "$(cat /etc/raba/raba.conf 2> /dev/null)"
+    fi
+
+    # 3. And the art is where it says.
+    if [ -n "$theme" ] && [ -f "$theme" ]; then
+        tap 0 'the art is in the image at that path'
+    else
+        tap 1 'the art is in the image at that path' "$theme is not there"
+    fi
+
+    # 4. The splash is running, answering, and drawing. The runtime hook
+    #    backgrounded it a moment ago; give it a moment more.
+    answered=1
+    n=0
+    while [ "$n" -lt 8 ]; do
+        if raba-ctl ping > /dev/null 2>&1; then
+            answered=0
+            break
+        fi
+        n=$((n + 1))
+        sleep 1
+    done
+    tap "$answered" 'the splash is running and answers raba-ctl'
+
+    # 5. On a terminal of its own, in the boot phase.
+    status="$(raba-ctl status 2> /dev/null)"
+    case "$status" in
+        *'phase: boot'*) tap 0 'it reports the boot phase' ;;
+        *) tap 1 'it reports the boot phase' "$status" ;;
+    esac
+    terminal="$(echo "$status" | sed -n 's/^terminal: //p')"
+    if [ -n "$terminal" ] && [ "$terminal" -gt 1 ]; then
+        tap 0 "it took a terminal of its own (tty${terminal})"
+    else
+        tap 1 'it took a terminal of its own' "terminal: ${terminal:-none}"
+    fi
+
+    # 6. And it is recording where it got to, which is what makes switch_root
+    #    survivable.
+    if [ -f /run/raba.state ]; then
+        tap 0 'it is writing /run/raba.state'
+    else
+        tap 1 'it is writing /run/raba.state' 'no state file'
+    fi
+
+    # 7. The handoff, from inside the initramfs, through the real client.
+    if raba-ctl quit --wait > /dev/null 2>&1; then
+        tap 0 'quit --wait returns'
+    else
+        tap 1 'quit --wait returns' 'non-zero exit'
+    fi
+    if raba-ctl ping > /dev/null 2>&1; then
+        tap 1 'and the instance is gone afterwards' 'something still answers'
+    else
+        tap 0 'and the instance is gone afterwards'
+    fi
+
+    echo "1..${tap_count}"
+    if [ "$tap_failed" -gt 0 ]; then
+        echo "# in-image: ${tap_failed} failed"
+    else
+        echo "# in-image: all passed"
+    fi
+
+    # Nothing here is going to mount a root filesystem.
+    echo o > /proc/sysrq-trigger
+    sleep 30
+}

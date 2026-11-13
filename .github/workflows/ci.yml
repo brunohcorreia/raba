@@ -39,6 +39,9 @@ jobs:
       # is run by busybox ash; neither has a shebang shellcheck can trust.
       - run: shellcheck --severity=warning --shell=bash integration/mkinitcpio/install/raba
       - run: shellcheck --severity=warning --shell=dash integration/mkinitcpio/hooks/raba
+      # The pair that checks them from inside a real image, same two shells.
+      - run: shellcheck --severity=warning --shell=bash integration/tests/rabacheck/install/rabacheck
+      - run: shellcheck --severity=warning --shell=dash integration/tests/rabacheck/hooks/rabacheck
       - run: shellcheck --severity=warning integration/dracut/50raba/*.sh
       - run: |
           shellcheck --severity=warning --shell=dash \

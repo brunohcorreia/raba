@@ -197,7 +197,7 @@ exists to test will not.
 
 #### The harness proves itself first
 
-`--self-test` puts `raba.selftest=fail` on the kernel command line, the guest fails one
+`--self-test` puts `rabatest.selftest=fail` on the kernel command line, the guest fails one
 check on purpose, and the script asserts the run came back **failed**. CI runs it before
 it runs anything else.
 
@@ -205,6 +205,39 @@ This is not ceremony. A test rig that cannot fail reports success for reasons un
 to the code, and the first anybody hears of it is when something that should have been
 caught was not. For the VT layer — where the failure mode is somebody's machine not
 booting — that is not an acceptable way to find out.
+
+### Tier 3a½ — the real generator's image, booted
+
+Tier 3a boots an image this project assembled itself, which proves the program and
+proves nothing about the hook that has to put it there. `scripts/image-test.sh` boots
+an image built by `/usr/bin/mkinitcpio`, unmodified, with the shipped install hook in
+a `--hookdir`:
+
+```sh
+scripts/image-test.sh            # build, boot, report
+scripts/image-test.sh --keep     # leave the image and the sandbox behind
+scripts/image-test.sh --console  # watch the guest's VGA console too
+```
+
+The checks ride along as a second hook, `rabacheck`, placed after `raba` in `HOOKS`,
+so they run inside the image as an ordinary runtime hook with the splash already up.
+Nine TAP lines come back over the serial line. It needs mkinitcpio, so it skips on
+machines that have none — `integration/tests/*.sh` cover those from stubs.
+
+Two things about mkinitcpio shape the whole script, and both are worth knowing before
+writing anything that drives it:
+
+- it does `export PATH="/usr/bin:/bin"` at startup, so a directory prepended to `PATH`
+  on the command line is gone before any hook runs;
+- `add_binary raba` installs the binary into the image **at the path it resolved to**,
+  so a `raba` found anywhere but `/usr/bin` lands in the image at that same odd path.
+
+Hence the build runs inside a throwaway user namespace whose `/usr/bin` is an overlay
+with the freshly built binaries on top, under `fakeroot` — being root in a namespace is
+not being root, host-owned files appear there as 65534, and `cp --preserve=all` cannot
+chown to an unmapped id, which would make every `add_binary` return non-zero. Nothing
+outside `target/` is touched; a machine without user namespaces, overlayfs or fakeroot
+gets a skip.
 
 ### Tier 3b — QEMU, full distribution images
 

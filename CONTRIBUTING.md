@@ -58,6 +58,16 @@ raba --preview themes/yours.dur
 Both render in the current terminal and touch no system state. Use these for anything
 that is not boot integration.
 
+### Two scripted runs before any of this
+
+```sh
+scripts/vm-test.sh        # kernel + our own initramfs: the VT layer, ~1s
+scripts/image-test.sh     # an initramfs built by the real mkinitcpio, booted
+```
+
+Neither touches the machine you are on. The second one needs mkinitcpio and skips
+without it. Start there; the hand-driven VM below is for what they cannot reach.
+
 ### Virtual machine
 
 ```sh

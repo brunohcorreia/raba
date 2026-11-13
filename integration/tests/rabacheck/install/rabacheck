@@ -1,0 +1,18 @@
+#!/bin/bash
+# A mkinitcpio hook that exists only to check the one beside it.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Used by scripts/image-test.sh and shipped nowhere. It is put after `raba` in
+# HOOKS, so by the time it runs the splash has been started by the real runtime
+# hook, out of a real image, built by the real mkinitcpio.
+
+build() {
+    add_runscript
+    return 0
+}
+
+help() {
+    cat << HELPEOF
+Checks that the raba hook did what it said. Not for installation.
+HELPEOF
+}
