@@ -81,6 +81,35 @@ This split is the single biggest reason to own the runtime format.
 - Pin a MSRV and test it. AUR users are always on the newest `rustc`; distributions
   packaging this later will not be.
 
+### And a size gate, because a budget nobody measures is a wish
+
+`.binary-size-limit` holds one number: the largest `raba` may be, as a static musl
+build, before CI fails. The release profile is already as small as cargo can make it —
+`opt-level = "z"`, `lto`, one codegen unit, `panic = "abort"`, `strip` — so the gate is
+measuring the code, not the settings.
+
+| | |
+|---|---|
+| limit | 552960 (540 KiB) |
+| `raba`, measured in CI, 13 November 2026 | 524976 |
+| headroom | 27984 bytes, a little over 5% |
+
+The headroom is deliberate at that width. A bug fix should never trip this; a new
+dependency almost always will, because almost nothing worth linking is under 28 KiB.
+That is the line the gate is drawn on.
+
+It has moved once. The original 524288 (512 KiB) was a round number picked before there
+was anything to measure, and the binary crossed it in `7bfe037c`, the commit that made a
+splash which cannot draw say so instead of exiting quietly. Everything since — the one
+safe writer, durability for `/etc`, a sentence for each way a boot can be sabotaged — is
+the same work, and it is work this document asks for in §6. The honest response was to
+move the gate and say why, not to argue the feature away.
+
+**A red gate is a red build, and a red build is nobody's background noise.** This one
+stayed red for fourteen commits, the 0.1.0 release among them, because the person
+pushing never looked at the badge he had just put in the README. The gate worked. The
+reading of it did not.
+
 ---
 
 ## 3. Make the invariants mechanical, not aspirational
