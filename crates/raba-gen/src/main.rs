@@ -141,7 +141,12 @@ fn build_command(args: &[String]) -> Result<(), String> {
     let source = match theme.art_source(recipe_path).map_err(|e| format!("{input}: {e}"))? {
         ArtSource::Inline(art) => art,
         ArtSource::File(path) => {
-            std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?
+            // Both files named, and the recipe first: `raba-gen` is run from a
+            // Makefile over a directory of recipes, and a message that names
+            // only the art file leaves the reader to work out which recipe
+            // refers to it.
+            std::fs::read_to_string(&path)
+                .map_err(|e| format!("{input}: {}: {e}", path.display()))?
         }
         ArtSource::Fastfetch(name) => {
             let logo = logos::find(&name).ok_or_else(|| {
