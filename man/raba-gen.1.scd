@@ -14,7 +14,10 @@ raba-gen - build and convert .raba animations
 	configuration, so a setup can be carried across.
 
 	*--columns* _N_, *--lines* _N_
-		Canvas size. Default 80x25.
+		Canvas size. Defaults to the terminal's, or 80x25 when that cannot be
+		read. A generated animation is whatever size it is asked for, so
+		generating at 80x25 and previewing on a larger terminal would draw a
+		box in the middle of it.
 	*--frames* _N_
 		How long the loop runs. For *gameoflife* this is a budget rather than a
 		length: the animation repeats every 30 generations and stops there.
@@ -75,7 +78,10 @@ whatever it likes while *raba*(8) depends on nothing.
 	configuration, so a setup can be carried across.
 
 	*--columns* _N_, *--lines* _N_
-		Canvas size. Default 80x25.
+		Canvas size. Defaults to the terminal's, or 80x25 when that cannot be
+		read. A generated animation is whatever size it is asked for, so
+		generating at 80x25 and previewing on a larger terminal would draw a
+		box in the middle of it.
 	*--frames* _N_
 		How long the loop runs. For *gameoflife* this is a budget rather than a
 		length: the animation repeats every 30 generations and stops there.

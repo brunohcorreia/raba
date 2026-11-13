@@ -324,6 +324,7 @@ name = "raba-term"
 version = "0.0.0"
 dependencies = [
  "raba-core",
+ "rustix",
 ]
 
 [[package]]

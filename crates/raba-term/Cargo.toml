@@ -16,6 +16,9 @@ path = "src/lib.rs"
 # See docs/maintenance.md on the split budget.
 [dependencies]
 raba-core = { path = "../raba-core", version = "0.0.0" }
+# The one dependency raba is allowed, spent on what DEPENDENCIES.md reserved it
+# for: TIOCGWINSZ now, the VT ioctls at M3.
+rustix = { version = "1", features = ["termios"] }
 
 [dev-dependencies]
 raba-core = { path = "../raba-core", version = "0.0.0", features = ["testing"] }

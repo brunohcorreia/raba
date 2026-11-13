@@ -309,7 +309,12 @@ fn convert_command(args: &[String]) -> Result<(), String> {
 fn generate_command(args: &[String]) -> Result<(), String> {
     let mut kind: Option<Kind> = None;
     let mut output: Option<PathBuf> = None;
-    let mut spec = Spec::default();
+    // Default to the terminal rather than to 80x25. A generated animation is
+    // whatever size it is asked for, so defaulting to the fallback console size
+    // and then centring that on a large terminal fills a box in the middle and
+    // looks broken. An explicit --columns/--lines still wins.
+    let terminal = raba_term::detect_size();
+    let mut spec = Spec { columns: terminal.columns, lines: terminal.lines, ..Spec::default() };
     let mut preview = false;
     let mut index = 0;
 

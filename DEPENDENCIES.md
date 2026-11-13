@@ -14,12 +14,23 @@ crate here is code that can break a boot on someone else's release schedule.
 |---|---|---|---|
 | `raba-core` | format, layout, rendering | ours | no — it is the program |
 | `raba-term` | stdout surface, frame timing | ours | no — it is the program |
+| `rustix` | `TIOCGWINSZ`; the VT ioctls at M3 | `std` cannot make an ioctl | no — without it the size is a guess |
 
-**Spent so far: none.** Through M0 the binary is `std` only, including `--preview`.
-The one allowance exists for `TIOCGWINSZ`, `VT_OPENQRY` and the rest of the VT ioctls,
-and until M3 needs them it stays unspent — so `--preview` reads `COLUMNS` and `LINES`
-from the environment and falls back to 80x25 rather than buying a syscall wrapper to
-ask a question it can mostly guess.
+**Spent: 1 of 1,** on `rustix`, which is what the allowance was reserved for.
+
+It was unspent through M0 on the reasoning that the terminal size was "a question it
+can mostly guess" from `COLUMNS` and `LINES`. That reasoning was wrong, and a user
+found it immediately: a shell sets `COLUMNS` as a *shell* variable and does not export
+it, so the guess was not mostly right, it was always 80x25, and `--preview` drew into a
+corner of any terminal larger than that. There is no guessing a window size.
+
+`rustix` over `libc` as planned: on Linux it goes through `linux-raw-sys` and makes the
+syscalls directly, so the boot binary has no C dependency and stays easy to build
+against musl. The whole tree it brings is `bitflags` and `linux-raw-sys`, neither of
+which does any I/O of its own. The release binary is 311 KB.
+
+`VT_OPENQRY` and the rest of the VT ioctls arrive at M3 through the same crate, so the
+budget does not have to move again.
 
 Not here, deliberately:
 
@@ -27,8 +38,8 @@ Not here, deliberately:
   format is ours.
 - **no decompression** — the gzip-bomb failure mode cannot be expressed.
 - **no async runtime** — a frame loop is a loop. Banned in `deny.toml`.
-- **`rustix`** will be added at milestone 3 for ioctls and termios, in preference to
-  `libc` because it avoids a C dependency and suits a static musl build.
+- **no `libc`** — `rustix` reaches the kernel through `linux-raw-sys` instead, which is
+  why the boot binary builds against musl without a C toolchain.
 
 ## `raba-core` — the pure core
 
