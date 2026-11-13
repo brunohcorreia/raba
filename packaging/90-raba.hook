@@ -1,0 +1,30 @@
+# Say whether the initramfs still matches what RABA would put in it.
+#
+# Two things make an image stale that pacman cannot see on its own: the theme
+# is baked into the image, and so is the resolved configuration. Upgrading
+# raba-themes therefore leaves an image carrying the old art, with nothing to
+# say so until the next boot shows it.
+#
+# Upgrade only, not Install: a fresh install has nothing to be stale, and the
+# .install message is already telling the user what to do.
+#
+# This runs *after* mkinitcpio's own hook — 90-mkinitcpio-install sorts before
+# 90-raba, and `usr/lib/initcpio/*` is one of its triggers, so a raba upgrade
+# has already rebuilt the image by the time this looks at it. What is left to
+# report is the case mkinitcpio does not watch: the art and the configuration.
+#
+# `|| true` because a stale image is advice, not a failed transaction. A
+# boot-critical package that turns a cosmetic staleness into a pacman error has
+# misjudged its own importance.
+
+[Trigger]
+Type = Path
+Operation = Upgrade
+Target = usr/bin/raba
+Target = usr/share/raba/themes/*
+Target = usr/share/raba/raba.defaults
+
+[Action]
+Description = Checking whether the RABA initramfs is current...
+When = PostTransaction
+Exec = /bin/sh -c '/usr/bin/raba-setup --check || true'

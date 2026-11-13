@@ -112,6 +112,7 @@ has "$raba" /usr/lib/initcpio/install/raba             'the mkinitcpio install h
 has "$raba" /usr/lib/initcpio/hooks/raba               'the mkinitcpio runtime hook'
 has "$raba" /usr/lib/dracut/modules.d/50raba/module-setup.sh 'the dracut module'
 has "$raba" /usr/lib/systemd/system/raba-start.service 'the systemd units'
+has "$raba" /usr/share/libalpm/hooks/90-raba.hook      'the pacman hook that notices a stale image'
 has "$raba" /usr/share/man/man8/raba.8                 'the man page'
 has "$raba" /usr/share/licenses/raba/LICENSE           'the licence'
 

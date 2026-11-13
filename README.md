@@ -273,6 +273,7 @@ font.
 | [docs/coexistence.md](docs/coexistence.md) | Plymouth, getty, and when not to draw |
 | [docs/secure-boot.md](docs/secure-boot.md) | Secure Boot, TPM measurements, lockdown |
 | [docs/packaging.md](docs/packaging.md) | packaging conventions, and what we refuse to do |
+| [docs/compatibility.md](docs/compatibility.md) | what an upgrade may never break |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | adding themes, testing in VMs |
 | [docs/development.md](docs/development.md) | implementation order, test environment and suite |
 | [docs/milestones.md](docs/milestones.md) | what is being built, in what order |

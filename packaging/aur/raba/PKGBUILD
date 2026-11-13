@@ -76,6 +76,9 @@ package_raba() {
     # Without it, `pacman -S raba` would install a splash that draws nothing.
     install -Dm644 themes/generic.raba "$pkgdir/usr/share/raba/themes/generic.raba"
 
+    # A pacman hook that says when the image stopped matching the art.
+    install -Dm644 packaging/90-raba.hook "$pkgdir/usr/share/libalpm/hooks/90-raba.hook"
+
     # mkinitcpio. One hook name for both kinds of image; the install hook
     # decides whether it is building a systemd initramfs or a busybox one.
     install -Dm644 integration/mkinitcpio/install/raba "$pkgdir/usr/lib/initcpio/install/raba"
