@@ -230,3 +230,73 @@ fn help_and_version_are_not_errors() {
         assert!(!stdout(&output).is_empty(), "{flag}");
     }
 }
+
+// --- the command line, which has the last word over every file ---------------
+//
+// Coverage found none of these flags had ever been parsed by a test. They are
+// the ones `man 8 raba` documents for exactly the situation where nothing else
+// works: a machine that will not boot, a bootloader prompt, and one chance to
+// get the spelling right.
+
+#[test]
+fn the_command_line_overrides_the_file_and_check_says_so() {
+    let scratch = Scratch::new("override");
+    theme(&scratch, "generic");
+    scratch.write("raba.conf", "[Boot]\nTty=3\nShowDelay=1\nTimeout=20\n");
+    let output =
+        raba(&scratch, &["--check", "--tty", "7", "--show-delay", "0.25", "--timeout", "9"]);
+    let text = stdout(&output);
+    // Reported as what *would happen*, which is the man page's own words. This
+    // used to print the file's values while the daemon used the flag's.
+    assert!(text.contains("Tty           /dev/tty7"), "{text}");
+    assert!(text.contains("ShowDelay     0.25s"), "{text}");
+    assert!(text.contains("Timeout       9s"), "{text}");
+}
+
+#[test]
+fn a_timeout_of_zero_is_reported_as_disabled_rather_than_as_zero_seconds() {
+    let scratch = Scratch::new("no-timeout");
+    theme(&scratch, "generic");
+    let output = raba(&scratch, &["--check", "--timeout", "0"]);
+    assert!(stdout(&output).contains("disabled, not recommended"), "{}", stdout(&output));
+}
+
+#[test]
+fn a_terminal_number_the_kernel_does_not_have_is_refused_at_the_flag() {
+    let scratch = Scratch::new("bad-tty");
+    theme(&scratch, "generic");
+    let output = raba(&scratch, &["--check", "--tty", "64"]);
+    assert!(!output.status.success());
+    let text = String::from_utf8_lossy(&output.stderr);
+    assert!(text.contains("--tty"), "{text}");
+    assert!(text.contains("64"), "the number it refused should be in the message:\n{text}");
+}
+
+#[test]
+fn a_duration_that_is_not_a_number_is_refused_and_names_the_flag() {
+    let scratch = Scratch::new("bad-delay");
+    theme(&scratch, "generic");
+    let output = raba(&scratch, &["--check", "--show-delay", "soon"]);
+    assert!(!output.status.success());
+    let text = String::from_utf8_lossy(&output.stderr);
+    assert!(text.contains("--show-delay"), "{text}");
+}
+
+#[test]
+fn an_outro_given_on_the_command_line_is_the_one_reported() {
+    let scratch = Scratch::new("outro");
+    theme(&scratch, "generic");
+    theme(&scratch, "generic-outro");
+    let outro = scratch.path("themes/generic-outro.raba");
+    let output = raba(&scratch, &["--check", "--outro", outro.to_str().expect("utf-8")]);
+    let text = stdout(&output);
+    assert!(text.contains("generic-outro.raba"), "{text}");
+}
+
+#[test]
+fn a_flag_that_needs_a_value_and_has_none_says_which_flag() {
+    let scratch = Scratch::new("no-value");
+    let output = raba(&scratch, &["--check", "--tty"]);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--tty"));
+}

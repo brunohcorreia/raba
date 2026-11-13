@@ -44,3 +44,20 @@ pub fn report(message: &dyn std::fmt::Display) {
         let _ = writeln!(kmsg, "<3>raba: {message}");
     }
 }
+
+/// One line about something a person might want to know, and nothing more.
+///
+/// stderr only. The difference from [`report`] is the kernel log, and the
+/// difference in meaning is whether the boot went wrong: `dmesg` is shared with
+/// everybody on the machine who is using it to debug something else, and this
+/// project's promise — asserted by `crates/raba-vmtest` and by
+/// `integration/tests/distro` — is that a healthy boot leaves nothing of ours
+/// there at all.
+///
+/// A splash that could not use the resume state is the case this exists for. It
+/// starts from the first frame instead of continuing, which is a fact worth
+/// having in the journal and is not a fault: nothing failed, nothing is
+/// degraded, and the splash is on the screen either way.
+pub fn note(message: &dyn std::fmt::Display) {
+    eprintln!("raba: {message}");
+}

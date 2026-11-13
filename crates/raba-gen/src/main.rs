@@ -78,10 +78,15 @@ fn run(args: &[String]) -> Result<(), String> {
             );
             Ok(())
         }
-        Some("--help" | "-h") | None => {
+        Some("--help" | "-h") => {
             print!("{USAGE}");
             Ok(())
         }
+        // Not grouped with `--help`. Asking for the usage is a request that
+        // succeeded; invoking this with no arguments at all is a line in
+        // somebody's Makefile with an empty variable in it, and answering that
+        // with exit 0 is a build that produced nothing and reported success.
+        None => Err(format!("nothing to do\n\n{USAGE}")),
         Some(other) => Err(format!("unknown command {other}\n\n{USAGE}")),
     }
 }

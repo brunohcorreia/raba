@@ -961,13 +961,25 @@ impl Startup {
                 }
             }
         }
-        push(&mut out, &format!("  Tty           {}", terminal(self.config.boot.tty)));
-        push(&mut out, &format!("  ShowDelay     {}", length(self.config.boot.show_delay)));
+        // From `settings`, not from `config`: `--check` is documented as
+        // reporting *what would happen*, and the command line has the last word
+        // over every file. Reading the configuration layer here meant
+        // `raba --check --tty 7` printed "auto" and the daemon then took tty7.
+        // With no override on the command line the two are the same value, so
+        // the ordinary report is unchanged.
+        push(
+            &mut out,
+            &format!(
+                "  Tty           {}",
+                terminal(self.settings.tty.map_or(Tty::Auto, Tty::Fixed))
+            ),
+        );
+        push(&mut out, &format!("  ShowDelay     {}", length(self.settings.show_delay)));
         push(
             &mut out,
             &format!(
                 "  Timeout       {}",
-                self.config.boot.timeout.map_or("0 (disabled, not recommended)".to_owned(), length)
+                self.settings.timeout.map_or("0 (disabled, not recommended)".to_owned(), length)
             ),
         );
 

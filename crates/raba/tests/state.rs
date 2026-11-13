@@ -299,6 +299,31 @@ fn the_clock_counts_from_boot_and_moves_forwards() {
     assert!(first > 0);
 }
 
+/// Every reason a state file can be refused, in the words a person would read.
+///
+/// These are not decoration. `state::load` deletes the file it rejects and
+/// hands the reason to the caller, which prints it — so a splash that starts
+/// over at frame 0 can say why. Coverage found that nothing had ever rendered
+/// any of them, which is how the caller was discovered to be throwing the
+/// reason away with `unwrap_or(None)`.
+#[test]
+fn the_reasons_a_state_file_is_refused_say_what_was_wrong() {
+    let cases: [(Invalid, &str); 7] = [
+        (Invalid::NotOurs, "not a raba state file"),
+        (Invalid::Missing("terminal"), "no terminal"),
+        (Invalid::Unreadable("frame"), "frame is not readable as a value"),
+        (Invalid::Terminal(0), "tty0 is outside"),
+        (Invalid::Frame { frame: 90, frames: 8 }, "frame 90 of a theme with 8"),
+        (Invalid::Stale { age_ms: 90_000 }, "written 90000ms ago"),
+        (Invalid::Theme, "theme is not an absolute path"),
+    ];
+    for (invalid, expected) in cases {
+        let said = invalid.to_string();
+        assert!(said.contains(expected), "{invalid:?} reads as {said:?}, wanted {expected:?}");
+        assert!(!said.is_empty());
+    }
+}
+
 /// The sabotage case `state-in-the-way`, as a host test.
 ///
 /// A directory at the resume file's path makes every save fail, and for a long

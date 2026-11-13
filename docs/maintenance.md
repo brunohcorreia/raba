@@ -192,6 +192,64 @@ list.** A row with no test is an untested claim.
 
 ---
 
+## 4b. Coverage, and what the number is not
+
+`scripts/coverage.sh` builds the workspace with rustc's own instrumentation and reads
+the counters with the LLVM tools already on the machine. No new dependency, nothing to
+install, and it answers one question: **is there code here that no test has ever run?**
+
+"Region", not "branch". rustc emits region counters and leaves llvm-cov's branch
+columns empty, so the report cannot say "this `if` was only ever taken one way" in
+those words — but a region is a straight-line stretch of code with its own counter,
+and each arm of an `if` or a `match` is its own region. A conditional taken only one
+way shows up as a missed region on the arm nobody ran, which is the question worth
+asking.
+
+Measured 13 November 2026, after the audit that this section is the result of:
+
+| what is counted | regions | lines |
+|---|---|---|
+| everything in `crates/` | 62% | 61% |
+| …without `raba-vmtest`, which only ever runs inside a VM | 74% | 78% |
+| …and without `vt/` and `boot.rs`, same reason | **81%** | **86%** |
+
+The third row is the honest one, and the first row is the one a badge would show. The
+difference between them is the whole architecture: the parts that cannot be unit tested
+were pushed into thin shells on purpose (§1), and those shells are tested by tiers 3a,
+3b and 3c — a real kernel, three real distributions, five power cuts and seven sabotage
+cases — none of which writes a coverage profile. `vt/mod.rs` reads 0% here and is the
+most heavily exercised file in the project.
+
+So the number is a search tool, not a score. Three things it found that nothing else
+had:
+
+- **`raba-setup`'s command line was 13% covered.** The argument parser and every
+  refusal standing in front of the one write this program does. A mistake there does
+  not produce a wrong answer, it produces a wrong *action* on somebody's machine.
+  `crates/raba-setup/tests/cli.rs` now drives the real binary for each of them, and
+  asserts twice every time: the right reason, and a configuration file that is exactly
+  as it was.
+- **`state::load`'s rejection reasons had never been rendered.** Nine `Display` arms
+  explaining why a resume was refused, and the one caller threw the reason away with
+  `unwrap_or(None)` — against its own doc comment, which says "the caller logs it".
+  A splash that silently restarted at frame 0 could not say why.
+- **`write::replace_durably` had never been executed.** The variant with the `fsync`,
+  which is the one that writes `/etc/raba/raba.conf`.
+
+What remains uncovered and is meant to:
+
+| | why |
+|---|---|
+| `crates/raba-vmtest` | it is the guest program; tier 3a *is* its test |
+| `raba/src/vt/`, `boot.rs` | a terminal and a boot; tiers 3a and 3b |
+| `report.rs`'s `/dev/kmsg` write | needs a kernel log; asserted in the VM instead |
+| `signals.rs`'s `sigaction` failures | the kernel would have to refuse a valid call |
+| the write-failed arm of `write::replace` | needs a disk to fill mid-call |
+
+A row leaving that table is a gap. A row joining it needs a reason written beside it.
+
+---
+
 ## 5. Written-down contracts
 
 These are public API. Breaking them silently is how a maintainable project stops being

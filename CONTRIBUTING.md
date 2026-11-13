@@ -134,6 +134,7 @@ see". Everything below runs in a VM or in your own terminal and touches no syste
 | `scripts/distro-test.sh` | Arch, Debian or Fedora installed from scratch and rebooted | ~12 min |
 | `scripts/resilience.sh` | five power cuts and seven sabotage cases on an installed machine | ~20 min |
 | `scripts/record.sh` | the animation at the top of the README | ~2 min |
+| `scripts/coverage.sh` | which lines and regions the suite above actually runs | ~4 min |
 
 None of them needs root on your machine: the cloud-init seed is a FAT filesystem built
 with `mkfs.vfat` and `mcopy`, and QEMU runs as you.

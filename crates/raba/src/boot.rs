@@ -37,7 +37,7 @@ use crate::conflict::{self, Conflict};
 use crate::control::wire::{Command, Rejection, Reply};
 use crate::control::{Connection, Listener};
 use crate::lifecycle::{Event, Lifecycle, Phase};
-use crate::report::report;
+use crate::report::{note, report};
 use crate::signals::{Signal, Signals};
 use crate::state::{self, State};
 use crate::vt::{Displaced, Vt};
@@ -163,7 +163,22 @@ pub fn run(settings: &Settings) -> Outcome {
         Err(why) => return Outcome::NoTheme(why),
     };
     let frames = u32::try_from(boot.frames.len()).unwrap_or(u32::MAX);
-    let resume = state::load(&settings.state, frames, state::now_ms()).unwrap_or(None);
+    let resume = match state::load(&settings.state, frames, state::now_ms()) {
+        Ok(resume) => resume,
+        Err(why) => {
+            // `state::load` documents this as reported, and for a long time it
+            // was not: `unwrap_or(None)` threw away the one sentence that
+            // explains why a splash started over at frame 0 instead of
+            // continuing where the last instance left off. The ordinary boot
+            // has no state file at all and says nothing; this runs only when
+            // there was one and it could not be used, which is never ordinary.
+            // `note`, not `report`: the splash draws either way, so this is
+            // news and not a fault, and the kernel log is shared with everybody
+            // on the machine who is using it to debug something else.
+            note(&format!("{}: ignoring the resume state: {why}", settings.state.display()));
+            None
+        }
+    };
 
     Session::new(settings, boot, resume).run()
 }
