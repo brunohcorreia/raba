@@ -150,6 +150,31 @@ if [ -s /run/raba-watch.log ]; then
         | uniq -c | awk '{printf "%s x%s  ", $2, $1}')"
 fi
 
+# The splash itself, as the kernel had it: the characters that were on the
+# console RABA took, read out of /dev/vcs by the harness's watcher while it was
+# happening. This is the assertion the screenshots were supposed to make and
+# could not — a console with no KMS driver under it is drawn correctly and
+# photographs black, because the emulator is still rendering a video mode the
+# guest stopped using.
+# Every console the kernel has, and what is on it, at the moment the checks run.
+# Reading this costs nothing and answers "was anything ever drawn anywhere" when
+# the watcher comes back empty-handed.
+for console in /dev/vcs[0-9]*; do
+    [ -e "$console" ] || continue
+    echo "#   ${console}: $(wc -c < "$console" 2>&1) bytes, $(tr -cd '[:graph:]' < "$console" 2>/dev/null | wc -c) of them ink"
+done
+if [ -s /run/raba-watch.err ]; then
+    sed 's/^/#   watcher: /' /run/raba-watch.err
+fi
+
+ink=$(cat /run/raba-watch-ink 2>/dev/null || echo 0)
+if [ "${ink:-0}" -gt 200 ]; then
+    tap 0 "the splash was on the console (${ink} characters of art)"
+    head -c 2000 /run/raba-watch-screen.txt 2>/dev/null | sed 's/^/#   |/'
+else
+    tap 1 'the splash was on the console' "only ${ink} characters were ever drawn"
+fi
+
 # What the instance inside the initramfs said, if anything. This is the only
 # window onto the half of the boot that happens before the journal exists.
 if [ -s /run/raba.early.log ]; then

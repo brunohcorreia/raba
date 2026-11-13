@@ -102,6 +102,17 @@ pub enum Outcome {
     NoTerminal(crate::vt::Error),
     /// The theme could not be read or decoded.
     NoTheme(String),
+    /// The art and this console cannot be put together — a console far larger
+    /// than any grid may be, a size the kernel reports as nonsense, a clock that
+    /// will not add up.
+    ///
+    /// Its own outcome because the alternative, found on a Debian machine where
+    /// the splash stopped after two frames and held the screen for the rest of
+    /// the boot, is for `draw` to answer "nothing to report, carry on" and keep
+    /// doing that forever: alive, holding a terminal, answering the socket, and
+    /// never drawing again. Silence is the one thing a boot splash must not do
+    /// when it has somebody's screen.
+    CannotDraw(String),
     /// Something else took the screen while we were drawing, and we left it
     /// alone. See [`Vt::displaced`](crate::vt::Vt::displaced).
     Displaced(Displaced),
@@ -114,6 +125,7 @@ impl std::fmt::Display for Outcome {
             Self::Yielded(why) => write!(f, "not drawing: {why}"),
             Self::NoTerminal(why) => write!(f, "not drawing: {why}"),
             Self::NoTheme(why) => write!(f, "not drawing: {why}"),
+            Self::CannotDraw(why) => write!(f, "stopped drawing: {why}"),
             Self::Displaced(why) => write!(f, "stopped: {why}"),
         }
     }
@@ -402,7 +414,9 @@ impl<'a> Session<'a> {
             Phase::Outro => self.outro.as_ref().unwrap_or(&self.boot),
             _ => &self.boot,
         };
-        let vt = self.vt.as_mut()?;
+        let Some(vt) = self.vt.as_mut() else {
+            return Some(self.give_up("the terminal went away between taking it and drawing on it"));
+        };
 
         // Has the console changed under us? Early in a boot it can: with no
         // graphics driver loaded yet the kernel binds `dummycon`, which answers
@@ -418,12 +432,24 @@ impl<'a> Session<'a> {
         if self.screen != Some(size) {
             self.screen = Some(size);
             if let Some(player) = self.player.as_mut() {
-                player.resize(movie, size)?;
+                if player.resize(movie, size).is_none() {
+                    let why = format!(
+                        "the console became {}x{}, which is not a size art can be laid out at",
+                        size.columns, size.lines
+                    );
+                    return Some(self.give_up(&why));
+                }
             }
         }
 
         if self.player.is_none() {
-            let mut player = Player::new(movie, vt.size())?;
+            let Some(mut player) = Player::new(movie, size) else {
+                let why = format!(
+                    "a {}x{} movie cannot be laid out on a {}x{} console",
+                    movie.columns, movie.lines, size.columns, size.lines
+                );
+                return Some(self.give_up(&why));
+            };
             // The resumed frame, used once and then forgotten: the next release
             // and reacquire is not a resume and starts from the top.
             if let Some(state) = self.resume.take() {
@@ -431,11 +457,18 @@ impl<'a> Session<'a> {
             }
             self.player = Some(player);
         }
-        let player = self.player.as_mut()?;
+        let Some(player) = self.player.as_mut() else {
+            return Some(self.give_up("there is no player, one line after making one"));
+        };
         // `0` loops: the boot animation repeats until something says otherwise,
         // and the outro is bounded by `MaxDuration` rather than by a count.
         match player.step(vt, movie, if self.outro_started.is_some() { 1 } else { 0 }) {
-            Some(hold) => self.next_frame = Instant::now().checked_add(hold)?,
+            Some(hold) => {
+                let Some(next) = Instant::now().checked_add(hold) else {
+                    return Some(self.give_up("the frame delay does not fit in this machine's clock"));
+                };
+                self.next_frame = next;
+            }
             None => {
                 self.advance(Event::OutroEnded);
                 return None;
@@ -444,6 +477,17 @@ impl<'a> Session<'a> {
         self.show_message();
         self.save();
         None
+    }
+
+    /// Stop, and say why.
+    ///
+    /// Everything a clean ending does — the terminal goes back, the state file
+    /// goes, a `quit --wait` gets its EOF — because the console is worth more to
+    /// the person in front of it than a frozen picture is, and because a boot
+    /// that stops being drawn on must not also be a boot that hangs.
+    fn give_up(&mut self, why: &str) -> Outcome {
+        self.finish();
+        Outcome::CannotDraw(why.to_owned())
     }
 
     /// Adopt the terminal from the state file, or take a fresh one.

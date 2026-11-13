@@ -78,6 +78,7 @@ fn main() {
     boot_checks::a_second_instance_yields_to_the_running_one(&mut report);
     boot_checks::a_configuration_file_chooses_the_terminal(&mut report);
     boot_checks::the_splash_leaves_when_the_screen_is_taken(&mut report);
+    boot_checks::the_console_holds_the_art_and_not_a_blank_screen(&mut report);
     boot_checks::a_mistake_reaches_the_kernel_log_and_a_good_boot_does_not(&mut report);
     boot_checks::the_kill_switch_touches_nothing(&mut report);
 

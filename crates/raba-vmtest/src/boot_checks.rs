@@ -511,6 +511,49 @@ fn ours(log: &str) -> usize {
     log.lines().filter(|line| line.contains("raba: ")).count()
 }
 
+/// What is on the console is the art.
+///
+/// Every other check here asks the kernel *about* the terminal — which one is
+/// active, what mode it is in, who has it. None of them asks what is on it, and
+/// that turns out to be a different question: a tier 3b run found a machine
+/// where RABA held the screen for three and a half seconds with the display
+/// switched to its terminal, and the console was blank the whole time.
+///
+/// `/dev/vcsN` is the kernel's own copy of the text on virtual console *N* —
+/// rows times columns of characters, no escape sequences, no scrollback. It is
+/// the one answer that does not depend on a video mode, a framebuffer driver,
+/// or an emulator's idea of what the screen looks like.
+pub fn the_console_holds_the_art_and_not_a_blank_screen(report: &mut Report) {
+    report.check("the characters on the console are the ones that were drawn", || {
+        let control = control()?;
+        let home = active(&control)?;
+        let mut child = start(&["--timeout", "0"]).map_err(|e| format!("starting raba: {e}"))?;
+
+        let outcome = (|| {
+            let taken = wait_for_the_splash(&control, home, &mut child)?;
+            // A frame or two of grace: the switch happens before the first
+            // write lands, and this is a race the real thing also has.
+            std::thread::sleep(Duration::from_millis(250));
+
+            let path = format!("/dev/vcs{taken}");
+            let screen = std::fs::read(&path).map_err(|e| format!("reading {path}: {e}"))?;
+            let ink = screen.iter().filter(|byte| byte.is_ascii_graphic()).count();
+            println!("# {path}: {} bytes, {ink} of them ink", screen.len());
+            if ink < 100 {
+                return Err(format!(
+                    "the console RABA is drawing on holds {ink} printable characters"
+                ));
+            }
+            Ok(())
+        })();
+
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = Command::new(CTL).arg("quit").status();
+        outcome
+    });
+}
+
 /// A person's mistake reaches the kernel log, and a healthy boot does not.
 ///
 /// Two halves of one promise, and neither is worth much without the other. The

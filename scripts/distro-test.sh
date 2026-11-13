@@ -192,11 +192,43 @@ MID
       # on a terminal nobody is looking at is invisible for a reason that no
       # amount of photographing the screen will explain.
       end=$(( $(cut -d. -f1 /proc/uptime) + 12 ))
+      best=0
       while [ "$(cut -d. -f1 /proc/uptime)" -lt "$end" ]; do
-          printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime)" \
-              "$(cat /sys/class/tty/tty0/active 2>/dev/null)" >> /run/raba-watch.log
+          now=$(cat /sys/class/tty/tty0/active 2>/dev/null)
+          printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime)" "$now" >> /run/raba-watch.log
+          # What is *on* that console, read from the kernel's own copy of the
+          # screen rather than from a photograph of the monitor. /dev/vcsN is
+          # the text of virtual console N, and it is the only answer that does
+          # not depend on whether the emulator and the guest agree about the
+          # video mode — which on a machine with no KMS driver in its initramfs
+          # they do not, and a correct splash photographs as a black screen.
+          case "$now" in
+              tty[0-9]*)
+                  n=${now#tty}
+                  # Every console, tty1 included. An earlier version skipped
+                  # tty1 on the assumption that it belongs to the login prompt,
+                  # and reported that nothing was ever drawn on an Arch machine
+                  # whose splash the camera had photographed: with a systemd
+                  # initramfs, RABA adopts the console that is already active,
+                  # and that is tty1. The fullest snapshot wins, so a login
+                  # prompt's handful of characters never displaces a screen of
+                  # art.
+                  if true; then
+                      if ! cat "/dev/vcs$n" > /run/raba-watch-screen.new 2>> /run/raba-watch.err
+                      then
+                          echo "could not read /dev/vcs$n" >> /run/raba-watch.err
+                      fi
+                      ink=$(tr -cd '[:graph:]' < /run/raba-watch-screen.new | wc -c)
+                      if [ "$ink" -gt "$best" ]; then
+                          best=$ink
+                          mv /run/raba-watch-screen.new /run/raba-watch-screen.txt
+                      fi
+                  fi
+                  ;;
+          esac
           sleep 0.1
       done
+      echo "$best" > /run/raba-watch-ink
   - path: /etc/systemd/system/raba-watch.service
     content: |
       [Unit]
