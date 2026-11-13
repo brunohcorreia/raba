@@ -718,3 +718,84 @@ fn a_named_outro_is_looked_for_where_every_other_theme_is() {
         [PathBuf::from("/t/fade.raba")]
     );
 }
+
+/// Every key in `raba.conf`(5), given a value it cannot possibly mean.
+///
+/// This is the whole contract of the lenient parser in one test. A file read
+/// as root, before the root filesystem is mounted, by a program that may not
+/// fail — so for each key the answer has to be the same three things: the
+/// setting keeps its default, the complaint names the section *and* the key,
+/// and every other key in the file is still applied.
+///
+/// One case per key rather than a clever loop over a table of them, because
+/// the thing most likely to go wrong is a key missing from the match in
+/// `set()`, and a loop over a list written next to it would share the mistake.
+#[test]
+fn a_value_no_key_can_mean_is_complained_about_by_name_and_changes_nothing() {
+    // Compared as `Debug`, because `Config` does not derive `PartialEq` and
+    // adding one to shipped code for a test's benefit is the wrong trade.
+    let defaults = format!("{:?}", Config::default());
+    let cases: &[(&str, &str, &str)] = &[
+        ("Boot", "Theme", "../../etc/shadow"),
+        ("Boot", "Tty", "sixty-four"),
+        ("Boot", "ShowDelay", "soon"),
+        ("Boot", "Timeout", "a while"),
+        ("Boot", "FrameRateOverride", "fast"),
+        ("Outro", "Enable", "perhaps"),
+        ("Outro", "Theme", "two words"),
+        ("Outro", "MaxDuration", "briefly"),
+        ("Outro", "FinishFrame", "sometimes"),
+        ("Progress", "Enable", "maybe"),
+        ("Progress", "Style", "barber-pole"),
+        ("Progress", "Source", "vibes"),
+        ("Progress", "Position", "diagonally"),
+        ("Progress", "Width", "wide"),
+        ("Progress", "Color", "puce"),
+        ("Progress", "BackgroundColor", "taupe"),
+        ("Handoff", "Mode", "interpretive-dance"),
+        ("Handoff", "RestoreTty", "if you like"),
+        ("Log", "Level", "shouty"),
+        ("Log", "File", "relative/path.log"),
+    ];
+
+    for (section, key, nonsense) in cases {
+        // A second key after the bad one, so "the parser stopped at the first
+        // problem" shows up as a failure rather than as a pass.
+        let text = format!("[{section}]\n{key} = {nonsense}\n[Boot]\nTty = 9\n");
+        let (config, problems) = parse(&text);
+
+        assert_eq!(problems.len(), 1, "{section}.{key} = {nonsense:?} gave {problems:?}");
+        let said = problems.first().expect("one problem");
+        assert!(said.contains(section), "{said:?} does not name the section");
+        assert!(said.contains(key), "{said:?} does not name the key");
+        assert!(said.contains(nonsense), "{said:?} does not quote what was written");
+        assert_eq!(
+            config.boot.tty,
+            Tty::Fixed(9),
+            "{section}.{key} being wrong stopped the rest of the file being read"
+        );
+    }
+
+    // And none of the above moved a setting off its default, which is the
+    // property that makes a half-broken file safe to boot from.
+    for (section, key, nonsense) in cases {
+        let (config, _) = parse(&format!("[{section}]\n{key} = {nonsense}\n"));
+        assert_eq!(
+            format!("{config:?}"),
+            defaults,
+            "{section}.{key} = {nonsense:?} changed something"
+        );
+    }
+}
+
+#[test]
+fn a_key_that_belongs_to_another_section_is_refused_where_it_does_not_belong() {
+    // `Theme` is a key in both [Boot] and [Outro], and in neither [Progress]
+    // nor [Log]. Accepting it anywhere would make a misplaced line silently
+    // do nothing.
+    let (_, problems) = parse("[Progress]\nTheme = arch\n");
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    let said = problems.first().expect("one problem");
+    assert!(said.contains("Theme"), "{said:?}");
+    assert!(said.contains("Progress"), "{said:?}");
+}

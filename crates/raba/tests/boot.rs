@@ -1234,3 +1234,44 @@ fn an_outro_that_is_not_a_raba_file_is_skipped_the_same_way() {
     assert!(matches!(outcome, Outcome::Finished), "{outcome:?}");
     assert_eq!(console.log().restored, 1);
 }
+
+#[test]
+fn an_outro_that_would_outlast_its_ceiling_is_cut_off_by_it() {
+    // `the_outro_plays_once_and_is_bounded_by_its_own_ceiling` above proves the
+    // ordinary case, where a short looping outro finishes on its own. This is
+    // the case the ceiling exists for: one frame, held for ten seconds. Without
+    // `Outro.MaxDuration` the handoff would hold the screen for all of it, and
+    // `raba-ctl quit --wait` — which a display manager's ExecStartPost blocks
+    // on — would not return until it was over.
+    let scratch = Scratch::new("outro-ceiling");
+    let mut settings = scratch.settings();
+    let outro = scratch.path("outro.raba");
+    let mut slow = frames_of(&['X']);
+    slow.looping = false;
+    if let Some(frame) = slow.frames.first_mut() {
+        frame.delay_ms = 10_000;
+    }
+    std::fs::write(&outro, raba_core::encode(&slow)).expect("writing the outro");
+    settings.outro = Some(outro);
+    settings.max_duration = Duration::from_millis(120);
+
+    let console = Fake::new();
+    let running = Running::start(settings, console.clone());
+    until("a boot frame", || !console.log().frames.is_empty());
+
+    let asked = std::time::Instant::now();
+    assert_eq!(running.ask("quit"), "+OK\n");
+    let outcome = running.finish();
+    let took = asked.elapsed();
+
+    assert!(matches!(outcome, Outcome::Finished), "{outcome:?}");
+    assert!(
+        took < Duration::from_secs(5),
+        "the ten-second frame was waited out: quit took {took:?}"
+    );
+    assert!(
+        console.written().windows(1).any(|w| w == b"X"),
+        "the outro was cut off before it drew anything at all"
+    );
+    assert_eq!(console.log().restored, 1, "the console was not handed back");
+}
