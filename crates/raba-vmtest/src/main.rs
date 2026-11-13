@@ -28,6 +28,7 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 mod checks;
+mod hold;
 mod report;
 mod shutdown;
 mod vt_checks;
@@ -35,6 +36,14 @@ mod vt_checks;
 use report::Report;
 
 fn main() {
+    // One argument, and it is not a test run: the guest re-executes itself to get
+    // a *second process* holding a terminal, which is the only way to ask what
+    // `SIGKILL` leaves behind. See `hold`.
+    if std::env::args().nth(1).as_deref() == Some(hold::FLAG) {
+        hold::hold_a_terminal();
+        return;
+    }
+
     let mut report = Report::new();
 
     // Nothing works before this: no /proc means no /proc/consoles, and no
@@ -57,6 +66,8 @@ fn main() {
     vt_checks::the_screen_being_taken_is_refused_rather_than_fought_over(&mut report);
     vt_checks::restoring_twice_is_harmless(&mut report);
     vt_checks::the_terminal_is_deallocated_afterwards(&mut report);
+    vt_checks::kernel_messages_are_moved_aside_and_put_back(&mut report);
+    vt_checks::being_killed_mid_frame_leaves_a_usable_terminal(&mut report);
 
     checks::a_deliberate_failure_is_reported(&mut report);
 

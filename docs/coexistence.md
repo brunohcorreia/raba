@@ -218,6 +218,13 @@ is simply blank and the user still knows nothing.
 Exit still happens when told to, or when the handoff completes. The timeout is not a
 shutdown, it is a surrender.
 
+As implemented in M3, "redirected away" means to **the terminal the user came from** —
+not to nowhere. So the messages that explain a stall are not lost while the splash is up;
+they are already on the terminal the display returns to. That is deliberate: it is also
+what makes the case RABA cannot clean up after — being killed outright — leave the user
+somewhere useful rather than somewhere silent. See
+[milestones.md](milestones.md#where-the-kernel-prints).
+
 This matters for an environment that is easy to overlook: a root filesystem over NFS or
 iSCSI, or a large degraded RAID, can legitimately take minutes. A 30-second timeout that
 exits would have killed the splash of a perfectly healthy boot. A timeout that reveals the

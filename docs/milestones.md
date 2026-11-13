@@ -252,8 +252,8 @@ this is written.**
 | 3 | `VT_OPENQRY` to acquire a free terminal — never hardcode tty1 | done |
 | 4 | Draw, and restore on **every** exit path including panic | done |
 | 5 | Detect a terminal already in `KD_GRAPHICS` and yield | done |
-| 6 | `TIOCL_SETKMSGREDIRECT` to move kernel messages aside; restore exactly | |
-| 7 | `SIGKILL` mid-frame leaves a usable terminal — the test that matters most | |
+| 6 | `TIOCL_SETKMSGREDIRECT` to move kernel messages aside; restore exactly | done |
+| 7 | `SIGKILL` mid-frame leaves a usable terminal — the test that matters most | done |
 
 ### The harness, first
 
@@ -295,7 +295,8 @@ leave wrong is confined to a terminal that is about to be handed back, and the u
 terminal is untouched apart from being switched away from. "Killed mid-frame leaves a
 usable terminal" is then true by construction rather than by careful unwinding.
 
-Seven checks in the guest, and the first run found two things:
+Nineteen checks in the guest, and they keep finding things. The first run of the VT
+checks found two:
 
 - **`O_NOCTTY`.** RABA is PID 1 in an initramfs, which makes it a session leader with no
   controlling terminal — and a session leader that opens a terminal without that flag
@@ -305,6 +306,54 @@ Seven checks in the guest, and the first run found two things:
   until the release completes a moment later. Every run was leaking its terminal. The fix
   is to wait, and the guest measures the real number on each run against a 10ms line, so
   the budget stops being a guess the moment a kernel changes it.
+
+### Where the kernel prints
+
+A splash takes the foreground, and by default the kernel prints on whichever
+terminal is in the foreground — so without `TIOCL_SETKMSGREDIRECT` every
+`EXT4-fs` and `usb 1-1` line lands on top of the art. RABA points them at the
+terminal the user came from, and puts the old value back on the way out.
+
+Two things make this different from the other ioctls here. It is **one global in
+the kernel**, not a property of a file descriptor, so "restore" means putting
+back the value that was there rather than setting it to zero. And it is the one
+piece of state that outlives a `SIGKILL`: if RABA is killed, the redirect stays.
+Pointing it at the user's own terminal is what makes that harmless — the messages
+are waiting on the terminal they land on, rather than being thrown at a terminal
+that no longer exists.
+
+It cost two wrong implementations, both of which compiled, succeeded and reported
+zero forever. `TIOCL_SETKMSGREDIRECT` reads its argument from byte 1 of the
+buffer, but `TIOCL_GETKMSGREDIRECT` writes its answer back over **byte 0** — the
+subcode byte itself. Writing the reader by symmetry with the writer is wrong, and
+so is assuming it answers in the return value the way `TIOCL_GETFGCONSOLE` does.
+Only reading `vt.c` settled it. The check is written so that the ioctl pair is
+exercised directly *before* it is exercised through `Vt`, because `Vt` swallows a
+failure here on purpose — a splash must still draw when it may not move the
+messages — and a check that went only through `Vt` reports "it did not move them"
+without being able to say why.
+
+### Killed mid-frame
+
+The claim the whole module is arranged around cannot be tested in-process:
+`SIGKILL` cannot be caught, so a test that sent it to itself would have nobody
+left to report the answer. The guest therefore re-executes itself with
+`--hold-a-terminal`; that child takes a terminal and draws in a loop, the parent
+waits until the display is actually on it — polling `VT_GETSTATE` rather than
+sleeping, so the victim is killed mid-frame and not mid-startup — and then kills
+it and asks the questions that mean "usable" on a console whose owner no longer
+exists:
+
+- the screen is still in `KD_TEXT`, so there is something to see;
+- the keyboard mode is unchanged and still one a person can type in;
+- the orphaned terminal still opens and still accepts a write;
+- `VT_ACTIVATE` away from it completes rather than being quietly queued forever;
+- the stranded kernel-message redirect points at the terminal the user is on.
+
+This found the one assertion in the set that was wrong: a modern console comes up
+in `K_UNICODE`, not `K_XLATE`, so insisting on `K_XLATE` was asserting a 1990s
+kernel. The check now holds the stronger and more honest property — the mode is
+whatever it was before, and it is one somebody can type in.
 
 ### Tier 2 found two bugs on its first run
 

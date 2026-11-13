@@ -265,3 +265,196 @@ pub fn a_terminal_comes_back_quickly_after_a_switch(report: &mut Report) {
         Err(format!("still busy after {:?}", start.elapsed()))
     });
 }
+
+/// Kernel messages are moved off the splash, and put back exactly.
+///
+/// `TIOCL_SETKMSGREDIRECT` is a single global in the kernel rather than a
+/// property of a file descriptor, so "put it back" means "put back the value
+/// that was there", not "set it to zero". Checking the restore is the half that
+/// matters: setting it wrong makes an untidy splash, and leaving it set wrong
+/// makes a machine where kernel messages print somewhere nobody is looking,
+/// which is the kind of thing found months later by somebody debugging a disk.
+///
+/// This would fail on a kernel built without `CONFIG_VT_CONSOLE`, where the
+/// redirect is a no-op that always reads back `0`. The guest's kernel is the
+/// host's, so that is a real thing to see one day rather than a hypothetical —
+/// and failing is right: RABA tolerates it, but a harness that shrugged at it
+/// would also shrug at the redirect being genuinely broken.
+pub fn kernel_messages_are_moved_aside_and_put_back(report: &mut Report) {
+    report.check("kernel messages move off the splash and go back where they were", || {
+        let control = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty0")
+            .map_err(|e| format!("opening /dev/tty0: {e}"))?;
+        let before = ioctl::kmsg_redirect(&control).map_err(|e| format!("TIOCL_GET: {e}"))?;
+
+        // The pair is exercised directly before it is exercised through `Vt`,
+        // because `Vt` swallows a failure here by design — a splash must draw
+        // even when it may not move the messages — and a check that went through
+        // it would report "it did not move them" for a reason it cannot see.
+        ioctl::set_kmsg_redirect(&control, 1).map_err(|e| format!("TIOCL_SETKMSGREDIRECT: {e}"))?;
+        let probe = ioctl::kmsg_redirect(&control).map_err(|e| format!("TIOCL_GET: {e}"))?;
+        if probe != 1 {
+            return Err(format!("set the redirect to tty1 and read back tty{probe}"));
+        }
+        ioctl::set_kmsg_redirect(&control, before).map_err(|e| format!("TIOCL_SET back: {e}"))?;
+
+        let vt = Vt::acquire().map_err(|e| format!("acquiring: {e}"))?;
+        let (number, previous) = (vt.number(), vt.previous());
+        let during = ioctl::kmsg_redirect(&control).map_err(|e| format!("TIOCL_GET: {e}"))?;
+        println!("# kmsg redirect {before} -> {during} (drawing on tty{number})");
+
+        if u16::from(during) != previous {
+            drop(vt);
+            return Err(format!(
+                "messages go to tty{during}, but the user came from tty{previous}"
+            ));
+        }
+        if u16::from(during) == number {
+            drop(vt);
+            return Err(format!("messages go to tty{number}, which is the splash"));
+        }
+        drop(vt);
+
+        let after = ioctl::kmsg_redirect(&control).map_err(|e| format!("TIOCL_GET: {e}"))?;
+        if after != before {
+            return Err(format!("left the redirect on tty{after}, not tty{before}"));
+        }
+        Ok(())
+    });
+}
+
+/// The one that matters: `SIGKILL` mid-frame leaves a machine somebody can use.
+///
+/// Nothing in RABA runs after a `SIGKILL`. There is no handler, no `Drop`, no
+/// atexit — the process stops between two bytes of a frame and the kernel is left
+/// holding whatever it was holding. So this check does not test cleanup code; it
+/// tests that there was never anything that *needed* cleaning up, which is the
+/// claim `raba::vt` makes about itself in its module documentation.
+///
+/// "Usable" is spelled out rather than assumed, because the ways a console dies
+/// are specific: a screen in graphics mode showing nothing, a keyboard in `K_RAW`
+/// that types nothing, a VT switch that silently does not happen, and a terminal
+/// the kernel will never hand back. Each is asserted here on a console whose
+/// owner was killed a moment ago.
+pub fn being_killed_mid_frame_leaves_a_usable_terminal(report: &mut Report) {
+    report.check("a terminal whose owner was SIGKILLed mid-frame is still usable", || {
+        let control = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty0")
+            .map_err(|e| format!("opening /dev/tty0: {e}"))?;
+        let home = ioctl::get_state(&control).map_err(|e| format!("VT_GETSTATE: {e}"))?.active;
+        let kmsg = ioctl::kmsg_redirect(&control).map_err(|e| format!("TIOCL_GET: {e}"))?;
+        let keyboard_before =
+            ioctl::get_keyboard_mode(&control).map_err(|e| format!("KDGKBMODE: {e}"))?;
+
+        // `/proc/self/exe`, not `/init`: the guest is installed under whatever
+        // name the host script chose, and a hardcoded path here would turn a
+        // rename into a mysterious failure of the most important check.
+        let me = std::env::current_exe().map_err(|e| format!("finding this binary: {e}"))?;
+        let mut child = std::process::Command::new(&me)
+            .arg(crate::hold::FLAG)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("spawning the victim: {e}"))?;
+
+        // Wait for it to be *on screen*, which is the only evidence that it is
+        // mid-frame rather than mid-startup. Polling the display beats a sleep:
+        // a sleep that is too short kills a process that has not drawn yet, and
+        // the check would then pass for the wrong reason.
+        let mut taken = home;
+        for _ in 0..500u32 {
+            if let Ok(Some(status)) = child.try_wait() {
+                return Err(format!("the victim exited before drawing ({status})"));
+            }
+            let active =
+                ioctl::get_state(&control).map_err(|e| format!("VT_GETSTATE: {e}"))?.active;
+            if active != home {
+                taken = active;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        if taken == home {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("the victim never took the display".to_owned());
+        }
+
+        // `Child::kill` is SIGKILL on Unix, which is the signal with no handler
+        // and no grace period. The process is drawing a frame as it arrives.
+        child.kill().map_err(|e| format!("SIGKILL: {e}"))?;
+        let status = child.wait().map_err(|e| format!("reaping: {e}"))?;
+        println!("# victim held tty{taken}, killed: {status}");
+
+        // Everything from here is asked of a console nobody owns any more.
+        let orphan = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(format!("/dev/tty{taken}"))
+            .map_err(|e| format!("the dead process's tty{taken} will not open: {e}"))?;
+
+        let mode = ioctl::get_mode(&orphan).map_err(|e| format!("KDGETMODE: {e}"))?;
+        if mode != ioctl::KD_TEXT {
+            return Err(format!("tty{taken} is in mode {mode}, not KD_TEXT: the screen is dead"));
+        }
+        let keyboard = ioctl::get_keyboard_mode(&orphan).map_err(|e| format!("KDGKBMODE: {e}"))?;
+        if keyboard != keyboard_before {
+            return Err(format!(
+                "the keyboard mode went from {keyboard_before} to {keyboard}; \
+                 RABA is supposed never to touch it"
+            ));
+        }
+        if !ioctl::is_typable(keyboard) {
+            return Err(format!("the keyboard is in mode {keyboard}: nobody can type"));
+        }
+        // It still draws. A console that passes its ioctls and swallows writes is
+        // the same thing as a dead one from in front of the machine.
+        {
+            use std::io::Write as _;
+            let mut orphan = &orphan;
+            orphan
+                .write_all(b"\x1b[0m\x1b[H\x1b[2Jraba: the owner of this terminal was killed\r\n")
+                .map_err(|e| format!("writing to tty{taken}: {e}"))?;
+        }
+
+        // And the user can get away from it, which is the thing they will
+        // actually try. A switch that is merely queued and never happens is the
+        // failure this waits for rather than assumes.
+        ioctl::activate(&control, home)
+            .map_err(|e| format!("VT_ACTIVATE back to tty{home}: {e}"))?;
+        ioctl::wait_active(&control, home)
+            .map_err(|e| format!("the display will not leave tty{taken}: {e}"))?;
+
+        // The dead process's redirect is still in place, and that is the designed
+        // outcome rather than a leak: it points at the terminal the user is on.
+        let stranded = ioctl::kmsg_redirect(&control).map_err(|e| format!("TIOCL_GET: {e}"))?;
+        if u16::from(stranded) != home {
+            return Err(format!(
+                "kernel messages were left pointing at tty{stranded}, not at tty{home} \
+                 where the user is"
+            ));
+        }
+
+        // Put the guest back the way it was, so the checks after this one are not
+        // reading this one's wreckage.
+        drop(orphan);
+        let returned = {
+            let mut outcome = Err("still busy".to_owned());
+            for _ in 0..200u32 {
+                if ioctl::disallocate(&control, taken).is_ok() {
+                    outcome = Ok(());
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_micros(500));
+            }
+            outcome
+        };
+        returned.map_err(|e| format!("tty{taken} could not be reclaimed: {e}"))?;
+        ioctl::set_kmsg_redirect(&control, kmsg).map_err(|e| format!("TIOCL_SET: {e}"))?;
+        Ok(())
+    });
+}

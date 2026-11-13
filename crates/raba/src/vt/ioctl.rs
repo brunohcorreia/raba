@@ -8,12 +8,13 @@
 //!
 //! The VT and KD requests predate `_IOC` by about a decade, so their numbers carry
 //! no direction and no argument size — `VT_ACTIVATE` is simply `0x5606`. There is
-//! nothing to derive them from; they are copied from `linux/vt.h` and `linux/kd.h`
-//! and must be read against those headers rather than against a macro.
+//! nothing to derive them from; they are copied from `linux/vt.h`, `linux/kd.h`,
+//! `linux/tiocl.h` and `asm-generic/ioctls.h`, and must be read against those
+//! headers rather than against a macro.
 //!
 //! # What makes each call sound
 //!
-//! Two shapes, and the distinction is the whole safety argument.
+//! Three shapes, and the distinction is the whole safety argument.
 //!
 //! - **Integer requests** (`VT_ACTIVATE`, `KDSETMODE`) pass the value *in* the
 //!   argument register. The kernel never dereferences it, so there is no pointer
@@ -22,6 +23,20 @@
 //!   kernel a pointer to write through. Soundness needs the pointed-to type to be
 //!   exactly what the kernel writes, which is stated at each one against the
 //!   kernel source that writes it.
+//! - **`TIOCLINUX`**, which is a family rather than a request: the *subcode* is
+//!   the first byte of a buffer we fill in, so `Getter` is wrong for it — that
+//!   passes uninitialised storage, and the kernel reads the subcode before it
+//!   decides what to do. These use `Updater`, which passes a buffer we filled.
+//!
+//! `TIOCLINUX` is also where the one genuinely surprising detail is, and it cost
+//! two wrong implementations to find. The subcodes do not agree on where the
+//! answer goes: `TIOCL_SETKMSGREDIRECT` reads its argument from **byte 1**, but
+//! `TIOCL_GETKMSGREDIRECT` writes its answer back over **byte 0** — the subcode
+//! byte itself (`vt.c`: `data = vt_get_kmsg_redirect(); return put_user(data, p)`,
+//! where `p` is the start of the buffer and `param` is `arg + 1`). A reader that
+//! looks at byte 1 by symmetry with the setter compiles, succeeds, and reports
+//! zero forever. `tiocl.h` hints at it — "these two don't return a value: they
+//! write it back in the type" — against the wrong two subcodes.
 //!
 //! `fd` being a console is *not* a safety requirement: an ioctl on the wrong kind
 //! of file returns `ENOTTY`, which is an error and not undefined behaviour.
@@ -45,11 +60,39 @@ const VT_DISALLOCATE: Opcode = 0x5608;
 // linux/kd.h
 const KDSETMODE: Opcode = 0x4b3a;
 const KDGETMODE: Opcode = 0x4b3b;
+const KDGKBMODE: Opcode = 0x4b44;
+
+// asm-generic/ioctls.h. One request number for a family: the *subcode* is the
+// first byte of the buffer, not part of the number.
+const TIOCLINUX: Opcode = 0x541c;
+
+// linux/tiocl.h. `GET` is 17 and not 12 — 12 is `TIOCL_GETFGCONSOLE`, which also
+// answers with a terminal number, so swapping them reads the foreground console
+// and calls it the redirect.
+const TIOCL_SETKMSGREDIRECT: u8 = 11;
+const TIOCL_GETKMSGREDIRECT: u8 = 17;
 
 /// `KD_TEXT`: the console draws characters. The only mode RABA ever sets.
 pub const KD_TEXT: i32 = 0x00;
 /// `KD_GRAPHICS`: something owns the framebuffer and the console draws nothing.
 pub const KD_GRAPHICS: i32 = 0x01;
+
+/// `K_XLATE`: keystrokes arrive as characters from the loaded keymap.
+pub const K_XLATE: i32 = 0x01;
+/// `K_UNICODE`: as `K_XLATE`, but UTF-8. The default on a modern console, so a
+/// check that insisted on `K_XLATE` would be asserting a 1990s kernel.
+pub const K_UNICODE: i32 = 0x03;
+
+/// Whether a console in this keyboard mode is one a person can type on.
+///
+/// The modes that are not are `K_RAW` and `K_MEDIUMRAW`, where keystrokes arrive
+/// as scancodes for a program that is no longer running, and `K_OFF`, where they
+/// arrive nowhere. RABA has no way to set any of them — see
+/// [`get_keyboard_mode`] — and this is how the tests say so.
+#[must_use]
+pub const fn is_typable(mode: i32) -> bool {
+    matches!(mode, K_XLATE | K_UNICODE)
+}
 
 /// `struct vt_stat` from `linux/vt.h`.
 ///
@@ -149,4 +192,56 @@ pub fn set_mode<F: AsFd>(fd: F, mode: i32) -> Result<(), Errno> {
             ioctl::IntegerSetter::<KDSETMODE>::new_usize(usize::try_from(mode).unwrap_or(0)),
         )
     }
+}
+
+/// Which terminal the kernel prints its messages on.
+///
+/// `0` means "whichever one is displayed", which is the default and the reason
+/// this matters at all: a splash takes the foreground, so by default every
+/// `EXT4-fs` and `usb 1-1` line lands on top of the art.
+///
+/// Note that this is **one global in the kernel**, not a property of `fd`
+/// (`vt.c`: `static int kmsg_con` inside `vt_kmsg_redirect`). It is shared with
+/// whatever else on the machine has an opinion about it, which is why RABA reads
+/// the old value and puts that exact value back rather than assuming zero.
+///
+/// On a kernel built without `CONFIG_VT_CONSOLE` the whole thing is a no-op that
+/// always answers `0` — harmless here, since the splash does not depend on it.
+pub fn kmsg_redirect<F: AsFd>(fd: F) -> Result<u8, Errno> {
+    let mut buffer = [TIOCL_GETKMSGREDIRECT, 0];
+    // SAFETY: TIOCLINUX reads the subcode from the first byte of the buffer, and
+    // for this subcode writes one byte back over that same first byte (`vt.c`:
+    // `put_user(data, p)`). `Updater` is the pattern for a buffer the kernel both
+    // reads and writes, and two bytes is more than this arm touches.
+    unsafe { ioctl::ioctl(fd, ioctl::Updater::<TIOCLINUX, [u8; 2]>::new(&mut buffer))? };
+    let [terminal, _unused] = buffer;
+    Ok(terminal)
+}
+
+/// Print kernel messages on a given terminal instead of on the displayed one.
+///
+/// Needs `CAP_SYS_ADMIN`, and `TIOCLINUX` as a whole needs `CAP_SYS_TTY_CONFIG`
+/// when the file descriptor is not the caller's controlling terminal — which
+/// RABA's never is, because it opens consoles with `O_NOCTTY`. Both hold for PID
+/// 1 in an initramfs and neither holds for a normal user, so the caller treats a
+/// failure here as "messages stay where they are", never as a reason not to draw.
+pub fn set_kmsg_redirect<F: AsFd>(fd: F, terminal: u8) -> Result<(), Errno> {
+    let mut buffer = [TIOCL_SETKMSGREDIRECT, terminal];
+    // SAFETY: as `kmsg_redirect`. For this subcode the kernel only reads the
+    // second byte (`vt.c`: `get_user(data, p + 1); vt_kmsg_redirect(data)`), so
+    // the buffer is written by us and left alone by it.
+    unsafe { ioctl::ioctl(fd, ioctl::Updater::<TIOCLINUX, [u8; 2]>::new(&mut buffer)) }
+}
+
+/// What the keyboard is doing: [`K_XLATE`] on any console anybody can type on.
+///
+/// RABA has no setter for this on purpose. A console left in `K_RAW` by a process
+/// that died is a machine whose owner cannot type, and since `SIGKILL` cannot be
+/// caught the only reliable way not to leave it that way is never to set it. This
+/// reader exists so that "never" can be checked rather than asserted.
+pub fn get_keyboard_mode<F: AsFd>(fd: F) -> Result<i32, Errno> {
+    // SAFETY: KDGKBMODE writes one `int` through the argument pointer
+    // (`vt_ioctl.c`: `setint:` ... `put_user(ucval, (int __user *)arg)`), as
+    // KDGETMODE does.
+    unsafe { ioctl::ioctl(fd, ioctl::Getter::<KDGKBMODE, i32>::new()) }
 }

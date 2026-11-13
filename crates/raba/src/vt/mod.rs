@@ -21,8 +21,15 @@
 //!   a terminal that is about to be given back, and the terminal the user was on
 //!   is untouched apart from being switched away from.
 //!
-//! What is left to restore is therefore small: which terminal is displayed, and
-//! the terminal we borrowed. [`Vt::restore`] does both, is safe to call twice, and
+//! The one thing it does reach outside its own terminal for is where the kernel
+//! prints. `TIOCL_SETKMSGREDIRECT` is a single global in the kernel, not a
+//! property of a file descriptor, so RABA reads the old value and puts that exact
+//! value back — and points it at the terminal the user came from, so that if RABA
+//! is killed and never restores it, the messages are waiting on the terminal the
+//! user lands on rather than lost or aimed at a terminal that no longer exists.
+//!
+//! What is left to restore is therefore small: which terminal is displayed, where
+//! kernel messages print, and the terminal we borrowed. [`Vt::restore`] does both, is safe to call twice, and
 //! carries on when a step fails — a restore that gives up halfway is exactly how a
 //! console ends up stranded.
 //!
@@ -92,6 +99,33 @@ fn give_back<F: rustix::fd::AsFd>(control: F, number: u16) -> Result<(), rustix:
     }
 }
 
+/// Move kernel messages off the terminal RABA is about to draw on.
+///
+/// Returns what the redirect was set to, and `None` when nothing was changed and
+/// so nothing needs putting back.
+///
+/// `aside` is the terminal the user was on, which is the only sensible target:
+/// it exists, RABA never deallocates it, and it is where the user ends up — so
+/// an `EXT4-fs error` that printed while the splash was up is still on screen
+/// when they get there. Aiming them at the borrowed terminal instead would hide
+/// them behind a terminal that is about to cease to exist.
+///
+/// Every failure is silent and harmless. Without `CAP_SYS_ADMIN` the messages
+/// simply stay where they were, which costs a tidy splash and nothing else; a
+/// splash that refused to draw over it would be trading the whole feature for
+/// one of its details.
+fn move_kernel_messages(control: &File, aside: u16) -> Option<u8> {
+    // The kernel's field is one byte, and 0 is not a terminal — it is the
+    // "follow the display" default, which is the thing being moved away from.
+    let aside = u8::try_from(aside).ok().filter(|number| *number > 0)?;
+    let before = ioctl::kmsg_redirect(control).ok()?;
+    if before == aside {
+        return None;
+    }
+    ioctl::set_kmsg_redirect(control, aside).ok()?;
+    Some(before)
+}
+
 fn open_console(path: &str) -> io::Result<File> {
     OpenOptions::new()
         .read(true)
@@ -144,6 +178,10 @@ pub struct Vt {
     number: u16,
     /// The terminal that was displayed when we arrived, to go back to.
     previous: u16,
+    /// Where kernel messages printed before we moved them, if we moved them.
+    /// `None` means there is nothing to put back — either the redirect already
+    /// pointed where we wanted it, or we were not allowed to change it.
+    kmsg: Option<u8>,
     restored: bool,
 }
 
@@ -175,7 +213,12 @@ impl Vt {
         let path = format!("/dev/tty{number}");
         let terminal = open_console(&path).map_err(|e| Error::Open(number, e))?;
 
-        let mut vt = Vt { control, terminal, number, previous, restored: false };
+        // Before the switch, not after: between `VT_ACTIVATE` and this call the
+        // display would already be ours, and a message arriving in that window
+        // would print on top of the first frame.
+        let kmsg = move_kernel_messages(&control, previous);
+
+        let mut vt = Vt { control, terminal, number, previous, kmsg, restored: false };
 
         // From here on a failure has to undo what has already been done, which is
         // what `restore` is for. It is why the struct is built before the switch.
@@ -262,6 +305,13 @@ impl Surface for Vt {
 
         note(ioctl::activate(&self.control, self.previous));
         note(ioctl::wait_active(&self.control, self.previous));
+
+        // After the switch, never before. The saved value is often 0, which means
+        // "print on whichever terminal is displayed" — putting that back while the
+        // display is still ours aims the next message at the splash.
+        if let Some(before) = self.kmsg.take() {
+            note(ioctl::set_kmsg_redirect(&self.control, before));
+        }
 
         // `VT_DISALLOCATE` refuses a terminal that is still open, so the handle
         // goes first. Replacing it keeps `self` whole rather than needing an
