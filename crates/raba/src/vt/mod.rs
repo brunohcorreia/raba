@@ -345,6 +345,103 @@ impl Vt {
     pub fn mode(&self) -> Result<i32, Error> {
         ioctl::get_mode(&self.terminal).map_err(|e| Error::Ioctl("KDGETMODE", e))
     }
+
+    /// Has something else taken the screen?
+    ///
+    /// Two ways for that to be true, and a splash has to notice both:
+    ///
+    /// - the display moved to another terminal. A display manager that takes a
+    ///   VT of its own, a compositor started from a login on tty1, or a person
+    ///   pressing Ctrl+Alt+F2 because the boot looks stuck.
+    /// - *our* terminal went into graphics mode. That is what a compositor
+    ///   taking the terminal we are on looks like — there is no switch to see,
+    ///   the mode under us changes. `docs/coexistence.md` uses the same check
+    ///   to decide not to start.
+    ///
+    /// This is how the splash ends on a machine with no display manager and no
+    /// way to call `raba-ctl`: the control socket is root-only on purpose, and
+    /// widening it so a user session could say "quit" would trade the most
+    /// sensitive boundary in the program for a convenience the kernel already
+    /// provides. Nothing here is specific to systemd, to Wayland or to any
+    /// display manager, which is the whole reason it is this check and not an
+    /// integration.
+    ///
+    /// An ioctl that fails answers `None`: a question that cannot be asked is
+    /// not evidence that the screen was taken, and the clock is the backstop.
+    #[must_use]
+    pub fn displaced(&self) -> Option<Displaced> {
+        if ioctl::get_mode(&self.terminal).is_ok_and(|mode| mode == ioctl::KD_GRAPHICS) {
+            return Some(Displaced::Graphics);
+        }
+        match ioctl::get_state(&self.control) {
+            Ok(state) if state.active != self.number => Some(Displaced::Switched(state.active)),
+            _ => None,
+        }
+    }
+
+    /// Give the terminal up without taking the screen back.
+    ///
+    /// The counterpart to [`restore`](Vt::restore) for the case [`displaced`]
+    /// reports: something else is on the screen now, and every step `restore`
+    /// takes to put the display back would take it away from whatever just
+    /// arrived. So no `VT_ACTIVATE`, no mode change, no escape sequence written
+    /// to a terminal that may be mid-handover.
+    ///
+    /// Two things still happen, because they are ours to undo: kernel messages
+    /// go back where they were printing, and a terminal we opened and nobody
+    /// took is handed back to the kernel. A terminal that went into graphics
+    /// mode is *not* handed back — somebody is using it.
+    ///
+    /// [`displaced`]: Vt::displaced
+    pub fn relinquish(&mut self, why: Displaced) -> io::Result<()> {
+        if self.restored {
+            return Ok(());
+        }
+        self.restored = true;
+
+        let mut first: Option<io::Error> = None;
+        let mut note = |result: Result<(), rustix::io::Errno>| {
+            if let Err(errno) = result {
+                if first.is_none() {
+                    first = Some(io::Error::from(errno));
+                }
+            }
+        };
+
+        if let Some(before) = self.kmsg.take() {
+            note(ioctl::set_kmsg_redirect(&self.control, before));
+        }
+        if let Ok(null) = File::open("/dev/null") {
+            drop(std::mem::replace(&mut self.terminal, null));
+        }
+        if matches!(why, Displaced::Switched(_)) {
+            note(give_back(&self.control, self.number));
+        }
+
+        match first {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Why the screen stopped being ours. See [`Vt::displaced`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Displaced {
+    /// The display is on another terminal now, this one.
+    Switched(u16),
+    /// Our own terminal is in graphics mode: something is drawing on it that is
+    /// not us.
+    Graphics,
+}
+
+impl fmt::Display for Displaced {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Switched(active) => write!(f, "the display moved to tty{active}"),
+            Self::Graphics => write!(f, "the terminal went into graphics mode"),
+        }
+    }
 }
 
 impl Surface for Vt {

@@ -717,7 +717,7 @@ maintainer could package and default to". Everything that is not that waits.
 |---|---|---|
 | 1 | A PKGBUILD that builds and installs: `raba`, `raba-themes`, `raba-gen` | done |
 | 2 | A fallback theme in the `raba` package, so an unknown distribution still draws | done |
-| 3 | Hold the screen from boot until the compositor has drawn, with no display manager in between | |
+| 3 | Hold the screen from boot until the compositor has drawn, with no display manager in between | done |
 | 4 | One real Arch VM, mkinitcpio + systemd, boot to login | |
 | 5 | Tag 0.1.0, release notes, publish to the AUR | |
 
@@ -741,8 +741,35 @@ is deciding *who calls quit* when there is no `display-manager.service` to hang 
 and documenting that path. The first one is the large, dangerous one — see
 [luks.md](luks.md) — and is deliberately deferred.
 
-Research into how Omarchy actually arranges this has not been done. Saying so is better
-than assuming.
+Researched 13 Nov 2026, and the premise needed correcting: **Omarchy today uses SDDM.**
+Its `quattro` branch enables `sddm.service`, runs it on Wayland with Hyprland as the
+greeter compositor (`etc/sddm.conf.d/10-wayland.conf`), and uses Plymouth only for the
+theme and the passphrase (`etc/plymouth/plymouthd.conf`). The `seamless-login` helper —
+a small C program imitating SDDM's VT handling so no console shows — belongs to older
+versions and to forks. So the no-display-manager path is a configuration RABA should
+support well, not the thing Omarchy is currently doing.
+
+### How row 3 was answered
+
+Three ways to end a splash when there is no display manager to hang a unit off:
+
+| | |
+|---|---|
+| the splash notices it lost the screen | no new privilege, no configuration, works under every init and every compositor |
+| open `quit` to the logged-in user | exact instant, at the cost of widening the most dangerous boundary in the program |
+| the timeout alone | not a handoff, a clock |
+
+The first. `raba` asks the kernel, once per slice, whether its terminal is still the
+displayed one and whether it is still in text mode; either answer changing means
+something else has the screen. It then leaves *quietly* — no switch back, no mode
+change, nothing written — because every step of a normal restore would take the screen
+from whatever just took it. `docs/security.md` records the refusal of the second option
+next to the finding it would have weakened.
+
+The tier 3a check is the shape of the promise: switch the display to a *third* terminal,
+not home, and assert that after `raba` exits the display is still there. Switching home
+would have proved nothing, because a normal restore ends there too. It notices in about
+15 ms.
 
 ---
 

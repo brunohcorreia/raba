@@ -119,6 +119,27 @@ silently.
 	itself on startup, so this only affects messages emitted before it runs. The
 	parameters must appear in this order.
 
+# WHEN THE SCREEN CHANGES HANDS
+
+*raba* watches the virtual terminal it borrowed. It stops drawing and exits when
+either of two things happens:
+
+- the display moves to another terminal — a display manager taking one of its own,
+  a compositor started from a login, or somebody pressing *Ctrl+Alt+F2*;
+- the terminal *raba* is on enters *KD_GRAPHICS* mode, which is what a compositor
+  taking that same terminal looks like from here.
+
+It leaves quietly: no switch back to the original terminal, no mode change, nothing
+written to the console. Every one of those would take the screen away from whatever
+has just taken it. Kernel message redirection is put back, because that is *raba*'s
+to undo.
+
+This is the whole handoff on a machine with no display manager. The control socket is
+root-only (*raba-ctl*(1)), a compositor in a user session cannot ask *raba* to quit,
+and *Boot.Timeout* is a backstop rather than an answer — so the kernel's own answer to
+"who has the screen" is used instead. Nothing about it is specific to an init system,
+a display server or a compositor.
+
 # EXIT STATUS
 
 *raba* exits *0* in every situation that is not a programming error, including a

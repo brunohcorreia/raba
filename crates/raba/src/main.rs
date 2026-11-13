@@ -307,7 +307,9 @@ fn boot(startup: &config::Startup) {
         return;
     }
     let outcome = raba::boot::run(&startup.settings);
-    if !matches!(outcome, raba::boot::Outcome::Finished) {
+    // Displaced is a normal ending, and a quiet one on purpose: the message
+    // would be printed on the console that something else just took.
+    if !matches!(outcome, raba::boot::Outcome::Finished | raba::boot::Outcome::Displaced(_)) {
         eprintln!("raba: {outcome}");
     }
 }

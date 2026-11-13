@@ -39,7 +39,7 @@ use crate::control::{Connection, Listener};
 use crate::lifecycle::{Event, Lifecycle, Phase};
 use crate::signals::{Signal, Signals};
 use crate::state::{self, State};
-use crate::vt::Vt;
+use crate::vt::{Displaced, Vt};
 use raba_core::surface::{Size, Surface as _};
 use raba_core::Movie;
 use raba_term::Player;
@@ -102,6 +102,9 @@ pub enum Outcome {
     NoTerminal(crate::vt::Error),
     /// The theme could not be read or decoded.
     NoTheme(String),
+    /// Something else took the screen while we were drawing, and we left it
+    /// alone. See [`Vt::displaced`](crate::vt::Vt::displaced).
+    Displaced(Displaced),
 }
 
 impl std::fmt::Display for Outcome {
@@ -111,6 +114,7 @@ impl std::fmt::Display for Outcome {
             Self::Yielded(why) => write!(f, "not drawing: {why}"),
             Self::NoTerminal(why) => write!(f, "not drawing: {why}"),
             Self::NoTheme(why) => write!(f, "not drawing: {why}"),
+            Self::Displaced(why) => write!(f, "stopped: {why}"),
         }
     }
 }
@@ -213,6 +217,9 @@ impl<'a> Session<'a> {
             }
             self.serve();
             self.deadlines();
+            if let Some(why) = self.displaced() {
+                return self.leave(why);
+            }
             if let Some(outcome) = self.draw() {
                 return outcome;
             }
@@ -246,6 +253,33 @@ impl<'a> Session<'a> {
     }
 
     /// Give the terminal back, keeping everything else.
+    /// Has the screen stopped being ours? Asked once per slice, which is two
+    /// ioctls every ten milliseconds on a machine that is otherwise waiting.
+    fn displaced(&self) -> Option<Displaced> {
+        self.vt.as_ref().and_then(Vt::displaced)
+    }
+
+    /// Stop, having been displaced: no outro, no switching back.
+    ///
+    /// An outro would be drawn on a terminal nobody is looking at, and the
+    /// switch back that ends a normal run would take the screen away from
+    /// whatever just took it. Everything else a clean exit does still happens —
+    /// the state file goes, the waiters get their EOF — because a `quit --wait`
+    /// blocked on this process is owed an answer either way.
+    fn leave(&mut self, why: Displaced) -> Outcome {
+        self.player = None;
+        if let Some(mut vt) = self.vt.take() {
+            let _ = vt.relinquish(why);
+        }
+        state::discard(&self.settings.state);
+        self.listener = None;
+        if let Some(signals) = self.signals.as_mut() {
+            signals.disarm();
+        }
+        self.waiters.clear();
+        Outcome::Displaced(why)
+    }
+
     fn release(&mut self) {
         self.player = None;
         if let Some(mut vt) = self.vt.take() {

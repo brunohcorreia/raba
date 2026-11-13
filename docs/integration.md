@@ -176,8 +176,41 @@ absent or disabled.
 
 ### 3. Do nothing
 
-`Boot.Timeout` releases the terminal on its own. The splash is up for a fixed time and
-then gets out of the way. Less precise, no configuration, never stuck.
+RABA watches the screen it was given. When the display moves to another terminal, or
+when the terminal it is on goes into graphics mode, it stops drawing and exits — without
+switching anything back, because switching back would take the screen from whatever just
+took it.
+
+That covers the case this section is really about: **no display manager at all.** A
+compositor started from an autologin on tty1 takes a virtual terminal, and the splash
+sees it happen. Nothing to configure, nothing to call, and nothing specific to systemd,
+Wayland or Hyprland in it.
+
+`Boot.Timeout` is the backstop under that, not the mechanism: if nothing ever takes the
+screen, the splash gets out of the way anyway. Set `Timeout=0` only if you are sure
+something will.
+
+### Booting straight into a compositor
+
+```ini
+# /etc/raba/raba.conf
+[Boot]
+Timeout=60      # generous: the compositor is what really ends this
+```
+
+Then nothing else. Do **not** enable `raba-quit.service` on this kind of machine — it
+fires on `multi-user.target`, which is reached long before a user session has drawn
+anything, and the console would show in between.
+
+If you want the handoff at an exact instant rather than when the terminal changes hands,
+the compositor can ask for it — but `raba-ctl` talks to a root-only socket, so it has to
+be root that runs it. A `systemd` system unit ordered after your session is the usual
+way; a line in `hyprland.conf` is not, because that runs as you.
+
+> Why the socket is not opened up to the logged-in user: `message` draws attacker-chosen
+> text on a console as root, and a convincing fake `login:` prompt is a credential
+> harvester. See [security.md](security.md). The kernel already says when the screen
+> changed hands, so there is nothing to buy with that risk.
 
 ### Booting to a text console
 

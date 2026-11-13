@@ -26,7 +26,7 @@ jobs:
       - run: cargo test --workspace --all-features
 
   shell:
-    name: shellcheck the initramfs glue
+    name: the glue cargo does not check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +43,13 @@ jobs:
       - run: shellcheck --severity=warning --shell=bash integration/tests/rabacheck/install/rabacheck
       - run: shellcheck --severity=warning --shell=dash integration/tests/rabacheck/hooks/rabacheck
       - run: shellcheck --severity=warning integration/dracut/50raba/*.sh
+      # The man pages are built by the PKGBUILD, so a syntax error in one is a
+      # package that will not build — found exactly that way, once.
+      - run: sudo apt-get install -y scdoc
+      - run: |
+          for page in man/*.scd; do
+            scdoc < "$page" > /dev/null || exit 1
+          done
       - run: |
           shellcheck --severity=warning --shell=dash \
             integration/initramfs-tools/hooks/raba \

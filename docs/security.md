@@ -40,6 +40,16 @@ the console.
 > peer with `SO_PEERCRED` and reject any `uid != 0` — permissions alone are not enough if
 > a directory is ever mis-created. Both checks, not either.
 
+**Asked and refused, 13 Nov 2026.** On a machine with no display manager, the natural
+request is for the user's compositor to end the splash — `exec-once = raba-ctl quit`.
+That needs a non-root peer, which means widening this socket: mode `0660` with a group,
+and a per-verb check so a non-root caller may `quit` but not `message`. It was refused.
+The verb check would become security-critical code written for a convenience, the
+boundary would stop being "only root talks to the daemon", and it buys nothing the
+kernel does not already provide: `raba` watches whether its terminal is still the
+displayed one and leaves when it is not. See *WHEN THE SCREEN CHANGES HANDS* in
+`raba`(8).
+
 ### 2. Terminal escape injection · **high**
 
 Any text RABA puts on the terminal — a `message`, a theme name in an error, a log line

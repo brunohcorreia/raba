@@ -411,6 +411,67 @@ pub fn a_configuration_file_chooses_the_terminal(report: &mut Report) {
 ///
 /// Unit-tested on the host as "writes no socket"; what can only be checked here
 /// is the thing they actually care about, which is that no terminal moves.
+/// The splash leaves when something else takes the screen.
+///
+/// This is the whole handoff story on a machine with no display manager: the
+/// control socket is root-only, a compositor in a user session cannot say
+/// `quit`, and the clock is a backstop rather than an answer. So `raba` watches
+/// the screen it was given, and when the display moves it stops — without
+/// switching anything back, because the switch back would take the screen from
+/// whatever just took it.
+///
+/// The third terminal is the point of the check. Switching *home* would prove
+/// nothing: a normal restore ends there too. Switching somewhere else means the
+/// display can only still be there if `raba` left it alone.
+pub fn the_splash_leaves_when_the_screen_is_taken(report: &mut Report) {
+    report.check("raba stops when the display moves, and does not take it back", || {
+        let control = control()?;
+        let home = active(&control)?;
+        let mut child = start(&["--timeout", "0"]).map_err(|e| format!("starting raba: {e}"))?;
+
+        let outcome = (|| {
+            let taken = wait_for_the_splash(&control, home, &mut child)?;
+
+            // Somewhere that is neither ours nor home, the way a compositor
+            // starting on a terminal of its own would be.
+            let elsewhere =
+                (1..=12u16).find(|n| *n != taken && *n != home).ok_or("no third terminal")?;
+            ioctl::activate(&control, elsewhere).map_err(|e| format!("VT_ACTIVATE: {e}"))?;
+            ioctl::wait_active(&control, elsewhere).map_err(|e| format!("VT_WAITACTIVE: {e}"))?;
+            println!(
+                "# home is tty{home}, raba took tty{taken}, the display moved to tty{elsewhere}"
+            );
+
+            // No quit, no signal, nobody asking: it has to notice by itself.
+            let left = Instant::now();
+            wait_until("raba to notice and exit", || matches!(child.try_wait(), Ok(Some(_))))?;
+            println!("# raba exited {:?} after the display moved", left.elapsed());
+
+            let status = child.wait().map_err(|e| format!("reaping: {e}"))?;
+            if !status.success() {
+                return Err(format!("raba exited {status}, and it exits 0 or it is a bug"));
+            }
+            let now = active(&control)?;
+            if now != elsewhere {
+                return Err(format!("the display was pulled back to tty{now} from tty{elsewhere}"));
+            }
+            if Path::new(STATE).exists() {
+                return Err("the state file outlived the instance that wrote it".to_owned());
+            }
+            if Path::new(SOCKET).exists() {
+                return Err("the control socket was left behind".to_owned());
+            }
+            Ok(())
+        })();
+
+        clean_up(&mut child);
+        // Put the display back for the checks after this one.
+        let _ = ioctl::activate(&control, home);
+        let _ = ioctl::wait_active(&control, home);
+        outcome
+    });
+}
+
 pub fn the_kill_switch_touches_nothing(report: &mut Report) {
     report.check("raba.enable=0 draws nothing and takes no terminal", || {
         let control = control()?;

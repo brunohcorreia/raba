@@ -6,7 +6,7 @@ raba-theme - theme recipe format for raba-gen(1)
 
 # SYNOPSIS
 
-_themes/*.toml_
+_themes/\*.toml_
 
 # DESCRIPTION
 
