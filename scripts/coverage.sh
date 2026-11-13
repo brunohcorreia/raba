@@ -95,7 +95,11 @@ if [ -s "${out}/vm/objects.txt" ]; then
     # descriptions of the same files, reports the union of both, and the extra
     # regions are ones no current line corresponds to. The symptom is a file
     # growing by a hundred uncovered regions after an edit that deleted code.
-    newest_source=$(find "${root}/crates" -name '*.rs' -newer "$(head -1 "${out}/vm/objects.txt")" -print -quit 2> /dev/null || true)
+    # Only the crates the guest binary is built from, and only their `src`:
+    # cargo does not relink an unchanged binary, so its mtime stays where it
+    # was while a test file that has nothing to do with it moves ahead.
+    guest_sources=("${root}/crates/raba/src" "${root}/crates/raba-core/src" "${root}/crates/raba-term/src")
+    newest_source=$(find "${guest_sources[@]}" -name '*.rs' -newer "$(head -1 "${out}/vm/objects.txt")" -print -quit 2> /dev/null || true)
     if [ -n "$newest_source" ]; then
         echo "coverage: the virtual-machine profile is older than ${newest_source#"${root}/"}," >&2
         echo "coverage: so it is being left out. Run scripts/vm-test.sh --coverage again" >&2

@@ -274,7 +274,13 @@ fn a_command_longer_than_the_protocol_allows_is_refused_here_rather_than_sent() 
     assert!(said.contains("limit"), "{said}");
 }
 
-/// A server that answers every connection with one fixed line, however wrong.
+/// A server that answers one connection with a fixed line, however wrong.
+///
+/// The request is read before the reply is sent, and that is not politeness: a
+/// server that writes and closes while the client is still writing leaves the
+/// client with a closed socket and an empty read, which it reports as an
+/// unexpected reply. The first version of this did exactly that, passed on a
+/// quiet machine, and failed under an instrumented build.
 fn answering(path: &Path, reply: &'static str) -> std::thread::JoinHandle<()> {
     let (ready, is_ready) = mpsc::channel();
     let path = path.to_path_buf();
@@ -282,8 +288,12 @@ fn answering(path: &Path, reply: &'static str) -> std::thread::JoinHandle<()> {
         let listener = std::os::unix::net::UnixListener::bind(&path).expect("binding");
         ready.send(()).expect("announcing");
         if let Ok((mut stream, _)) = listener.accept() {
-            use std::io::Write as _;
+            use std::io::{BufRead as _, BufReader, Write as _};
+            let mut request = String::new();
+            let mut reader = BufReader::new(stream.try_clone().expect("a second handle"));
+            let _ = reader.read_line(&mut request);
             let _ = stream.write_all(reply.as_bytes());
+            let _ = stream.flush();
         }
     });
     is_ready.recv_timeout(Duration::from_secs(5)).expect("server came up");

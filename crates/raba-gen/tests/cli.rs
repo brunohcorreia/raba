@@ -710,3 +710,147 @@ fn check_without_a_file_is_a_usage_error() {
     let output = gen(&["--check"]);
     assert!(!output.status.success(), "--check with no file exited 0");
 }
+
+// --- the paths through the verbs that the options above did not reach ----------
+
+#[test]
+fn build_writes_where_it_is_told_rather_than_beside_the_recipe() {
+    let scratch = Scratch::new("build-output");
+    let recipe = recipe_with(&scratch, "art", "##\n##\n", "");
+    let elsewhere = scratch.path("somewhere-else.raba");
+    let output = gen(&["build", utf8(&recipe), "-o", utf8(&elsewhere)]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(elsewhere.exists(), "-o was ignored");
+    assert!(!scratch.path("art.raba").exists(), "it wrote the default one as well");
+}
+
+#[test]
+fn art_can_be_written_inside_the_recipe_instead_of_beside_it() {
+    let scratch = Scratch::new("inline-art");
+    let recipe = scratch.write(
+        "inline.toml",
+        "[logo]\nsource = \"inline\"\nart = \"\"\"\n$1##\n$1##\n\"\"\"\ncolors = [2]\n",
+    );
+    let output = gen(&["build", utf8(&recipe)]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(scratch.path("inline.raba").exists());
+}
+
+#[test]
+fn a_logo_name_nothing_resembles_is_pointed_at_the_list_rather_than_at_nothing() {
+    let scratch = Scratch::new("no-suggestion");
+    let recipe = scratch.write("x.toml", "[logo]\nsource = \"fastfetch:qqqqzzzzxxxx\"\n");
+    let output = gen(&["build", utf8(&recipe)]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("--list-logos"), "{}", stderr(&output));
+}
+
+#[test]
+fn a_colour_the_console_cannot_show_is_fitted_and_the_change_is_reported() {
+    // The recipe is allowed to name a 256-colour index with a 16-colour
+    // palette; it is fitted rather than refused, and the author is told which
+    // slot moved and to what. A silent substitution is a theme that looks
+    // wrong on the machine and right in the recipe.
+    let scratch = Scratch::new("downsample");
+    let recipe = recipe_with(&scratch, "art", "$1##\n", "colors = [196]\n");
+    let output = gen(&["build", utf8(&recipe)]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let said = stderr(&output);
+    assert!(said.contains("$1"), "it did not say which slot: {said}");
+    assert!(said.contains("196"), "it did not say what it was: {said}");
+}
+
+#[test]
+fn ansi_art_is_recognised_by_what_is_in_it_and_laid_out_at_the_width_asked_for() {
+    let scratch = Scratch::new("ansi-input");
+    let art = scratch.path("art.ans");
+    std::fs::write(&art, b"\x1b[31mred\x1b[0m\r\n\x1b[32mgreen\x1b[0m\r\n").expect("writing");
+    let out = scratch.path("art.raba");
+    let output = gen(&["convert", utf8(&art), "--columns", "40", "-o", utf8(&out)]);
+    assert!(output.status.success(), "{}", stderr(&output));
+
+    let checked = gen(&["--check", utf8(&out)]);
+    assert!(checked.status.success(), "{}", stderr(&checked));
+    assert!(stdout(&checked).contains("40x2"), "{}", stdout(&checked));
+}
+
+#[test]
+fn the_format_can_be_named_for_each_importer_there_is() {
+    let scratch = Scratch::new("formats");
+    // `dur` and `ansi` as names, so `Format::named` is exercised for every
+    // spelling the usage advertises. Both are given the wrong kind of file on
+    // purpose: what is under test is that the name was understood and the
+    // right importer was chosen, which its refusal proves.
+    let text = scratch.write("plain.txt", "hi\n");
+    for name in ["dur", "durdraw"] {
+        let output = gen(&["convert", utf8(&text), "--format", name]);
+        assert!(!output.status.success(), "{name} read plain text as Durdraw");
+        // Either arm of the importer is a pass: a .dur may be gzipped or bare
+        // JSON, and what matters is that the Durdraw reader is the one that
+        // answered rather than the text one.
+        let said = stderr(&output);
+        assert!(said.contains("gzip") || said.contains("Durdraw"), "{name}: {said}");
+    }
+    for name in ["ansi", "ans"] {
+        let out = scratch.path(&format!("{name}.raba"));
+        let output = gen(&["convert", utf8(&text), "--format", name, "-o", utf8(&out)]);
+        assert!(output.status.success(), "{name}: {}", stderr(&output));
+    }
+}
+
+#[test]
+fn convert_and_generate_write_a_dur_at_the_version_asked_for_too() {
+    let scratch = Scratch::new("dur-everywhere");
+    let art = scratch.write("hi.txt", "hi\n");
+    let out = scratch.path("hi.raba");
+    let converted =
+        gen(&["convert", utf8(&art), "-o", utf8(&out), "--also-dur", "--dur-version", "8"]);
+    assert!(converted.status.success(), "{}", stderr(&converted));
+    assert!(stdout(&converted).contains("Durdraw v8"), "{}", stdout(&converted));
+
+    let made = gen(&[
+        "generate",
+        "fire",
+        "--columns",
+        "10",
+        "--lines",
+        "4",
+        "--frames",
+        "2",
+        "-o",
+        utf8(&scratch.path("f.raba")),
+        "--also-dur",
+        "--dur-version",
+        "8",
+    ]);
+    assert!(made.status.success(), "{}", stderr(&made));
+    assert!(stdout(&made).contains("Durdraw v8"), "{}", stdout(&made));
+}
+
+#[test]
+fn shading_art_too_wide_for_the_fallback_console_is_told_it_will_be_scaled() {
+    // Two different fates for art larger than 80x25, and which one applies
+    // depends on what the art is made of. Saying "it is too big" without
+    // saying which would leave the author unable to predict the result.
+    let scratch = Scratch::new("shading");
+    let wide: String =
+        std::iter::repeat_n("\u{2592}".repeat(120), 30).collect::<Vec<_>>().join("\n");
+    let art = scratch.write("shade.txt", &format!("{wide}\n"));
+    let out = scratch.path("shade.raba");
+    let output = gen(&["convert", utf8(&art), "-o", utf8(&out), "--allow-unsafe-glyphs"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(stderr(&output).contains("scaled down"), "{}", stderr(&output));
+}
+
+#[test]
+fn a_glyph_that_may_not_survive_setfont_is_a_warning_and_not_a_refusal() {
+    // Unlike an undrawable glyph: this one exists in CP437, so a console that
+    // has not had `setfont` run on it will draw it. The build goes through and
+    // the author is told what the risk is.
+    let scratch = Scratch::new("unreliable-glyph");
+    let recipe = recipe_with(&scratch, "art", "\u{00e9}\u{00e9}\n", "");
+    let output = gen(&["build", utf8(&recipe)]);
+    assert!(output.status.success(), "an accented letter was refused: {}", stderr(&output));
+    assert!(scratch.path("art.raba").exists());
+    assert!(stderr(&output).contains("setfont"), "{}", stderr(&output));
+}

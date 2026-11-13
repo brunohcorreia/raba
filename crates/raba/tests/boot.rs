@@ -1072,3 +1072,41 @@ fn the_double_records_what_is_done_to_it() {
     assert_eq!(log.relinquished, vec![Displaced::Graphics]);
     assert_eq!(log.forgotten, 1);
 }
+
+/// Why the splash is not drawing, as the line that reaches `dmesg`.
+///
+/// On a machine booted with `console=ttyS0` alone, `NoConsole` is the normal
+/// case and not a fault — so the sentence has to be readable by somebody who
+/// went looking for a splash that never appeared, and has to name the file or
+/// the ioctl that answered. Every arm of this was unexercised.
+#[test]
+fn every_reason_there_is_no_terminal_says_which_one_and_why() {
+    let cases: Vec<(Error, Vec<&str>)> = vec![
+        (
+            Error::NoConsole(std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
+            vec!["/dev/tty0", "no virtual terminal"],
+        ),
+        (Error::ScreenIsTaken, vec!["graphics mode"]),
+        (Error::NoFreeTerminal, vec!["every virtual terminal"]),
+        (Error::Ioctl("VT_OPENQRY", rustix::io::Errno::NOTTY), vec!["VT_OPENQRY"]),
+        (Error::Open(7, std::io::Error::from(std::io::ErrorKind::NotFound)), vec!["/dev/tty7"]),
+    ];
+    for (error, wanted) in cases {
+        let said = error.to_string();
+        for fragment in wanted {
+            assert!(said.contains(fragment), "{error:?} says {said:?}, without {fragment:?}");
+        }
+        assert!(
+            std::error::Error::source(&error).is_none() || !said.is_empty(),
+            "{error:?} has no message"
+        );
+    }
+}
+
+/// The two ways the screen stops being ours, as the line that explains a splash
+/// that ended early.
+#[test]
+fn both_ways_of_being_displaced_name_what_happened() {
+    assert!(Displaced::Switched(4).to_string().contains("tty4"));
+    assert!(Displaced::Graphics.to_string().contains("graphics mode"));
+}
