@@ -2,6 +2,15 @@
 <p align="center"><b>R</b>ust <b>A</b>SCII <b>B</b>oot <b>A</b>rt</p>
 <p align="center">A tiny boot splash that plays ASCII animations, then gets out of the way.</p>
 
+<p align="center">
+  <img src="docs/images/boot.gif" alt="An Arch Linux virtual machine booting: the console goes quiet, the Arch logo animates in ASCII with a spinner under it, and the screen is handed back." width="720">
+</p>
+
+<p align="center"><sub>A real boot, not a mock-up: an Arch guest booting under QEMU, photographed through the
+monitor by <a href="scripts/record.sh"><code>scripts/record.sh</code></a>. The splash starts inside the initramfs and
+survives <code>switch_root</code>; what you are seeing is about two seconds of a machine that takes about four to
+come up.</sub></p>
+
 ---
 
 > [!WARNING]

@@ -355,6 +355,35 @@ why — and `no-binary` cannot reach the copy baked into the image. Breaking the
 instance means regenerating the initramfs inside the guest per case, which is minutes
 rather than seconds, and it is not done.
 
+### Recording a boot
+
+The animation at the top of the README is made by `scripts/record.sh`, which boots the
+same installed image tier 3c boots and photographs the screen through QEMU's monitor:
+
+```sh
+scripts/record.sh                       # arch, into docs/images/boot.gif
+scripts/record.sh --distro fedora --seconds 20 --out /tmp/boot.gif
+scripts/record.sh --crop 1280x800       # the whole screen rather than a window
+```
+
+Two decisions in it are worth knowing before changing them.
+
+**It crops; it does not scale.** The guest's console is 1280x800 of 8x16 glyphs.
+Resampling that to a README-friendly width turns every glyph into a smear and the logo
+into horizontal stripes — the first attempt looked like a damaged CRT. Cutting a window
+out of the middle at one-to-one keeps every pixel the kernel drew, and costs nothing in
+file size, because what is cut away is black. `paletteuse=dither=none` for the same
+reason: console text is flat colour, and dithering invents noise in the one place the
+image has none.
+
+**It finds the splash by asking the classifier.** A whole boot is mostly not what anybody
+came to see — four seconds of the firmware's logo, a kernel log, about a second of RABA,
+then a login prompt. `scripts/screen-colours.py` already tells a bitmap from a boot log
+from a centred block of console text, so the cut is the longest *run* of centred frames
+plus a short pad either side. The run, not the span: a login prompt with one line on it
+classifies as centred too, and taking first-to-last would quietly include the rest of
+the boot.
+
 ---
 
 ## Test suite
