@@ -45,7 +45,8 @@ pub fn encode(movie: &Movie) -> Vec<u8> {
     out.extend_from_slice(&u32::try_from(frame_count).unwrap_or(u32::MAX).to_le_bytes());
     out.extend_from_slice(&u32::try_from(total).unwrap_or(u32::MAX).to_le_bytes());
     out.push(movie.palette.to_byte());
-    out.extend_from_slice(&[0, 0, 0]); // reserved
+    out.push(movie.scaling.to_byte());
+    out.extend_from_slice(&[0, 0]); // reserved
     out.extend_from_slice(&u32::try_from(op_count).unwrap_or(u32::MAX).to_le_bytes());
     out.extend_from_slice(&crc32(&payload).to_le_bytes());
 

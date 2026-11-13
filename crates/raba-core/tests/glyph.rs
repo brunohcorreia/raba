@@ -9,7 +9,7 @@
 )]
 
 use raba_core::glyph::{audit, safety, Safety};
-use raba_core::{Frame, Movie, Op, Palette};
+use raba_core::{Frame, Movie, Op, Palette, Scaling};
 
 fn movie_of(chars: &[char]) -> Movie {
     let ops: Vec<Op> = chars.iter().map(|&ch| Op { cell: 0, ch, fg: 7, bg: 0 }).collect();
@@ -17,6 +17,7 @@ fn movie_of(chars: &[char]) -> Movie {
         columns: 8,
         lines: 2,
         palette: Palette::Ansi16,
+        scaling: Scaling::Auto,
         looping: true,
         frames: vec![Frame { delay_ms: 100, op_start: 0, op_count: ops.len() as u16 }],
         ops,

@@ -74,7 +74,8 @@ header, 32 bytes
  12   frame_count     u32              4
  16   total_bytes     u32              4    must equal the file length
  20   palette         u8               1    0 = ANSI 16, 1 = xterm-256
- 21   reserved        u8 x3            3    must be zero
+ 21   scaling         u8               1    0 = auto, 1 = resample, 2 = crop
+ 22   reserved        u8 x2            2    must be zero
  24   op_count        u32              4    total across all frames
  28   crc32           u32              4    over everything after the header
 
@@ -91,6 +92,31 @@ op, 12 bytes
  10   reserved        u16              2    must be zero
 ```
 
+### scaling
+
+What to do when the console is not the size the art was authored for. The renderer
+has two answers and cannot pick between them from the bytes alone.
+
+**Resampling** averages the coverage of a block of source cells into one output
+cell and takes the nearest character on the shading ramp ` .·░▒▓█`. That is a true
+statement about art whose characters mean *intensity*, and a false one about art
+whose characters mean *things* — and both are written in the same seven characters.
+A fire and a Game of Life board are indistinguishable by alphabet; `▓` is "hotter
+than `▒`" in one and "a cell that died two generations ago" in the other.
+
+**Cropping** centres the canvas and discards what hangs over the edge. It is right
+for anything composed — a logo, a plasma with no subject, a board of oscillators —
+and it never invents a cell that was not drawn.
+
+So the file says which. `auto` guesses from the alphabet, resampling when every
+character is on the ramp; that is the best a converter can do for art somebody else
+authored, and it is what `raba-gen convert` writes. Everything RABA generates
+itself states the answer outright, because it knows what it drew.
+
+An unknown value is rejected rather than treated as `auto`: a later version could
+add a mode, and guessing would draw somebody's art in a way they did not ask for,
+without saying so.
+
 Ceilings, enforced before any allocation: 16 MiB per file, 1024 columns, 1024 lines,
 65535 frames. The op count is bounded by the file size rather than separately.
 
@@ -101,7 +127,7 @@ The order is the design, not an implementation detail:
 1. at least 32 bytes
 2. magic, then version
 3. `total_bytes` against the real file length, and against the 16 MiB ceiling
-4. canvas and frame count against their ceilings; reserved fields zero
+4. canvas, frame count and palette against their ceilings; scaling known; reserved fields zero
 5. **the layout arithmetic** — do the declared counts add up to the declared size?
 6. CRC over the payload
 7. *only now* allocate, then check every frame's op range, and for every op: its cell

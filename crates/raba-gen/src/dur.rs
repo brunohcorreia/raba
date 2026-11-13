@@ -312,6 +312,10 @@ pub fn parse(bytes: &[u8]) -> Result<Imported, DurError> {
 
     Ok(Imported {
         movie: Movie {
+            // A converter cannot know what somebody else's art means, so it lets
+            // the alphabet decide. Right for `video-to-dur` output, which is the
+            // bulk of what arrives this way.
+            scaling: raba_core::Scaling::Auto,
             columns: dur.columns,
             lines: dur.lines,
             palette,

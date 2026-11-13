@@ -12,7 +12,9 @@
 use core::fmt;
 
 use super::crc::crc32;
-use super::{limits, Frame, Movie, Op, Palette, FRAME_SIZE, HEADER_SIZE, MAGIC, OP_SIZE, VERSION};
+use super::{
+    limits, Frame, Movie, Op, Palette, Scaling, FRAME_SIZE, HEADER_SIZE, MAGIC, OP_SIZE, VERSION,
+};
 
 /// Why a byte slice is not a valid `.raba`.
 ///
@@ -52,6 +54,10 @@ pub enum DecodeError {
     CellOutOfRange { op: u32, cell: u32, cells: u32 },
     /// An op's codepoint is not a character — a surrogate, or beyond U+10FFFF.
     BadCodepoint { op: u32, value: u32 },
+    /// The scaling byte is not one this build knows. Rejected rather than treated
+    /// as `Auto`: a later version could add a mode, and silently guessing would
+    /// draw the art in a way its author did not ask for.
+    BadScaling { got: u8 },
     /// An op's colour index does not exist in the declared palette: an index above
     /// 15 in a 16-colour movie.
     ///
@@ -83,6 +89,7 @@ impl fmt::Display for DecodeError {
                 write!(f, "{got} frames, over the {} limit", limits::MAX_FRAMES)
             }
             Self::BadPalette { got } => write!(f, "unknown palette {got}"),
+            Self::BadScaling { got } => write!(f, "unknown scaling mode {got}"),
             Self::ColourOutOfPalette { op, value, max } => {
                 write!(f, "op {op}: colour index {value} is above the palette maximum {max}")
             }
@@ -197,8 +204,11 @@ pub fn decode(bytes: &[u8]) -> Result<Movie, DecodeError> {
     }
     let palette =
         Palette::from_byte(palette_byte).ok_or(DecodeError::BadPalette { got: palette_byte })?;
+    let scaling_byte = *bytes.get(21).unwrap_or(&0xFF);
+    let scaling =
+        Scaling::from_byte(scaling_byte).ok_or(DecodeError::BadScaling { got: scaling_byte })?;
 
-    for offset in 21..24 {
+    for offset in 22..24 {
         if *bytes.get(offset).unwrap_or(&0) != 0 {
             return Err(DecodeError::ReservedNotZero { offset });
         }
@@ -288,5 +298,5 @@ pub fn decode(bytes: &[u8]) -> Result<Movie, DecodeError> {
         ops.push(Op { cell, ch, fg, bg });
     }
 
-    Ok(Movie { columns, lines, palette, looping: flags & 1 != 0, frames, ops })
+    Ok(Movie { columns, lines, palette, scaling, looping: flags & 1 != 0, frames, ops })
 }

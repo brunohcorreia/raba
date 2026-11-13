@@ -74,6 +74,30 @@ console the high background bit is blink, not brightness. That last rule is now
 checked at compile time, because the first version of the shader got it wrong and
 would have flashed its brightest band.
 
+## At a size they were not generated for
+
+`raba-gen generate` defaults its canvas to the terminal it is run in, so in normal
+use this never comes up: regenerating is free and exact, and there is no
+information to lose. It comes up for a **packaged** animation, generated once by
+whoever built the package and played on consoles it never saw.
+
+Three of the four are drawn entirely in the shading ramp ` .·░▒▓█`, so the
+`auto` guess in the `.raba` header — resample anything written in the ramp — would
+resample three of them. That is right for exactly one:
+
+| | stores | why |
+|---|---|---|
+| `doom` | **resample** | a fire means intensity, and it burns upward from the bottom row; cropping cuts the base away and leaves flames with no source |
+| `colormix` | crop | a plasma has no centre and no subject, so any sub-window of it is a complete colormix; its characters encode a *blend between two colours*, not a brightness, so averaging them gives noise |
+| `gameoflife` | crop | cropping shows fewer oscillators, each intact and still oscillating; averaging four cells does not give three quarters of a glider |
+| `matrix` | crop | letters — there was never a question |
+
+This is why the `.raba` header carries the answer rather than deriving it. The
+alphabet cannot tell a fire from a Game of Life board: `▓` is "hotter than `▒`" in
+one and "a cell that died two generations ago" in the other. Only the thing that
+drew it knows, so the thing that drew it says. See
+[console-size.md](console-size.md).
+
 ## What they cost
 
 At 80x25, 60 frames:

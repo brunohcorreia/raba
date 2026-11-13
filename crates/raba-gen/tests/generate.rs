@@ -13,7 +13,7 @@
 )]
 
 use raba_core::glyph::{safety, Safety};
-use raba_core::{apply, encode, Grid, Movie, Palette};
+use raba_core::{apply, encode, Grid, Movie, Palette, Scaling};
 use raba_gen::generate::{generate, Kind, Rng, Spec};
 
 fn grids(movie: &Movie) -> Vec<Grid> {
@@ -244,4 +244,43 @@ fn names_match_lys_configuration_values() {
     assert!(Kind::named("none").is_none(), "Ly's `none` is not an animation");
     assert!(Kind::named("nonsense").is_none());
     assert_eq!(Kind::named("DOOM"), Kind::named("doom"), "names are case-insensitive");
+}
+
+#[test]
+fn each_animation_says_what_to_do_at_another_size() {
+    // Three of the four are drawn entirely in the shading ramp, so leaving this to
+    // `Auto` would resample all three. It is right for exactly one of them, which
+    // is the whole reason the header carries the answer. See docs/generated.md.
+    assert_eq!(Kind::Doom.scaling(), Scaling::Resample);
+    assert_eq!(Kind::Colormix.scaling(), Scaling::Crop);
+    assert_eq!(Kind::GameOfLife.scaling(), Scaling::Crop);
+    assert_eq!(Kind::Matrix.scaling(), Scaling::Crop);
+
+    for kind in Kind::ALL {
+        let spec = Spec { columns: 40, lines: 12, frames: 8, ..Spec::default() };
+        let movie = generate(kind, &spec);
+        assert_eq!(movie.scaling, kind.scaling(), "{} lost its answer", kind.name());
+        assert_eq!(
+            raba_core::render::resamples(&movie),
+            kind.scaling() == Scaling::Resample,
+            "{} is not played the way it asked",
+            kind.name()
+        );
+    }
+}
+
+#[test]
+fn the_three_that_crop_would_otherwise_have_been_resampled() {
+    // The trap this guards: all three pass the alphabet test, so an `Auto` movie
+    // of the same cells would be resampled. If this ever stops being true the
+    // decision above is no longer load-bearing and the comment explaining it is
+    // wrong — which is worth being told about.
+    for kind in [Kind::Colormix, Kind::GameOfLife] {
+        let movie = generate(kind, &Spec { columns: 40, lines: 12, frames: 8, ..Spec::default() });
+        assert!(
+            raba_core::render::all_shading(movie.ops.iter().map(|op| op.ch)),
+            "{} is no longer ramp-only",
+            kind.name()
+        );
+    }
 }

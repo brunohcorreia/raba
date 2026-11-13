@@ -188,6 +188,11 @@ pub fn compose(
     }
 
     Ok(Movie {
+        // A logo is a drawing, not a picture of one: it is composed, it is meant to
+        // be centred, and a blown-up or blurred trademark looks broken rather than
+        // scaled. Stated rather than left to the alphabet, because a logo drawn
+        // entirely in block characters would otherwise be resampled.
+        scaling: raba_core::Scaling::Crop,
         columns: base.columns(),
         lines: base.lines(),
         palette: base.palette(),

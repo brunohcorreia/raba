@@ -24,7 +24,8 @@
 //!   12  4  frame_count  u32
 //!   16  4  total_bytes  u32   must equal the file length
 //!   20  1  palette      u8    0 = ANSI 16, 1 = xterm-256
-//!   21  3  reserved     must be zero
+//!   21  1  scaling      u8    0 = auto, 1 = resample, 2 = crop
+//!   22  2  reserved     must be zero
 //!   24  4  op_count     u32   total across all frames
 //!   28  4  crc32        u32   over everything after the header
 //!
@@ -81,6 +82,52 @@ pub mod limits {
     pub const MAX_LINES: u16 = 1024;
     /// At 10 fps this is nearly two hours of animation.
     pub const MAX_FRAMES: u32 = 65_535;
+}
+
+/// What to do when the console is not the size the art was authored for.
+///
+/// The question is not answerable from the bytes alone, which is why it is stored.
+/// Resampling averages the coverage of a block of cells into one; that is right for
+/// a picture whose characters mean *intensity* and wrong for one whose characters
+/// mean *things*. Both can be drawn in the same seven characters:
+///
+/// - a fire, or a video converted by `video-to-dur`, means intensity — `▓` is
+///   "more than `▒`", and the average of a block is a true statement about it
+/// - a Game of Life board does not — `█` is a live cell and `░` is its trail, and
+///   the average of four cells is not three quarters of a glider
+///
+/// [`Scaling::Auto`] guesses from the alphabet, which is the best a converter can
+/// do for art somebody else authored. Anything RABA generates itself says outright.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Scaling {
+    /// Resample if every character is on the shading ramp, otherwise crop.
+    #[default]
+    Auto,
+    /// Always resample. The art means coverage.
+    Resample,
+    /// Never resample: centre, and crop what does not fit.
+    Crop,
+}
+
+impl Scaling {
+    #[must_use]
+    pub const fn to_byte(self) -> u8 {
+        match self {
+            Scaling::Auto => 0,
+            Scaling::Resample => 1,
+            Scaling::Crop => 2,
+        }
+    }
+
+    #[must_use]
+    pub const fn from_byte(byte: u8) -> Option<Self> {
+        match byte {
+            0 => Some(Scaling::Auto),
+            1 => Some(Scaling::Resample),
+            2 => Some(Scaling::Crop),
+            _ => None,
+        }
+    }
 }
 
 /// Which palette the colour indices in [`Op`] refer to.
@@ -160,6 +207,8 @@ pub struct Movie {
     pub columns: u16,
     pub lines: u16,
     pub palette: Palette,
+    /// What to do when the console is not the size this was authored for.
+    pub scaling: Scaling,
     /// Whether playback repeats. A boot animation loops; an outro does not.
     pub looping: bool,
     pub frames: Vec<Frame>,

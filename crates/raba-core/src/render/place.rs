@@ -12,6 +12,7 @@
 //! somebody can still change the canvas.
 
 use super::{Cell, Grid};
+use crate::format::{Movie, Scaling};
 use crate::surface::Size;
 
 /// Where the source canvas sits relative to the screen, in signed screen
@@ -246,4 +247,19 @@ pub fn best_fit(source: &Grid, size: Size, shading: bool) -> Grid {
         return fit(&resample(source, scaled_size(canvas, size)), size);
     }
     fit(source, size)
+}
+
+/// Whether this movie should be resampled when the console is a different size.
+///
+/// Resolves [`Scaling::Auto`] by looking at the alphabet: art drawn only in the
+/// shading ramp is taken to mean coverage. That is a guess, and it is wrong for a
+/// Game of Life board, which is why anything RABA generates states its answer
+/// instead of relying on it.
+#[must_use]
+pub fn resamples(movie: &Movie) -> bool {
+    match movie.scaling {
+        Scaling::Resample => true,
+        Scaling::Crop => false,
+        Scaling::Auto => all_shading(movie.ops.iter().map(|op| op.ch)),
+    }
 }

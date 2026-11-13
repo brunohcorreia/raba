@@ -13,7 +13,7 @@ pub mod glyph;
 pub mod render;
 pub mod surface;
 
-pub use format::{decode, encode, DecodeError, Frame, Movie, Op, Palette};
+pub use format::{decode, encode, DecodeError, Frame, Movie, Op, Palette, Scaling};
 pub use glyph::{is_safe, Safety};
 pub use render::{apply, to_ansi, to_ansi_into, Cell, Grid};
 pub use surface::{Size, Surface};

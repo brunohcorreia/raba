@@ -33,13 +33,22 @@ out is most of the work.
 
 | kind | example | at the wrong size |
 |---|---|---|
-| procedural | `generate matrix` | perfect — it is generated at the console's size |
+| procedural | `generate matrix` | perfect — it is generated at the console's size; a *packaged* one says which of the two below it wants |
 | shading | the black hole, anything from `video-to-dur` | **resampled**, proportions kept |
 | line art and logos | every theme in `themes/` | centred, and cropped if it overflows |
 
 **Procedural animations have no native size.** `raba-gen generate` defaults its
 canvas to the terminal it is run in, and nothing stops it being run again for
 another one. There is no information to lose.
+
+**But the alphabet is only a guess, and the file gets the last word.** Three of the
+four generated animations are drawn entirely in the ramp, and resampling is right
+for exactly one of them — a Game of Life board uses `█` for a live cell and `░`
+for its trail, which are symbols, not intensities, and averaging four of them gives
+a smear rather than three quarters of a glider. The `.raba` header therefore stores
+`scaling`: `auto` guesses from the alphabet, and anything RABA generates itself
+states the answer outright. [generated.md](generated.md) has the four decisions and
+[format.md](format.md) the byte.
 
 **Shading art is not really text.** The black hole is drawn in ` .·░▒▓█` and
 nothing else — seven characters that are a greyscale ramp, which makes the picture

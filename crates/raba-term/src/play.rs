@@ -4,7 +4,7 @@
 //! theme looks right here, the core is right and only the VT layer remains in doubt —
 //! which is the whole reason `--preview` is a milestone and not a debug flag.
 
-use raba_core::render::{all_shading, best_fit, to_ansi_into};
+use raba_core::render::{best_fit, resamples, to_ansi_into};
 use raba_core::surface::Surface;
 use raba_core::{apply, Grid, Movie};
 use std::io;
@@ -37,11 +37,11 @@ pub fn play<S: Surface>(surface: &mut S, movie: &Movie, loops: u32) -> io::Resul
     // column instead would leave the console scrolled, which is the one thing a
     // splash must not do.
     //
-    // Shading art is resampled to the screen; everything else is centred and
-    // cropped. The decision is made once, here, from the whole movie: a picture
-    // that resampled on some frames and was cropped on others would jump.
+    // Art that means coverage is resampled to the screen; everything else is
+    // centred and cropped. The decision is made once, here, for the whole movie: a
+    // picture that resampled on some frames and was cropped on others would jump.
     let screen = surface.size();
-    let shading = all_shading(movie.ops.iter().map(|op| op.ch));
+    let shading = resamples(movie);
     let Some(mut shown) = Grid::new(screen.columns, screen.lines, movie.palette) else {
         return Ok(());
     };

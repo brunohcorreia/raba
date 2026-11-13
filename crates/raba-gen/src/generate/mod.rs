@@ -30,7 +30,7 @@ pub mod fire;
 pub mod life;
 pub mod matrix;
 
-use raba_core::{Frame, Grid, Movie, Op, Palette};
+use raba_core::{Frame, Grid, Movie, Op, Palette, Scaling};
 
 /// A deterministic generator, so that a build is reproducible and a golden test
 /// means something. Any randomness comes from [`Rng`], never from the clock.
@@ -127,6 +127,35 @@ impl Kind {
         !matches!(self, Kind::Doom)
     }
 
+    /// What to do when the console is not the size this was generated for.
+    ///
+    /// These are generated at the terminal's size, so in normal use the question
+    /// never comes up. It comes up for a *packaged* animation, which is generated
+    /// once by whoever built the package and played on consoles it never saw.
+    ///
+    /// Three of the four are drawn entirely in the shading ramp, so
+    /// [`Scaling::Auto`] would resample all three. That is right for exactly one of
+    /// them:
+    ///
+    /// - **doom** is a fire, which means intensity, and it burns upward from the
+    ///   bottom row. Cropping would cut the base away and leave flames with no
+    ///   source. Resampling keeps the whole fire.
+    /// - **colormix** is a plasma with no composition — no centre and no subject —
+    ///   so any sub-window of it is a complete, correct colormix. Resampling it
+    ///   instead would average its dither into noise, because its characters
+    ///   encode a blend between two colours rather than a brightness.
+    /// - **gameoflife** is a garden of oscillators. Cropping shows fewer of them,
+    ///   each intact and still oscillating. Averaging four cells does not give
+    ///   three quarters of a glider; it gives a smear.
+    /// - **matrix** is letters, so there was never a question.
+    #[must_use]
+    pub const fn scaling(self) -> Scaling {
+        match self {
+            Kind::Doom => Scaling::Resample,
+            Kind::Matrix | Kind::Colormix | Kind::GameOfLife => Scaling::Crop,
+        }
+    }
+
     pub const ALL: [Kind; 4] = [Kind::Doom, Kind::Matrix, Kind::Colormix, Kind::GameOfLife];
 }
 
@@ -139,7 +168,7 @@ pub fn generate(kind: Kind, spec: &Spec) -> Movie {
         Kind::Colormix => colormix::frames(spec),
         Kind::GameOfLife => life::frames(spec),
     };
-    delta_encode(&grids, spec)
+    Movie { scaling: kind.scaling(), ..delta_encode(&grids, spec) }
 }
 
 /// Turn a sequence of whole screens into a movie, storing only what moves.
@@ -180,6 +209,9 @@ pub fn delta_encode(grids: &[Grid], spec: &Spec) -> Movie {
         columns: spec.columns,
         lines: spec.lines,
         palette: spec.palette,
+        // Overridden per kind by `generate`; a bare `delta_encode` of hand-built
+        // grids has no way to know what they mean.
+        scaling: Scaling::Auto,
         looping: true,
         frames,
         ops,

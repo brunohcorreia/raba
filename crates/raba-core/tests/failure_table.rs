@@ -20,7 +20,7 @@
 )]
 
 use raba_core::format::{crc32, limits, FRAME_SIZE, HEADER_SIZE, OP_SIZE};
-use raba_core::{decode, encode, DecodeError, Frame, Movie, Op, Palette};
+use raba_core::{decode, encode, DecodeError, Frame, Movie, Op, Palette, Scaling};
 
 /// A small, valid movie: 4x2 canvas, two frames, three ops.
 fn valid_movie() -> Movie {
@@ -28,6 +28,7 @@ fn valid_movie() -> Movie {
         columns: 4,
         lines: 2,
         palette: Palette::Ansi16,
+        scaling: Scaling::Auto,
         looping: true,
         frames: vec![
             Frame { delay_ms: 100, op_start: 0, op_count: 2 },
@@ -261,7 +262,9 @@ fn unknown_palette() {
 
 #[test]
 fn reserved_header_bytes_must_be_zero() {
-    for offset in 21..24 {
+    // Byte 21 was one of these and is now `scaling`, which is the relaxation this
+    // strictness was for. 22 and 23 are still held.
+    for offset in 22..24 {
         let mut bytes = valid_bytes();
         bytes[offset] = 1;
         refresh_crc(&mut bytes);
@@ -270,6 +273,28 @@ fn reserved_header_bytes_must_be_zero() {
             Err(DecodeError::ReservedNotZero { offset }),
             "reserved byte {offset} must be rejected so it can be used later"
         );
+    }
+}
+
+#[test]
+fn every_scaling_mode_survives_the_round_trip() {
+    for mode in [Scaling::Auto, Scaling::Resample, Scaling::Crop] {
+        let mut bytes = valid_bytes();
+        bytes[21] = mode.to_byte();
+        refresh_crc(&mut bytes);
+        assert_eq!(decode(&bytes).map(|movie| movie.scaling), Ok(mode));
+    }
+}
+
+#[test]
+fn an_unknown_scaling_mode_is_rejected_rather_than_assumed() {
+    // A later version could add a mode. Treating one we do not know as `Auto`
+    // would draw somebody's art in a way they did not ask for, silently.
+    for byte in [3u8, 4, 255] {
+        let mut bytes = valid_bytes();
+        bytes[21] = byte;
+        refresh_crc(&mut bytes);
+        assert_eq!(decode(&bytes), Err(DecodeError::BadScaling { got: byte }));
     }
 }
 
@@ -479,6 +504,7 @@ fn round_trip_single_frame_non_looping() {
         columns: 1,
         lines: 1,
         palette: Palette::Xterm256,
+        scaling: Scaling::Auto,
         looping: false,
         frames: vec![Frame { delay_ms: u16::MAX, op_start: 0, op_count: 1 }],
         ops: vec![Op { cell: 0, ch: '█', fg: 255, bg: 0 }],
@@ -494,6 +520,7 @@ fn round_trip_frame_with_no_ops() {
         columns: 2,
         lines: 1,
         palette: Palette::Ansi16,
+        scaling: Scaling::Auto,
         looping: true,
         frames: vec![
             Frame { delay_ms: 50, op_start: 0, op_count: 1 },

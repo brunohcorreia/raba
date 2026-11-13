@@ -16,14 +16,15 @@
 
 use proptest::prelude::*;
 use raba_core::format::{limits, HEADER_SIZE};
-use raba_core::{decode, encode, Frame, Movie, Op, Palette};
+use raba_core::{decode, encode, Frame, Movie, Op, Palette, Scaling};
 
 /// Generate a well-formed movie: ops inside the canvas, frame ranges inside `ops`.
 fn arb_movie() -> impl Strategy<Value = Movie> {
-    (1u16..40, 1u16..20, any::<bool>(), prop::bool::ANY).prop_flat_map(
-        |(columns, lines, looping, wide_palette)| {
+    (1u16..40, 1u16..20, any::<bool>(), prop::bool::ANY, 0u8..=2).prop_flat_map(
+        |(columns, lines, looping, wide_palette, scaling)| {
             let cells = u32::from(columns) * u32::from(lines);
             let palette = if wide_palette { Palette::Xterm256 } else { Palette::Ansi16 };
+            let scaling = Scaling::from_byte(scaling).unwrap_or_default();
             // Colours stay inside the declared palette: a 16-colour movie with
             // index 200 is not a well-formed movie, and the decoder says so.
             let top = palette.max_index();
@@ -61,7 +62,7 @@ fn arb_movie() -> impl Strategy<Value = Movie> {
                             op_count: (op_count - start) as u16,
                         });
                     }
-                    Movie { columns, lines, palette, looping, frames, ops: ops.clone() }
+                    Movie { columns, lines, palette, scaling, looping, frames, ops: ops.clone() }
                 })
             })
         },
