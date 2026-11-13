@@ -136,3 +136,83 @@ the split on size is arguing from a number nobody measured.
 The `raba` package carries exactly one theme of its own, `generic.raba`, which is not a
 logo. `pacman -S raba` has to produce a splash that draws something, and the fallback
 cannot live in a package that a trademark complaint could remove.
+
+---
+
+## Publishing to the AUR
+
+The AUR is a git server. A package is a repository with two files in it — `PKGBUILD`
+and `.SRCINFO` — plus whatever the `PKGBUILD` references by name; here that is
+`raba.install`. There is no review queue and no upload form: pushing is publishing.
+
+Both files are kept in [`packaging/aur/raba`](../packaging/aur/raba) and the AUR
+repository is a copy of that directory, which is why the recipe is version-controlled
+here rather than only there.
+
+### Once, to get an account
+
+1. Register at <https://aur.archlinux.org/register> — username, email, nothing else.
+2. Make a key for it, kept apart from any other, so that revoking it later costs
+   nothing else:
+
+   ```sh
+   ssh-keygen -t ed25519 -f ~/.ssh/aur -C "aur"
+   cat ~/.ssh/aur.pub
+   ```
+
+3. Paste that public key into *My Account → SSH Public Key*.
+4. Tell SSH which key belongs to that host, in `~/.ssh/config`:
+
+   ```
+   Host aur.archlinux.org
+       User aur
+       IdentityFile ~/.ssh/aur
+       IdentitiesOnly yes
+   ```
+
+5. Check it, which also tells you the username the AUR thinks you are:
+
+   ```sh
+   ssh aur@aur.archlinux.org help
+   ```
+
+### Each release
+
+```sh
+cd packaging/aur/raba
+updpkgsums                              # the digest of the new tag's tarball
+makepkg --printsrcinfo > .SRCINFO       # never written by hand
+makepkg -f                              # it has to build from the tarball, not the tree
+namcap PKGBUILD *.pkg.tar.zst           # the lints a user would hit
+```
+
+Then push. The first time, the repository has to be created by cloning the empty one
+the AUR makes on demand:
+
+```sh
+git clone ssh://aur@aur.archlinux.org/raba.git aur-raba
+cp PKGBUILD .SRCINFO raba.install aur-raba/
+cd aur-raba
+git add PKGBUILD .SRCINFO raba.install
+git commit -m "Initial import: raba 0.1.0"
+git push origin master
+```
+
+`master`, not `main`. The AUR has not renamed it.
+
+### What the AUR will not forgive
+
+- **`.SRCINFO` out of step with `PKGBUILD`.** The web interface reads only `.SRCINFO`,
+  so a stale one shows the wrong version to everybody while `makepkg` builds the right
+  one. Regenerate it in the same commit, every time.
+- **A `pkgver` that moves without `pkgrel` resetting to 1**, or a `pkgrel` that does not
+  increase when the recipe changes under an unchanged `pkgver`. Nobody's upgrade path
+  works otherwise.
+- **Sources that are not fixed.** A tag can be moved; the digest is what makes the
+  tarball the one that was tested. `SKIP` is for VCS packages and nothing else.
+- **Dropping a package that other packages depend on.** Not our problem yet, and worth
+  remembering before `raba-themes` is ever renamed.
+
+A boot-critical package has one more obligation, and it is not written in any AUR rule:
+whatever is pushed has been booted. The matrix in `scripts/resilience.sh` is what makes
+that sentence true rather than hopeful.

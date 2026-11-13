@@ -1,0 +1,35 @@
+pkgbase = raba
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/brunohcorreia/raba
+	arch = x86_64
+	arch = aarch64
+	license = GPL-3.0-or-later
+	makedepends = cargo
+	makedepends = scdoc
+	makedepends = make
+	source = raba-0.1.0.tar.gz::https://github.com/brunohcorreia/raba/archive/refs/tags/v0.1.0.tar.gz
+	sha256sums = b571b698aecfcccba78101c4833170ce8302c25ccf2b4f064c8ebe9b1725ebb6
+
+pkgname = raba
+	pkgdesc = ASCII boot splash: a terminal animation from the initramfs to the login screen
+	install = raba.install
+	depends = glibc
+	depends = gcc-libs
+	optdepends = raba-themes: logo art for 50 distributions
+	optdepends = raba-gen: build your own animations
+	optdepends = mkinitcpio: initramfs hook (Arch and derivatives)
+	optdepends = dracut: initramfs module
+	optdepends = systemd: packaged start/quit units
+	backup = etc/raba/raba.conf
+
+pkgname = raba-themes
+	pkgdesc = Logo animations for RABA, 50 distributions
+	arch = any
+	optdepends = raba: the splash that plays them
+
+pkgname = raba-gen
+	pkgdesc = Build RABA animations from ASCII art, ANSI art and Durdraw files
+	depends = glibc
+	depends = gcc-libs
+	optdepends = raba: the splash that plays what this builds

@@ -15,8 +15,8 @@ url="https://github.com/brunohcorreia/raba"
 license=('GPL-3.0-or-later')
 makedepends=('cargo' 'scdoc' 'make')
 source=("$pkgbase-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-# Replaced with the real digest when the tag exists; `updpkgsums` writes it.
-sha256sums=('SKIP')
+# The v0.1.0 tarball. `updpkgsums` rewrites this on every version bump.
+sha256sums=('b571b698aecfcccba78101c4833170ce8302c25ccf2b4f064c8ebe9b1725ebb6')
 
 prepare() {
     cd "$pkgbase-$pkgver"
