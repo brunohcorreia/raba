@@ -226,6 +226,31 @@ MID
                   fi
                   ;;
           esac
+          # What the splash process is doing, if it is still there: the
+          # state letter from /proc/PID/stat (R running, S sleeping, D in
+          # uninterruptible I/O, T stopped) and the kernel function it is
+          # waiting in. A splash that has stopped drawing but is still alive
+          # is the failure this was written to catch, and "which syscall is
+          # it sitting in" is the question that distinguishes a wedged write
+          # from a loop that has decided there is nothing to draw.
+          for pid in $(pgrep -x raba 2>/dev/null); do
+              printf '%s pid=%s state=%s wchan=%s\n' \
+                  "$(cut -d' ' -f1 /proc/uptime)" "$pid" \
+                  "$(awk '{print $3}' "/proc/$pid/stat" 2>/dev/null)" \
+                  "$(cat "/proc/$pid/wchan" 2>/dev/null)" >> /run/raba-watch-proc.log
+          done
+          # And ask the splash itself what it thinks it is doing. The process
+          # answers the socket while wedged — that is how a second instance
+          # finds it — so `status` is the one probe that reports the phase and
+          # the frame from inside the loop rather than inferring them.
+          if [ -S /run/raba.sock ]; then
+              printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime)" \
+                  "$(raba-ctl status 2>&1 | tr '\n' ' ')" >> /run/raba-watch-status.log
+          fi
+          # Written every pass, not at the end: the post-boot checks run while
+          # this is still sampling, and a verdict that arrives after they have
+          # read it is no verdict at all.
+          echo "$best" > /run/raba-watch-ink
           sleep 0.1
       done
       echo "$best" > /run/raba-watch-ink

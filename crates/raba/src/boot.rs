@@ -54,6 +54,10 @@ use std::time::{Duration, Instant};
 /// booting is nothing.
 pub const SLICE: Duration = Duration::from_millis(10);
 
+/// How late a frame may be before the splash decides it is broken. See
+/// [`Session::stalled`].
+const STALL_GRACE: Duration = Duration::from_secs(5);
+
 /// What `raba` was asked to do. The names are `raba.conf`(5)'s.
 #[derive(Debug, Clone)]
 pub struct Settings {
@@ -240,6 +244,9 @@ impl<'a> Session<'a> {
             if let Some(outcome) = self.draw() {
                 return outcome;
             }
+            if self.stalled() {
+                return self.give_up("a frame was due and none was drawn");
+            }
             std::thread::sleep(SLICE);
         }
         self.finish();
@@ -254,7 +261,14 @@ impl<'a> Session<'a> {
         match phase {
             // Acquiring is deferred to `draw`, which is the only place that
             // knows whether it succeeded and the only place that needs it.
-            Phase::Boot => self.player = None,
+            Phase::Boot => {
+                self.player = None;
+                // The frame clock starts when the drawing does. Without this a
+                // long `Boot.ShowDelay` leaves `next_frame` seconds in the past
+                // at the moment the splash begins, which is indistinguishable
+                // from a splash that has stopped drawing — see `stalled`.
+                self.next_frame = Instant::now();
+            }
             Phase::Outro => {
                 self.outro_started = Some(Instant::now());
                 self.player = None;
@@ -470,13 +484,44 @@ impl<'a> Session<'a> {
                 self.next_frame = next;
             }
             None => {
-                self.advance(Event::OutroEnded);
-                return None;
+                // The movie has nothing more to play. In the outro that is the
+                // end of the run and the phase machine knows what to do with
+                // it. In the boot phase it means a movie that does not loop has
+                // run out, and there is no transition for `OutroEnded` there —
+                // so `advance` would do nothing, `next_frame` would stay in the
+                // past, and this loop would spend the rest of the boot waking
+                // up every ten milliseconds to be told there is nothing to draw,
+                // holding a terminal the whole time.
+                if self.life.phase() == Phase::Outro {
+                    self.advance(Event::OutroEnded);
+                    return None;
+                }
+                return Some(self.give_up("the animation ran out of frames and does not loop"));
             }
         }
         self.show_message();
         self.save();
         None
+    }
+
+    /// A frame was due and is very late.
+    ///
+    /// Measured against when the next frame was *due* rather than against a
+    /// fixed interval, because a theme is allowed to hold one frame for a
+    /// minute and that is not a stall. Five seconds past due is not a slow
+    /// machine; it is this program broken.
+    ///
+    /// The guard exists because the alternative has happened: a wedged loop,
+    /// alive, answering the control socket, holding a virtual terminal and
+    /// drawing nothing for the rest of the boot. Whatever the next cause of
+    /// that turns out to be, it ends here — with the screen handed back and a
+    /// line in the log — instead of with somebody staring at a frozen picture.
+    fn stalled(&self) -> bool {
+        self.life.phase().drawing()
+            && self
+                .next_frame
+                .checked_add(STALL_GRACE)
+                .is_some_and(|deadline| Instant::now() > deadline)
     }
 
     /// Stop, and say why.

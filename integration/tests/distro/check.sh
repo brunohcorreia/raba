@@ -163,6 +163,17 @@ for console in /dev/vcs[0-9]*; do
     [ -e "$console" ] || continue
     echo "#   ${console}: $(wc -c < "$console" 2>&1) bytes, $(tr -cd '[:graph:]' < "$console" 2>/dev/null | wc -c) of them ink"
 done
+if [ -s /run/raba-watch-proc.log ]; then
+    echo "#   the splash process, while it lasted:"
+    # First and last of each run of identical states, so twelve seconds of
+    # sampling reads as a story rather than as a hundred identical lines.
+    awk '{key=$3" "$4} key!=last {print "#     "$0; last=key}' /run/raba-watch-proc.log | head -12
+    echo "#     last seen: $(tail -1 /run/raba-watch-proc.log)"
+fi
+if [ -s /run/raba-watch-status.log ]; then
+    echo "#   what the splash said about itself:"
+    awk '{$1=""; key=$0} key!=last {print "#     "$0; last=key}' /run/raba-watch-status.log | head -8
+fi
 if [ -s /run/raba-watch.err ]; then
     sed 's/^/#   watcher: /' /run/raba-watch.err
 fi
