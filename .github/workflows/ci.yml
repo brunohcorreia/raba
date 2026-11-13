@@ -39,6 +39,14 @@ jobs:
       # is run by busybox ash; neither has a shebang shellcheck can trust.
       - run: shellcheck --severity=warning --shell=bash integration/mkinitcpio/install/raba
       - run: shellcheck --severity=warning --shell=dash integration/mkinitcpio/hooks/raba
+      - run: shellcheck --severity=warning integration/dracut/50raba/*.sh
+      - run: |
+          shellcheck --severity=warning --shell=dash \
+            integration/initramfs-tools/hooks/raba \
+            integration/initramfs-tools/scripts/init-premount/raba \
+            integration/init/runit/raba/run \
+            integration/init/runit/raba/finish \
+            integration/init/s6/raba/run
 
   msrv:
     name: minimum supported rust version

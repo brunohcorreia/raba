@@ -1,0 +1,24 @@
+#!/bin/sh
+# Start the splash in a Debian or Ubuntu initramfs.
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+PREREQ=""
+
+prereqs() {
+    echo "$PREREQ"
+}
+
+case "${1:-}" in
+    prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+# Backgrounded: init-premount scripts are sourced in order and the boot has to
+# carry on. Being killed later is not an event; see docs/early-boot.md.
+if command -v raba > /dev/null; then
+    raba &
+fi
+
+exit 0

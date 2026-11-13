@@ -1,0 +1,55 @@
+#!/bin/sh
+# RABA's initramfs-tools hook: what goes into a Debian or Ubuntu initramfs.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# update-initramfs runs hooks under `set -e` and aborts the image on a non-zero
+# exit, so this exits 0 on every path and checks before it copies. The same rule
+# as the mkinitcpio hook and the dracut module, in a third dialect.
+
+PREREQ=""
+
+prereqs() {
+    echo "$PREREQ"
+}
+
+case "${1:-}" in
+    prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+if ! command -v raba > /dev/null || ! command -v raba-setup > /dev/null; then
+    echo "raba: not installed; this image gets no splash" >&2
+    exit 0
+fi
+
+# Resolved here, where /etc and os-release(5) exist. See raba.conf(5).
+frozen="$(raba-setup --freeze)" || {
+    echo "raba: no theme resolved; this image gets no splash (try: raba --check)" >&2
+    exit 0
+}
+
+# `command -v` rather than a hardcoded /usr/bin: the two checks above already
+# went through PATH, and mkinitcpio's add_binary and dracut's inst_multiple
+# both resolve through PATH as well. Three dialects, one answer to "which raba".
+copy_exec "$(command -v raba)"
+if command -v raba-ctl > /dev/null; then
+    copy_exec "$(command -v raba-ctl)"
+fi
+
+raba-setup --print-files | while IFS= read -r file; do
+    if [ -f "$file" ]; then
+        mkdir -p "$DESTDIR/$(dirname "$file")"
+        cp -a "$file" "$DESTDIR/$file"
+    else
+        echo "raba: $file went away while the image was being built" >&2
+    fi
+done
+
+mkdir -p "$DESTDIR/etc/raba"
+printf '%s' "$frozen" > "$DESTDIR/etc/raba/raba.conf"
+
+exit 0

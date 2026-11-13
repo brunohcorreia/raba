@@ -1,0 +1,28 @@
+#!/sbin/openrc-run
+# RABA under OpenRC. Install as /etc/init.d/raba.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This starts the splash *outside* the initramfs, which is later than the hook
+# would — after the root filesystem is mounted rather than before. Use it when
+# your initramfs has no RABA in it, or alongside one that does: a second
+# instance finds the first on the control socket and declines.
+
+description="RABA boot splash"
+
+command="/usr/bin/raba"
+command_background="yes"
+# raba does not write a pid file; start-stop-daemon makes this one. Conflict
+# detection between instances goes through /run/raba.sock, which is the only
+# file that proves an instance is alive rather than merely remembered.
+pidfile="/run/raba-openrc.pid"
+
+depend() {
+    need localmount
+    before display-manager xdm
+}
+
+stop_pre() {
+    # The polite exit: the outro plays, the terminal is restored, and the
+    # process ends on its own. Exits 0 when nothing is listening.
+    /usr/bin/raba-ctl quit --wait
+}

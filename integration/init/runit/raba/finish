@@ -1,0 +1,9 @@
+#!/bin/sh
+# RABA under runit: what happens after the splash hands the terminal back.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# runsv restarts a service that exits, and a boot splash that comes back after
+# the handoff would draw over whatever took the screen. So the service takes
+# itself down once it has finished, which is what "run once per boot" means
+# under a supervisor that has no such concept.
+sv down raba

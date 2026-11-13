@@ -1,0 +1,5 @@
+#!/bin/sh
+# RABA under runit. Install as /etc/sv/raba/run.
+# SPDX-License-Identifier: GPL-3.0-or-later
+exec 2>&1
+exec /usr/bin/raba

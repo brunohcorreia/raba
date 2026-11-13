@@ -1,0 +1,11 @@
+# RABA under dinit. Install as /etc/dinit.d/raba.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Chimera and Artix. `restart = false` is the important line: the splash runs
+# once per boot and exiting is how it succeeds.
+type = process
+command = /usr/bin/raba
+restart = false
+smooth-recovery = false
+depends-on = early-filesystems
+before = login

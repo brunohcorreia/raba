@@ -1,0 +1,10 @@
+#!/bin/sh
+# RABA under s6. Install as the `run` script of an s6-rc longrun.
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# s6-supervise restarts a service that exits, so the bundle this belongs to
+# should mark it `down-when-finished`, or the handoff should go through
+# `s6-svc -d raba` from whatever starts the display manager. The same problem
+# runit has, with s6's spelling.
+exec 2>&1
+exec /usr/bin/raba

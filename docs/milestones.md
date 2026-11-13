@@ -520,9 +520,9 @@ where it is supposed to run and the one place none of the tests so far have been
 | 3 | mkinitcpio runtime hook | done |
 | 4 | The hook cannot fail an image build, proven against a stubbed mkinitcpio | done |
 | 5 | systemd units: start, quit, quit-wait | done |
-| 6 | dracut module — **v1, not later**: Void, Gentoo and Chimera are non-systemd | |
-| 7 | initramfs-tools hook (Debian, Ubuntu) | |
-| 8 | Service files for OpenRC, runit, s6 and dinit | |
+| 6 | dracut module — **v1, not later**: Void, Gentoo and Chimera are non-systemd | done |
+| 7 | initramfs-tools hook (Debian, Ubuntu) | done |
+| 8 | Service files for OpenRC, runit, s6 and dinit | done |
 | 9 | `raba-setup`: dry run by default, `--apply`, `--check` | |
 | 10 | TPM2 token detected and warned about **before** the initramfs is touched | |
 | 11 | A real mkinitcpio image, booted in QEMU, draws | |
@@ -586,6 +586,43 @@ parser reads back as the same configuration. The first draft failed it — the
 report spells a duration `30s` and the parser wants `30` — which is exactly the
 bug this test exists to catch, found before the file had ever been near an
 initramfs.
+
+### Three generators, three dialects, one rule
+
+mkinitcpio counts a failing `add_*`. dracut calls `dfatal` and aborts. Debian's
+`update-initramfs` runs hooks under `set -e` and stops at the first non-zero
+exit. Three mechanisms, one consequence — a failed image build is a failed
+kernel update — so all three hooks check before they copy and exit 0 on every
+path, and each has a harness that stubs its generator and fails where the real
+one fails. 71 assertions across 20 half-installed machines.
+
+The dracut harness found the kind of bug only a harness finds: the module
+defines a function called `check`, and the first draft of the script used that
+name for its own assertion helper. Sourcing the module silently replaced it and
+the run reported `1..0` — every check passing by never running.
+
+The initramfs-tools harness gets in through a side door. The hook sources an
+absolute path that does not exist off Debian, the `.` fails, the script has no
+`set -e` of its own, and execution carries on with the functions the harness
+exported — which is the hook, unmodified, doing exactly what it does there.
+
+One more thing came out of writing all three: nothing in the glue hardcodes
+`/usr/bin/raba`. `add_binary` and `inst_multiple` both resolve through PATH, so
+the third dialect does too, and a test asserts no line of any of them says
+otherwise.
+
+### The supervisors all have the same bug waiting
+
+A boot splash exits on purpose, and a supervisor's job is to restart things that
+exit. Left alone, runit and s6 bring the splash straight back up over whatever
+took the screen — so the runit service ships a `finish` that takes itself down,
+the s6 one says to mark it `down-when-finished`, and dinit gets
+`restart = false` in the file. OpenRC is the only one of the four that can hand
+off politely by itself, through `stop_pre`.
+
+These four are the part of M5 that no test here can execute. They are written
+down, checked for the one decision each gets wrong by default, and they wait for
+the full-distribution matrix in M6. Saying so is better than a green tick.
 
 ### raba-setup is a second binary on purpose
 

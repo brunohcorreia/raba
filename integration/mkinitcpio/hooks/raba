@@ -8,8 +8,8 @@ run_hook() {
     # killed is not an event: /run/raba.state carries the terminal and the frame
     # across switch_root, and whatever starts next picks the animation back up.
     # See docs/early-boot.md.
-    if [ -x /usr/bin/raba ]; then
-        /usr/bin/raba &
+    if command -v raba > /dev/null; then
+        raba &
     fi
     return 0
 }
@@ -17,8 +17,8 @@ run_hook() {
 run_emergencyhook() {
     # The init script is about to drop to a rescue shell. Whatever went wrong,
     # the person about to read the screen needs the screen.
-    if [ -x /usr/bin/raba-ctl ]; then
-        /usr/bin/raba-ctl quit --wait
+    if command -v raba-ctl > /dev/null; then
+        raba-ctl quit --wait
     fi
     return 0
 }

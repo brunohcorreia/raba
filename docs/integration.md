@@ -119,9 +119,21 @@ sudo systemctl enable raba-start.service raba-quit.service raba-quit-wait.servic
 
 ### OpenRC, runit, s6, dinit
 
-Service scripts ship in `/usr/share/raba/init/`. Copy the one for your system and
-enable it the usual way. These start RABA outside the initramfs, so the splash appears
-slightly later — after the root filesystem is mounted rather than before.
+Service files ship in `/usr/share/raba/init/`. Copy the one for your system and enable
+it the usual way. These start RABA outside the initramfs, so the splash appears slightly
+later — after the root filesystem is mounted rather than before. Running both is fine:
+the second instance finds the first on the control socket and declines.
+
+| init | install as | the thing to watch |
+|---|---|---|
+| OpenRC | `/etc/init.d/raba` | `stop_pre` hands off with `raba-ctl quit --wait` |
+| runit | `/etc/sv/raba/{run,finish}` | `finish` takes the service down; runsv would otherwise restart a splash that finished |
+| s6 | the `run` script of an s6-rc longrun | same problem, s6's spelling: mark it `down-when-finished` |
+| dinit | `/etc/dinit.d/raba` | `restart = false`, because exiting is how this succeeds |
+
+The supervision systems all share one trap: a boot splash *exits on purpose*, and a
+supervisor's job is to restart things that exit. Left alone, runit and s6 bring the
+splash straight back up over whatever took the screen.
 
 ---
 

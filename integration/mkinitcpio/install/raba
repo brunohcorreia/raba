@@ -26,7 +26,7 @@ build() {
     # Every one of these is a reason to put nothing in the image, and none of
     # them is a reason to stop the image being built.
     if ! command -v raba > /dev/null; then
-        warning 'raba: /usr/bin/raba is not installed; this image gets no splash'
+        warning 'raba: the raba binary is not installed; this image gets no splash'
         return 0
     fi
     if ! command -v raba-setup > /dev/null; then
