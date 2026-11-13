@@ -64,6 +64,7 @@ that is not boot integration.
 scripts/vm-test.sh           # kernel + our own initramfs: the VT layer, ~1s
 scripts/image-test.sh        # an initramfs built by the real mkinitcpio, booted
 packaging/tests/package.sh   # makepkg on the working tree, then what is inside
+scripts/distro-test.sh       # a real distribution, installed and rebooted
 ```
 
 Neither touches the machine you are on. The second one needs mkinitcpio and skips

@@ -245,10 +245,23 @@ Only for what genuinely needs a distribution: real mkinitcpio and dracut runs, r
 systems, real display manager handoff, Secure Boot and TPM behaviour.
 
 ```sh
-scripts/distro-test.sh            # Arch: install the packages, reboot, check
-scripts/distro-test.sh --console  # watch it happen
-scripts/distro-test.sh --keep     # leave the disks behind to poke at
+scripts/distro-test.sh                     # Arch: packages, mkinitcpio
+scripts/distro-test.sh --distro debian     # source build, initramfs-tools
+scripts/distro-test.sh --distro fedora     # source build, dracut
+scripts/distro-test.sh --all               # each in turn
+scripts/distro-test.sh --console           # watch it happen
+scripts/distro-test.sh --keep              # leave the disks and frames behind
 ```
+
+| | installed how | initramfs | what it also answers |
+|---|---|---|---|
+| Arch | the packages the PKGBUILD builds, `pacman -U` | mkinitcpio | does the package work |
+| Debian | `make all && make install`, with apt's cargo | initramfs-tools | can a Debian packager build it today |
+| Fedora | `make all && make install`, with dnf's cargo | dracut | same question, dnf's answer |
+
+The two source builds are not a formality. They use the toolchain in each
+distribution's own repositories, so a `cargo` older than the MSRV shows up as a loud
+failure — which is exactly the finding worth having before promising anybody a package.
 
 The distribution's own cloud image, cached once in `target/distro/<distro>/base.qcow2`
 and never written to — every run gets a copy-on-write overlay. **Nothing here needs
@@ -262,11 +275,17 @@ ordered after `multi-user.target` emits TAP on the serial line and powers the ma
 off. Meanwhile the host is taking `screendump`s through QEMU's monitor, so there is
 evidence about what was actually on the screen rather than only what the guest believes.
 
-The screen evidence is deliberately weak and honest: `scripts/screen-colours.py` says
-whether any captured frame had more than a console's worth of black in it. It is not a
-pixel comparison against a reference, because a reference frame would be a font, a
-resolution and a timing all pinned at once — three ways to go red for no reason. See
-`docs/milestones.md` on what would justify a stronger check.
+The screen check classifies rather than thresholds, and the difference matters:
+`scripts/screen-colours.py` calls a many-coloured bitmap firmware, console text against
+the left margin a boot log or a prompt, and a *centred* block of console text a splash.
+The first version only counted how much of the frame was not black, and passed happily
+on the TianoCore logo that OVMF draws. It is still not a pixel comparison against a
+reference frame — that would pin a font, a resolution and a timing at once, three ways
+to go red for no reason — but "something centred was drawn in text" is a claim about the
+right thing.
+
+One frame is kept as `target/distro/<distro>/screen.png` and the rest are thrown away; a
+run captures a hundred three-megabyte screenshots otherwise.
 
 Visual results come from the QEMU monitor:
 
