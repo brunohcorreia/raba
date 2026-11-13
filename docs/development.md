@@ -295,6 +295,68 @@ Visual results come from the QEMU monitor:
 
 which makes automated visual regression possible — compare against a known-good frame.
 
+### Tier 3c — power cuts and sabotage
+
+Tier 3b asks whether a real distribution installs this and draws. This asks the first
+promise in `notas/ideia.md`:
+
+> no pior caso, se quebrar, nao podemos impedir o computador de dar boot
+
+```sh
+scripts/resilience.sh --distro fedora              # everything
+scripts/resilience.sh --distro fedora --cuts       # power cuts only
+scripts/resilience.sh --distro fedora --sabotage   # sabotage only
+scripts/resilience.sh --distro arch --case no-binary
+```
+
+Nothing here is a unit test. Every case is a whole machine, booted, and the assertion is
+always the same: it came up anyway.
+
+**Power cuts.** `kill -9` to QEMU at 1.0, 1.6, 2.2, 3.0 and 4.5 seconds — no SIGTERM, no
+ACPI, no flush, the machine stops existing between two instructions — and then the *same
+disk* is booted again. RABA writes nothing to persistent storage at boot, only to `/run`,
+which is a tmpfs, so the claim under test is that a cut cannot leave anything of ours
+behind that the next boot trips over. Both halves are asserted: the machine boots, and
+the full tier 3b check suite passes on the boot after the cut.
+
+**Sabotage.** Seven cases, chosen because a person could do any of them to their own
+machine — an upgrade that removed a file, a half-finished download, a configuration
+edited in anger at two in the morning:
+
+| case | what is broken | what is expected |
+|---|---|---|
+| `none` | nothing; the control | the strict tier 3b checks pass |
+| `no-binary` | `/usr/bin/raba` deleted | systemd reports the failed unit |
+| `truncated-art` | every theme cut to 100 bytes | a sentence naming the file and the sizes |
+| `garbage-config` | `raba.conf` replaced with nonsense | a sentence naming the file |
+| `impossible-tty` | `Boot.Tty=64` | a sentence naming the range |
+| `socket-in-the-way` | a plain file at `/run/raba.sock` | **silence** — `bind()` replaces it |
+| `state-in-the-way` | `/run/raba.state` is a directory | a sentence, said once, not per frame |
+
+The host chooses the case by attaching a small vfat disk labelled `RABACASE`, the same
+trick as the cloud-init seed, so the guest's filesystem is never edited from outside.
+`integration/tests/distro/case.sh` applies it before the splash starts, and
+`survived.sh` runs instead of `check.sh` afterwards and asks five questions: is the
+machine up, is there a login prompt, is the root filesystem writable, is nothing of ours
+still holding the screen, and is the reason somewhere a person would look.
+
+That last expectation is per-case and it is the subtle one. `socket-in-the-way` is a
+thing RABA is supposed to *cope* with, so a complaint about it would be the defect and
+the assertion is the absence of one. Demanding a sentence from every case is how this
+check first went red against a splash that was working correctly.
+
+Both groups boot an already-installed image rather than installing each time:
+`scripts/distro-test.sh --keep-installed` leaves `installed.qcow2` behind, and
+`resilience.sh` builds one if it is missing. The install is about ten minutes; each case
+after that is about thirty seconds.
+
+What this does **not** cover yet: the sabotage lands in the real root, after the
+initramfs instance is already drawing. The two configuration cases edit
+`/etc/raba/raba.conf`, which the boot-time instance never reads — `man 5 raba.conf` on
+why — and `no-binary` cannot reach the copy baked into the image. Breaking the early
+instance means regenerating the initramfs inside the guest per case, which is minutes
+rather than seconds, and it is not done.
+
 ---
 
 ## Test suite
@@ -375,7 +437,7 @@ no fixture is an untested claim, and should be treated as a documentation bug.
 | `cargo clippy` with the deny lints | long fuzz run |
 | `cargo fmt --check` | upstream watch: latest Durdraw, kernel versions |
 | `cargo deny` — licences, advisories | visual regression via `screendump` |
-| tier 3a VM tests | |
+| tier 3a VM tests | tier 3c: power cuts and the sabotage matrix |
 | binary size check | |
 
 **Binary size is a gate, not a metric.** A threshold with a small allowance; crossing it

@@ -719,7 +719,7 @@ maintainer could package and default to". Everything that is not that waits.
 | 2 | A fallback theme in the `raba` package, so an unknown distribution still draws | done |
 | 3 | Hold the screen from boot until the compositor has drawn, with no display manager in between | half |
 | 4 | One real Arch VM, mkinitcpio + systemd, boot to login | done |
-| 5 | A machine that boots anyway: power cuts and a sabotaged install | |
+| 5 | A machine that boots anyway: power cuts and a sabotaged install | Fedora |
 | 6 | A mistake says what it was, and the system log is left alone | done |
 | 7 | Tag 0.1.0, release notes, publish to the AUR | |
 
@@ -814,6 +814,53 @@ own copy of the text on virtual console *N*, and asking the guest for it answers
 the art on the console" without the emulator having an opinion. The screenshots stay,
 because a picture is still the best evidence to show a person, but the assertion no
 longer depends on them.
+
+### Row 5: twenty-four ways to not break somebody's computer
+
+The row Bruno put inside the MVP rather than after it, on the grounds that publishing to
+the AUR without it would be publishing an unverified claim onto strangers' machines. It
+is `scripts/resilience.sh`, tier 3c, and `docs/development.md` describes the mechanism.
+What belongs here is what running it found.
+
+**The power cuts passed on the first attempt.** `kill -9` to QEMU at 1.0, 1.6, 2.2, 3.0
+and 4.5 seconds — four of those land inside the splash — then the same disk booted again.
+Ten assertions, all green, and the second one of each pair is the strong one: not merely
+that the machine came up, but that the full tier 3b suite passed on the boot after the
+cut. This is the cheapest claim in the project to believe and the most expensive to be
+wrong about, and it is now measured rather than reasoned about.
+
+**The sabotage found one defect, and it was a silence.** `state-in-the-way` puts a
+directory at `/run/raba.state`. Saving is best effort and happens every frame, so
+`let _ = state::save(..)` discarded the error sixty times a second: a splash that could
+not survive `switch_root`, on a machine where nothing anywhere said why. It says it once
+now — `report` moved out of `main.rs` into the library so the boot loop can reach it, and
+a flag keeps one sentence from becoming a flood. A failed save also used to leave
+`raba.state.new` behind for the rest of the boot; it cleans up after itself.
+
+**Two more failures were the harness being wrong, which is worth writing down.**
+`impossible-tty` set `Boot.Tty=63` — but `MAX_NR_CONSOLES` is 63, devtmpfs makes
+`/dev/tty63`, and RABA drew on it perfectly well. The case was demanding a complaint
+nobody had any cause to make. And `socket-in-the-way` did `: > /run/raba.sock` at a
+moment when the initramfs splash was already listening there: opening a socket inode
+gives `ENXIO`, and a redirection error on a special built-in kills the shell outright, so
+the sabotage never happened and the strict checks ran against an unbroken machine. The
+test caught that itself, through `no raba unit failed`.
+
+The last red was the expectation, not the code. `socket-in-the-way` is a case RABA is
+*supposed* to cope with — `bind()` replaces a plain file — so a complaint about it would
+be the defect. Demanding a sentence from all seven cases is how a working splash went
+red. The expectation is per-case now: systemd reports the missing binary, silence is the
+right answer where RABA coped, everything else owes a line in words.
+
+**Fedora: 24 of 24.** The same matrix has to pass on Arch and Debian before the row is
+done — mkinitcpio and initramfs-tools are different machines for this, and the Debian
+one has no systemd in its initramfs at all.
+
+One limitation, recorded rather than hidden: the sabotage lands in the real root, after
+the initramfs instance is already drawing. The configuration cases edit a file the
+boot-time instance never reads, and `no-binary` cannot reach the copy baked into the
+image. Breaking the *early* instance means regenerating the initramfs in the guest per
+case, minutes instead of seconds, and it is not done.
 
 ### Row 6, and where a message belongs
 
