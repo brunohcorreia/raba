@@ -144,9 +144,7 @@ pub fn search(pattern: &str) -> Vec<&'static Logo> {
         .iter()
         .filter(|logo| {
             needles.is_empty()
-                || logo
-                    .names()
-                    .any(|name| needles.iter().any(|n| name.to_lowercase().contains(n)))
+                || logo.names().any(|name| needles.iter().any(|n| name.to_lowercase().contains(n)))
         })
         .collect()
 }

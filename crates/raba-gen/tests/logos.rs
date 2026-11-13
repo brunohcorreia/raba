@@ -63,7 +63,12 @@ fn every_vendored_logo_parses() {
             failures.push(format!("{}: {error}", logo.name));
         }
     }
-    assert!(failures.is_empty(), "{} logos do not parse: {:?}", failures.len(), &failures[..failures.len().min(5)]);
+    assert!(
+        failures.is_empty(),
+        "{} logos do not parse: {:?}",
+        failures.len(),
+        &failures[..failures.len().min(5)]
+    );
 }
 
 #[test]
@@ -199,12 +204,18 @@ fn the_shipped_art_matches_what_upstream_actually_has() {
         compared = compared.saturating_add(1);
         let same = shape(&shipped) == shape(&logo.art_source());
         if hand_edited.contains(&stem.as_str()) {
-            assert!(!same, "{stem} is listed as hand-edited but matches upstream; drop it from the list");
+            assert!(
+                !same,
+                "{stem} is listed as hand-edited but matches upstream; drop it from the list"
+            );
         } else if !same {
             differing.push(stem);
         }
     }
 
     assert!(compared > 40, "only {compared} themes compared");
-    assert!(differing.is_empty(), "art differs from upstream without a recorded hand edit: {differing:?}");
+    assert!(
+        differing.is_empty(),
+        "art differs from upstream without a recorded hand edit: {differing:?}"
+    );
 }

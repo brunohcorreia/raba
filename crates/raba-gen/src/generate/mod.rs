@@ -85,14 +85,7 @@ pub struct Spec {
 
 impl Default for Spec {
     fn default() -> Self {
-        Spec {
-            columns: 80,
-            lines: 25,
-            frames: 60,
-            delay_ms: 80,
-            seed: 1,
-            palette: Palette::Ansi16,
-        }
+        Spec { columns: 80, lines: 25, frames: 60, delay_ms: 80, seed: 1, palette: Palette::Ansi16 }
     }
 }
 
@@ -199,4 +192,3 @@ pub(crate) fn blank(spec: &Spec) -> Grid {
         .or_else(|| Grid::new(1, 1, spec.palette))
         .unwrap_or_else(|| unreachable!("a 1x1 grid is always constructible"))
 }
-

@@ -164,8 +164,7 @@ fn decompress(bytes: &[u8]) -> Result<Vec<u8>, DurError> {
 /// Convert a `.dur` file to a `Movie`.
 pub fn parse(bytes: &[u8]) -> Result<Imported, DurError> {
     let raw = decompress(bytes)?;
-    let file: DurFile =
-        serde_json::from_slice(&raw).map_err(|e| DurError::Json(e.to_string()))?;
+    let file: DurFile = serde_json::from_slice(&raw).map_err(|e| DurError::Json(e.to_string()))?;
     let dur = file.movie;
     let mut notes = Vec::new();
 
@@ -247,8 +246,7 @@ pub fn parse(bytes: &[u8]) -> Result<Imported, DurError> {
             ));
         }
 
-        let mut grid =
-            Grid::new(dur.columns, dur.lines, palette).ok_or(DurError::EmptyCanvas)?;
+        let mut grid = Grid::new(dur.columns, dur.lines, palette).ok_or(DurError::EmptyCanvas)?;
         for line in 0..dur.lines {
             let text: Vec<char> = frame
                 .contents

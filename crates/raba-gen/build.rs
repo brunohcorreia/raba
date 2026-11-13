@@ -30,8 +30,9 @@ fn main() {
     println!("cargo:rerun-if-changed={}", manifest.display());
     println!("cargo:rerun-if-changed={}", pinned.display());
 
-    let text = std::fs::read_to_string(&manifest)
-        .unwrap_or_else(|e| panic!("{}: {e}\nrun scripts/vendor-fastfetch-logos.sh", manifest.display()));
+    let text = std::fs::read_to_string(&manifest).unwrap_or_else(|e| {
+        panic!("{}: {e}\nrun scripts/vendor-fastfetch-logos.sh", manifest.display())
+    });
 
     let mut tag = String::new();
     let mut commit = String::new();
@@ -56,8 +57,7 @@ fn main() {
             continue;
         }
         let mut fields = line.split('\t');
-        let (Some(name), Some(aliases), Some(file)) =
-            (fields.next(), fields.next(), fields.next())
+        let (Some(name), Some(aliases), Some(file)) = (fields.next(), fields.next(), fields.next())
         else {
             panic!("malformed manifest line: {line}");
         };

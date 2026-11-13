@@ -51,8 +51,7 @@ fn themes() -> Vec<(String, Movie)> {
         }
         let name = path.file_stem().expect("stem").to_string_lossy().into_owned();
         let text = std::fs::read_to_string(&path).expect("recipe");
-        let theme = raba_gen::recipe::parse(&text)
-            .unwrap_or_else(|e| panic!("{name}: {e}"));
+        let theme = raba_gen::recipe::parse(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
         let source = match theme.art_source(&path).unwrap_or_else(|e| panic!("{name}: {e}")) {
             raba_gen::recipe::ArtSource::Inline(art) => art,
             raba_gen::recipe::ArtSource::File(p) => {

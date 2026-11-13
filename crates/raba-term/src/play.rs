@@ -4,8 +4,8 @@
 //! theme looks right here, the core is right and only the VT layer remains in doubt —
 //! which is the whole reason `--preview` is a milestone and not a debug flag.
 
-use raba_core::render::{fit, to_ansi_into};
-use raba_core::surface::{Size, Surface};
+use raba_core::render::{all_shading, best_fit, to_ansi_into};
+use raba_core::surface::Surface;
 use raba_core::{apply, Grid, Movie};
 use std::io;
 use std::thread::sleep;
@@ -32,12 +32,16 @@ pub fn play<S: Surface>(surface: &mut S, movie: &Movie, loops: u32) -> io::Resul
     };
 
     // Art is authored at one size and played at whatever this machine has. When
-    // they differ the canvas is centred and cropped, so that what reaches the
-    // encoder is always exactly screen-sized and its absolute cursor moves are
-    // always in range. Drawing past the last column instead would leave the
-    // console scrolled, which is the one thing a splash must not do.
+    // they differ, what reaches the encoder is still always exactly screen-sized,
+    // so its absolute cursor moves are always in range. Drawing past the last
+    // column instead would leave the console scrolled, which is the one thing a
+    // splash must not do.
+    //
+    // Shading art is resampled to the screen; everything else is centred and
+    // cropped. The decision is made once, here, from the whole movie: a picture
+    // that resampled on some frames and was cropped on others would jump.
     let screen = surface.size();
-    let canvas = Size { columns: movie.columns, lines: movie.lines };
+    let shading = all_shading(movie.ops.iter().map(|op| op.ch));
     let Some(mut shown) = Grid::new(screen.columns, screen.lines, movie.palette) else {
         return Ok(());
     };
@@ -49,7 +53,7 @@ pub fn play<S: Surface>(surface: &mut S, movie: &Movie, loops: u32) -> io::Resul
     loop {
         for frame in &movie.frames {
             apply(&mut current, movie, frame);
-            let drawn = if canvas == screen { current.clone() } else { fit(&current, screen) };
+            let drawn = best_fit(&current, screen, shading);
             to_ansi_into(&mut buffer, &drawn, Some(&shown));
             // Park the cursor below the art in the same write, so it does not blink
             // in the middle of the animation and so nothing has to be restored if

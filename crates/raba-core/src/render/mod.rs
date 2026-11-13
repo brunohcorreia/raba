@@ -8,7 +8,9 @@ mod ansi;
 pub mod place;
 
 pub use ansi::{to_ansi, to_ansi_into};
-pub use place::{crops, fit, Placement};
+pub use place::{
+    all_shading, best_fit, crops, fit, intensity, resample, scaled_size, Placement, RAMP,
+};
 
 use crate::format::{limits, Frame, Movie, Palette};
 

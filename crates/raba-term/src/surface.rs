@@ -75,10 +75,7 @@ fn size_from_terminal() -> Option<Size> {
 pub fn detect_size() -> Size {
     let (columns, lines) = size_from_environment();
     let asked = size_from_terminal().unwrap_or(Size::FALLBACK);
-    Size {
-        columns: columns.unwrap_or(asked.columns),
-        lines: lines.unwrap_or(asked.lines),
-    }
+    Size { columns: columns.unwrap_or(asked.columns), lines: lines.unwrap_or(asked.lines) }
 }
 
 impl Surface for StdoutSurface {

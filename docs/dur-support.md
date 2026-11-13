@@ -98,6 +98,22 @@ Keep the canvas to the bounding box of the art rather than padding it to the ter
 size. RABA centres it at display time, so padding buys nothing and multiplies across
 every frame. A 20x22 canvas instead of 80x30 is roughly a quarter of the cost.
 
+### A canvas bigger than the console
+
+`raba-gen convert` warns when the canvas is larger than 80x25, the size `raba`(8)
+assumes when it cannot read the console, and says which of two things will happen.
+
+If the art is drawn only in the shading ramp ` .·░▒▓█` — which `video-to-dur` output
+is, including `/etc/ly/blackhole.dur` at 240x67 — it is **resampled** to the console,
+keeping its proportions. Nothing has to be declared: the property is computed from the
+movie's own cells at load time. Anything else is **centred and cropped**, because
+halving a box-drawing line does not give you half a line.
+
+So a full-screen recording does not need re-authoring per console size, and a logo is
+small enough not to need it either. The case that still wants attention is large art
+in a mixed alphabet — one stray letter in a shading picture disqualifies the whole
+movie from resampling. [console-size.md](console-size.md) has the details.
+
 ## Timing
 
 `framerate` is the global playback rate in frames per second. A frame's `delay`, in

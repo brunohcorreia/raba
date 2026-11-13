@@ -53,8 +53,7 @@ fn document(
 }
 
 fn gzip(text: &str) -> Vec<u8> {
-    let mut encoder =
-        flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     encoder.write_all(text.as_bytes()).expect("write");
     encoder.finish().expect("finish")
 }
@@ -135,10 +134,12 @@ fn the_same_artwork_as_v7_and_v8_encodes_byte_for_byte_identically() {
         .map(|line| (0..2).map(|column| at(column, line)).collect::<Vec<_>>())
         .collect::<Vec<_>>());
 
-    let seven = dur::parse(gzip(&document(7, "256", 2, 3, &[(contents, seven_map, 0.0)])).as_slice())
-        .expect("v7");
-    let eight = dur::parse(gzip(&document(8, "256", 2, 3, &[(contents, eight_map, 0.0)])).as_slice())
-        .expect("v8");
+    let seven =
+        dur::parse(gzip(&document(7, "256", 2, 3, &[(contents, seven_map, 0.0)])).as_slice())
+            .expect("v7");
+    let eight =
+        dur::parse(gzip(&document(8, "256", 2, 3, &[(contents, eight_map, 0.0)])).as_slice())
+            .expect("v8");
 
     assert_eq!(
         raba_core::encode(&seven.movie),
@@ -255,7 +256,8 @@ fn what_is_refused_is_refused_clearly() {
     assert!(matches!(dur::parse(b"not json at all"), Err(DurError::Json(_))));
 
     let no_frames = serde_json::json!({"DurMovie":{"formatVersion":8,"colorFormat":"256",
-        "columns":1,"lines":1,"frames":[]}}).to_string();
+        "columns":1,"lines":1,"frames":[]}})
+    .to_string();
     assert_eq!(dur::parse(no_frames.as_bytes()).unwrap_err(), DurError::NoFrames);
 }
 
@@ -295,9 +297,13 @@ fn a_short_colour_row_is_padded_but_an_ambiguous_map_is_refused() {
     assert_eq!(grid.get(0, 0).unwrap().fg, 40);
     assert_eq!(grid.get(3, 1).unwrap().fg, 7, "past the end of a short colour row");
 
-    let ambiguous = document(8, "256", 4, 2, &[(&["abcd", "efgh"], serde_json::json!([[[7, 0]]]), 0.0)]);
+    let ambiguous =
+        document(8, "256", 4, 2, &[(&["abcd", "efgh"], serde_json::json!([[[7, 0]]]), 0.0)]);
     let error = dur::parse(gzip(&ambiguous).as_slice()).unwrap_err();
-    assert!(matches!(error, DurError::ColourMapMismatch { got: 1, columns: 4, lines: 2, .. }), "{error:?}");
+    assert!(
+        matches!(error, DurError::ColourMapMismatch { got: 1, columns: 4, lines: 2, .. }),
+        "{error:?}"
+    );
     let text = error.to_string();
     assert!(text.contains('4') && text.contains('2'), "{text}");
 }

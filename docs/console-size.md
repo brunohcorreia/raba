@@ -27,15 +27,68 @@ it was authored for a 1080p framebuffer with an 8x16 font, which is the default.
 
 ## What this means for art
 
-A full-screen animation is **tied to the font it was drawn for**. The black hole
-is the size of a 1080p console at 8x16; on the same screen with
-`latarcyrheb-sun32` loaded, the console is 120x33 and most of the art is off the
-edges. `raba_core::render::place` centres and crops rather than scrambling, and
-`raba-gen convert` warns when a canvas is larger than the 80x25 fallback, but
-neither can invent the missing resolution.
+Three kinds of art, three answers. The question "does this survive a console that
+is not the size it was drawn for" has a different answer for each, and sorting them
+out is most of the work.
 
-A logo does not have this problem, because it is small and gets centred. The rule
-is the obvious one: **the bigger the art, the more it assumes.**
+| kind | example | at the wrong size |
+|---|---|---|
+| procedural | `generate matrix` | perfect — it is generated at the console's size |
+| shading | the black hole, anything from `video-to-dur` | **resampled**, proportions kept |
+| line art and logos | every theme in `themes/` | centred, and cropped if it overflows |
+
+**Procedural animations have no native size.** `raba-gen generate` defaults its
+canvas to the terminal it is run in, and nothing stops it being run again for
+another one. There is no information to lose.
+
+**Shading art is not really text.** The black hole is drawn in ` .·░▒▓█` and
+nothing else — seven characters that are a greyscale ramp, which makes the picture
+an image written in a coarse alphabet. An image can be resampled: average the
+coverage of the block of source cells each output cell stands for, and pick the
+character nearest that average. `raba_core::render::resample` does exactly that,
+and `best_fit` chooses it over cropping when every character in the movie is on the
+ramp — a property computed once per movie at load time, so no format change was
+needed and nothing has to be declared in a recipe.
+
+Two details decide whether it looks right:
+
+- **Colour comes from the brightest contributing cell, not the average.** A bright
+  core on dark sky averages to uniform mud and the structure dissolves. Taking the
+  brightest contributor keeps edges where the art put them. 60 distinct colours
+  survive 240x67 → 80x25 on the black hole.
+- **Proportions are kept and the remainder centred.** 240x67 into an 80x60 console
+  becomes 80x22 centred, not a squashed 80x60.
+
+The result at 100x30 is still legibly a black hole — event horizon, the disk
+curving, the jet — from a source nearly nine times its area.
+
+**Line art does not survive this and must not be put through it.** Halving a line
+does not give you half a line; a box-drawing logo resampled is mush. These stay
+centred and cropped, which is also what you want: a centred logo looks deliberate,
+a blown-up one looks broken. For the same reason nothing is ever scaled *up* —
+small art on a big console is centred.
+
+So the rule from the earlier version of this file — *the bigger the art, the more
+it assumes* — is still true, but it is not about size. It is about whether the
+art's alphabet carries intensity.
+
+## Does the font have to change?
+
+**No.** The font decides the grid, and nothing scales it — the framebuffer console
+draws glyph bitmaps one pixel to one pixel, and its only sysfs knobs are
+`cursor_blink`, `power`, `rotate` and `rotate_all`. There is no zoom to turn. So if
+the console had to be made to fit the art, the only lever would be loading a
+different font, with everything that costs below.
+
+The art is the easier end to move. Changing the console changes it for everything
+that draws afterwards and has to be undone on every exit path including a crash;
+resampling a picture changes nothing outside RABA's own output buffer and is a pure
+function with no syscalls, which is where `raba-core` is allowed to work. That is
+why the answer above is resampling and not `setfont`.
+
+The rest of this section stays because the font question is still open for other
+reasons — the glyph restriction, and the sprite-sheet idea at the end — not because
+screen size needs it.
 
 ## Could RABA set the font itself?
 
@@ -92,5 +145,5 @@ and tested in a virtual machine before anything else.
 ## See also
 
 - [glyphs.md](glyphs.md) — the problem a self-loaded font would remove
-- [dur-support.md](dur-support.md) — why canvases should stay small
+- [dur-support.md](dur-support.md) — importing art authored at somebody else's size
 - [generated.md](generated.md) — animations generated at the terminal's size

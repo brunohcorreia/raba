@@ -48,9 +48,7 @@ fn bucket(value: f64, buckets: usize) -> usize {
     let clamped = value.clamp(0.0, 1.0);
     let total = f64::from(u32::try_from(buckets.max(1)).unwrap_or(1));
     (1..=buckets)
-        .find(|edge| {
-            clamped < f64::from(u32::try_from(*edge).unwrap_or(1)) / total
-        })
+        .find(|edge| clamped < f64::from(u32::try_from(*edge).unwrap_or(1)) / total)
         .map_or(buckets.saturating_sub(1), |edge| edge.saturating_sub(1))
 }
 

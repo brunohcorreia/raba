@@ -40,12 +40,8 @@ fn every_animation_generates_and_draws_on_a_console() {
     for kind in Kind::ALL {
         let movie = generate(kind, &Spec::default());
         assert!(!movie.frames.is_empty(), "{}: no frames", kind.name());
-        let bad: Vec<char> = movie
-            .ops
-            .iter()
-            .map(|op| op.ch)
-            .filter(|ch| safety(*ch) != Safety::Safe)
-            .collect();
+        let bad: Vec<char> =
+            movie.ops.iter().map(|op| op.ch).filter(|ch| safety(*ch) != Safety::Safe).collect();
         assert!(bad.is_empty(), "{}: unsafe glyphs {bad:?}", kind.name());
     }
 }
@@ -176,8 +172,10 @@ fn a_random_soup_would_have_been_the_wrong_choice() {
                         }
                     }
                 }
-                next[l * columns + c] =
-                    matches!((alive(&cells, c as isize, l as isize), n), (true, 2 | 3) | (false, 3));
+                next[l * columns + c] = matches!(
+                    (alive(&cells, c as isize, l as isize), n),
+                    (true, 2 | 3) | (false, 3)
+                );
             }
         }
         cells = next;
@@ -196,8 +194,10 @@ fn a_random_soup_would_have_been_the_wrong_choice() {
                         }
                     }
                 }
-                next[l * columns + c] =
-                    matches!((alive(&cells, c as isize, l as isize), n), (true, 2 | 3) | (false, 3));
+                next[l * columns + c] = matches!(
+                    (alive(&cells, c as isize, l as isize), n),
+                    (true, 2 | 3) | (false, 3)
+                );
             }
         }
         cells = next;
@@ -224,9 +224,7 @@ fn delta_encoding_still_pays_on_a_full_screen_animation() {
     // would sit at.
     for kind in Kind::ALL {
         let movie = generate(kind, &Spec::default());
-        let dense = usize::from(movie.columns)
-            * usize::from(movie.lines)
-            * movie.frames.len();
+        let dense = usize::from(movie.columns) * usize::from(movie.lines) * movie.frames.len();
         assert!(
             movie.ops.len() < dense,
             "{}: {} ops against {dense} for a dense format",

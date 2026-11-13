@@ -114,8 +114,8 @@ fn garden(columns: usize, lines: usize, rng: &mut Rng) -> Vec<bool> {
 
     for slot_line in 0..down {
         for slot_column in 0..across {
-            let choice = usize::try_from(rng.below(u32::try_from(PATTERNS.len()).unwrap_or(1)))
-                .unwrap_or(0);
+            let choice =
+                usize::try_from(rng.below(u32::try_from(PATTERNS.len()).unwrap_or(1))).unwrap_or(0);
             let Some((pattern, _)) = PATTERNS.get(choice) else { continue };
             let width = pattern.first().map_or(0, |row| row.chars().count());
             let height = pattern.len();
@@ -147,18 +147,24 @@ impl Board {
         let lines = isize::try_from(self.lines).unwrap_or(1).max(1);
         let column = usize::try_from(column.rem_euclid(columns)).unwrap_or(0);
         let line = usize::try_from(line.rem_euclid(lines)).unwrap_or(0);
-        self.cells.get(line.saturating_mul(self.columns).saturating_add(column)).copied().unwrap_or(false)
+        self.cells
+            .get(line.saturating_mul(self.columns).saturating_add(column))
+            .copied()
+            .unwrap_or(false)
     }
 
     fn step(&self) -> Vec<bool> {
         let mut next = vec![false; self.cells.len()];
         for line in 0..self.lines {
             for column in 0..self.columns {
-                let (c, l) = (isize::try_from(column).unwrap_or(0), isize::try_from(line).unwrap_or(0));
+                let (c, l) =
+                    (isize::try_from(column).unwrap_or(0), isize::try_from(line).unwrap_or(0));
                 let mut neighbours = 0u8;
                 for dl in -1_isize..=1 {
                     for dc in -1_isize..=1 {
-                        if (dc, dl) != (0, 0) && self.alive(c.saturating_add(dc), l.saturating_add(dl)) {
+                        if (dc, dl) != (0, 0)
+                            && self.alive(c.saturating_add(dc), l.saturating_add(dl))
+                        {
                             neighbours = neighbours.saturating_add(1);
                         }
                     }
@@ -184,8 +190,10 @@ fn paint(spec: &Spec, now: &[bool], before: &[bool], columns: usize, lines: usiz
     for line in 0..lines {
         for column in 0..columns {
             let index = line.saturating_mul(columns).saturating_add(column);
-            let (alive, was) =
-                (now.get(index).copied().unwrap_or(false), before.get(index).copied().unwrap_or(false));
+            let (alive, was) = (
+                now.get(index).copied().unwrap_or(false),
+                before.get(index).copied().unwrap_or(false),
+            );
             let cell = match (alive, was) {
                 (true, false) => Cell { ch: '█', fg: 15, bg: 0 }, // just born
                 (true, true) => Cell { ch: '█', fg: 10, bg: 0 },  // living on
@@ -228,11 +236,17 @@ pub fn frames(spec: &Spec) -> Vec<Grid> {
             // Exactly one turn of the cycle, trimmed to the budget if the cycle is
             // longer than the caller wants to store.
             let length = period.min(budget);
-            history.get(first..first.saturating_add(length)).map(<[Vec<bool>]>::to_vec).unwrap_or_default()
+            history
+                .get(first..first.saturating_add(length))
+                .map(<[Vec<bool>]>::to_vec)
+                .unwrap_or_default()
         }
         // Still churning after SEARCH generations: take what was asked for and
         // accept the seam.
-        _ => history.get(history.len().saturating_sub(budget)..).map(<[Vec<bool>]>::to_vec).unwrap_or_default(),
+        _ => history
+            .get(history.len().saturating_sub(budget)..)
+            .map(<[Vec<bool>]>::to_vec)
+            .unwrap_or_default(),
     };
 
     if states.is_empty() {
@@ -246,7 +260,8 @@ pub fn frames(spec: &Spec) -> Vec<Grid> {
         .iter()
         .enumerate()
         .map(|(index, now)| {
-            let before = if index == 0 { states.get(last) } else { states.get(index.saturating_sub(1)) };
+            let before =
+                if index == 0 { states.get(last) } else { states.get(index.saturating_sub(1)) };
             paint(spec, now, before.map_or(&[][..], Vec::as_slice), columns, lines)
         })
         .collect()

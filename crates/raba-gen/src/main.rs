@@ -262,15 +262,25 @@ fn convert_command(args: &[String]) -> Result<(), String> {
     let movie = &imported.movie;
 
     // Warned here, where the canvas can still be changed, rather than at boot
-    // where all that can happen is cropping. 80x25 is what raba(8) assumes when
+    // where all that can happen is fitting it. 80x25 is what raba(8) assumes when
     // it cannot read the console.
+    //
+    // What happens there depends on the art. Shading art is resampled, which is
+    // lossy but keeps the whole picture; anything else is centred and cropped,
+    // which keeps the detail and loses the edges. Saying which one applies is the
+    // difference between a warning somebody acts on and one they ignore.
     let fallback = raba_core::surface::Size::FALLBACK;
     let canvas = raba_core::surface::Size { columns: movie.columns, lines: movie.lines };
     if raba_core::render::crops(canvas, fallback) {
+        let fate = if raba_core::render::all_shading(movie.ops.iter().map(|op| op.ch)) {
+            "it is shading art, so it will be scaled down to fit"
+        } else {
+            "it will be centred and cropped there"
+        };
         eprintln!(
             "raba-gen: {input}: canvas is {}x{}, larger than the {}x{} console \
-             raba(8) assumes when it cannot read the real size; it will be centred \
-             and cropped there (see docs/dur-support.md on size)",
+             raba(8) assumes when it cannot read the real size; {fate} \
+             (see docs/dur-support.md on size)",
             movie.columns, movie.lines, fallback.columns, fallback.lines
         );
     }

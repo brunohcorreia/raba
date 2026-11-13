@@ -27,23 +27,23 @@ use raba_core::Grid;
 /// between them. Backgrounds stay in 0–7, since a console's high background bit
 /// is blink rather than brightness.
 const RAMP: [(char, u8, u8); 17] = [
-    (' ', 0, 0),    // cold
+    (' ', 0, 0), // cold
     ('░', 1, 0),
     ('▒', 1, 0),
     ('▓', 1, 0),
-    ('█', 1, 0),    // red
+    ('█', 1, 0), // red
     ('░', 9, 1),
     ('▒', 9, 1),
     ('▓', 9, 1),
-    ('█', 9, 1),    // bright red
+    ('█', 9, 1), // bright red
     ('░', 11, 1),
     ('▒', 11, 1),
     ('▓', 11, 3),
-    ('█', 11, 3),   // bright yellow
+    ('█', 11, 3), // bright yellow
     ('░', 15, 3),
     ('▒', 15, 3),
     ('▓', 15, 3),
-    ('█', 15, 0),   // white hot
+    ('█', 15, 0), // white hot
 ];
 
 fn paint(heat: u8) -> Cell {
@@ -62,7 +62,9 @@ pub fn frames(spec: &Spec) -> Vec<Grid> {
     // Heat, row-major, with row 0 at the top. The bottom row is the source.
     let mut heat = vec![0u8; columns.saturating_mul(lines)];
     for column in 0..columns {
-        if let Some(cell) = heat.get_mut(columns.saturating_mul(lines.saturating_sub(1)).saturating_add(column)) {
+        if let Some(cell) =
+            heat.get_mut(columns.saturating_mul(lines.saturating_sub(1)).saturating_add(column))
+        {
             *cell = hottest;
         }
     }
@@ -83,8 +85,8 @@ pub fn frames(spec: &Spec) -> Vec<Grid> {
                 let target = target.rem_euclid(i32::try_from(columns).unwrap_or(1));
                 let target = usize::try_from(target).unwrap_or(0);
                 let value = below.saturating_sub(decay);
-                if let Some(cell) =
-                    heat.get_mut(line.saturating_sub(1).saturating_mul(columns).saturating_add(target))
+                if let Some(cell) = heat
+                    .get_mut(line.saturating_sub(1).saturating_mul(columns).saturating_add(target))
                 {
                     *cell = value;
                 }
@@ -104,8 +106,10 @@ pub fn frames(spec: &Spec) -> Vec<Grid> {
         let mut grid = blank(spec);
         for line in 0..lines {
             for column in 0..columns {
-                let value =
-                    heat.get(line.saturating_mul(columns).saturating_add(column)).copied().unwrap_or(0);
+                let value = heat
+                    .get(line.saturating_mul(columns).saturating_add(column))
+                    .copied()
+                    .unwrap_or(0);
                 if let (Ok(c), Ok(l)) = (u16::try_from(column), u16::try_from(line)) {
                     grid.set(c, l, paint(value));
                 }

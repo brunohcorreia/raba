@@ -54,7 +54,10 @@ pub fn frames(spec: &Spec) -> Vec<Grid> {
     let drops: Vec<Column> = (0..columns)
         .map(|_| {
             let cycle = choices
-                .get(usize::try_from(rng.below(u32::try_from(choices.len()).unwrap_or(1))).unwrap_or(0))
+                .get(
+                    usize::try_from(rng.below(u32::try_from(choices.len()).unwrap_or(1)))
+                        .unwrap_or(0),
+                )
                 .copied()
                 .unwrap_or(frame_count);
             Column {
@@ -72,7 +75,8 @@ pub fn frames(spec: &Spec) -> Vec<Grid> {
     // One glyph per cell, fixed for the whole animation. See the note above.
     let glyphs: Vec<char> = (0..usize::from(columns).saturating_mul(usize::from(lines)))
         .map(|_| {
-            let index = usize::try_from(rng.below(u32::try_from(GLYPHS.len()).unwrap_or(1))).unwrap_or(0);
+            let index =
+                usize::try_from(rng.below(u32::try_from(GLYPHS.len()).unwrap_or(1))).unwrap_or(0);
             char::from(GLYPHS.get(index).copied().unwrap_or(b'0'))
         })
         .collect();
@@ -92,14 +96,16 @@ pub fn frames(spec: &Spec) -> Vec<Grid> {
                     continue;
                 }
                 let fg = match behind {
-                    0 => 15,                                        // the head, white
-                    1..=2 => 10,                                    // just behind it, bright
-                    n if n < i32::from(drop.trail) / 2 => 2,        // the body, green
+                    0 => 15,                                 // the head, white
+                    1..=2 => 10,                             // just behind it, bright
+                    n if n < i32::from(drop.trail) / 2 => 2, // the body, green
                     _ => 2,
                 };
                 // The tail thins out rather than stopping dead.
                 let faded = behind >= i32::from(drop.trail).saturating_mul(3) / 4;
-                let index = usize::from(line).saturating_mul(usize::from(columns)).saturating_add(usize::from(column));
+                let index = usize::from(line)
+                    .saturating_mul(usize::from(columns))
+                    .saturating_add(usize::from(column));
                 let ch = glyphs.get(index).copied().unwrap_or('0');
                 grid.set(column, line, Cell { ch: if faded { '.' } else { ch }, fg, bg: 0 });
             }
