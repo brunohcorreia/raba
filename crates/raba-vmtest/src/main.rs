@@ -30,6 +30,7 @@
 mod boot_checks;
 mod checks;
 mod hold;
+mod profile;
 mod report;
 mod shutdown;
 mod vt_checks;
@@ -85,5 +86,9 @@ fn main() {
     checks::a_deliberate_failure_is_reported(&mut report);
 
     report.finish();
+    // Before the power-off, which is an I/O port write and not an exit: a
+    // process that leaves that way runs no `atexit`, so anything still
+    // unwritten would be lost with the machine.
+    profile::emit();
     shutdown::power_off(report.failed());
 }

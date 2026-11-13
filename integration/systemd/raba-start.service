@@ -27,10 +27,13 @@ IgnoreOnIsolate=true
 [Service]
 Type=exec
 ExecStart=/usr/bin/raba
-# raba blocks SIGTERM and acts on it at a frame boundary, restoring the terminal
-# on the way out; a second one is fatal by design. There is nothing here to make
-# survive switch_root: systemd's killing spree is answered by resuming from
-# /run/raba.state rather than by fighting it. See docs/early-boot.md.
+# raba blocks SIGTERM and acts on it at a frame boundary; a second one is fatal
+# by design. It does not hand the console back on that path — it writes down the
+# terminal and the frame and leaves the art where it is, which is what makes the
+# next instance a pause rather than a flash of black. See raba-initrd.service
+# and `Session::finish`. There is nothing here to make survive switch_root:
+# systemd's killing spree is answered by resuming from /run/raba.state rather
+# than by fighting it. See docs/early-boot.md.
 TimeoutStopSec=5
 
 [Install]

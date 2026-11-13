@@ -40,8 +40,8 @@ use crate::lifecycle::{Event, Lifecycle, Phase};
 use crate::report::{note, report};
 use crate::signals::{Signal, Signals};
 use crate::state::{self, State};
-use crate::vt::{Displaced, Vt};
-use raba_core::surface::{Size, Surface as _};
+use crate::vt::{Console, Displaced, Kernel, Screen};
+use raba_core::surface::{Size, Surface};
 use raba_core::Movie;
 use raba_term::Player;
 use std::path::PathBuf;
@@ -153,8 +153,17 @@ pub fn read_movie(path: &std::path::Path) -> Result<Movie, String> {
     raba_core::decode(&bytes).map_err(|e| format!("{shown}: {e}"))
 }
 
-/// Run until something says to stop.
+/// Run until something says to stop, on this machine's real consoles.
 pub fn run(settings: &Settings) -> Outcome {
+    run_on(settings, Kernel)
+}
+
+/// Run until something says to stop, drawing on whatever `console` hands out.
+///
+/// The entry point the tests use. `run` is this with [`Kernel`], and there is no
+/// other implementation of [`Console`] in the shipped binary — see
+/// `crates/raba/src/vt/screen.rs` for why the seam is here and not elsewhere.
+pub fn run_on<C: Console>(settings: &Settings, console: C) -> Outcome {
     if let Some(conflict) = conflict::detect(&settings.places) {
         return Outcome::Yielded(conflict);
     }
@@ -180,20 +189,24 @@ pub fn run(settings: &Settings) -> Outcome {
         }
     };
 
-    Session::new(settings, boot, resume).run()
+    Session::new(settings, console, boot, resume).run()
 }
 
 /// Everything the loop needs, so that the loop itself reads as a list of
 /// questions rather than as a pile of local variables.
-struct Session<'a> {
+struct Session<'a, C: Console> {
     settings: &'a Settings,
+    /// Where a terminal comes from. Held rather than called statically so that
+    /// a test can hand the loop a console that fails, or one that reports a
+    /// different size on every frame.
+    console: C,
     boot: Movie,
     /// Loaded on the way into the outro, not before: on most boots it is never
     /// needed, and reading it early is a file read in the window where a boot is
     /// slowest.
     outro: Option<Movie>,
     life: Lifecycle,
-    vt: Option<Vt>,
+    vt: Option<C::Screen>,
     player: Option<Player>,
     signals: Option<Signals>,
     listener: Option<Listener>,
@@ -225,14 +238,20 @@ struct Session<'a> {
     next_frame: Instant,
 }
 
-impl<'a> Session<'a> {
-    fn new(settings: &'a Settings, boot: Movie, resume: Option<State>) -> Session<'a> {
+impl<'a, C: Console> Session<'a, C> {
+    fn new(
+        settings: &'a Settings,
+        console: C,
+        boot: Movie,
+        resume: Option<State>,
+    ) -> Session<'a, C> {
         // A resume has no handoff to play an outro for: the screen it would
         // animate away from is one the user has been looking at for a while.
         // `docs/coexistence.md` is explicit about it.
         let outro_wanted = settings.outro.is_some() && resume.is_none();
         Session {
             settings,
+            console,
             boot,
             outro: None,
             life: Lifecycle::new(outro_wanted),
@@ -307,7 +326,37 @@ impl<'a> Session<'a> {
             Phase::Outro => {
                 self.outro_started = Some(Instant::now());
                 self.player = None;
+                // Read here and not at startup, which is what the field's
+                // documentation has always said and what nothing did: `outro`
+                // stayed `None` for the life of the process, `draw` fell
+                // through to `unwrap_or(&self.boot)`, and a configured
+                // `Outro.Theme` silently played the boot animation once more.
+                // Nothing failed, nothing was logged, and no test looked —
+                // this phase could not be entered outside a virtual machine
+                // until `vt::Console` existed.
+                if let Some(path) = self.settings.outro.as_ref() {
+                    match read_movie(path) {
+                        Ok(movie) => self.outro = Some(movie),
+                        // `note`, not `report`: the boot animation plays in its
+                        // place, the splash still ends properly, and the only
+                        // loss is the handoff looking less deliberate.
+                        Err(why) => note(&format!("ignoring the outro: {why}")),
+                    }
+                }
             }
+            // A termination signal is `switch_root`, and there the terminal
+            // must be left exactly as it stands for the instance that comes
+            // next: `docs/early-boot.md` says the screen holds the last frame
+            // "because nothing cleared it", and [`Session::finish`] is the one
+            // place that chooses between the two endings.
+            //
+            // Releasing here made that choice first and silently. The display
+            // went back, the console flashed, the terminal was deallocated —
+            // and then `finish` found `self.vt` already gone, so it saved no
+            // state and had nothing to hand over. The whole resume path across
+            // `switch_root` was dead, and every test that covered it killed the
+            // process with `SIGKILL`, which skips this line.
+            Phase::Done if self.interrupted => {}
             // The timeout case and the deactivate case are the same action and
             // different reasons: give the console back. For a timeout that is
             // the whole feature — `raba` does not exit, it *reveals*, so a
@@ -322,7 +371,7 @@ impl<'a> Session<'a> {
     /// Has the screen stopped being ours? Asked once per slice, which is two
     /// ioctls every ten milliseconds on a machine that is otherwise waiting.
     fn displaced(&self) -> Option<Displaced> {
-        self.vt.as_ref().and_then(Vt::displaced)
+        self.vt.as_ref().and_then(Screen::displaced)
     }
 
     /// Stop, having been displaced: no outro, no switching back.
@@ -396,7 +445,7 @@ impl<'a> Session<'a> {
                 }
                 // The only path from outside this process to a terminal, and the
                 // only place that is true. See `raba_core::message`.
-                let width = self.vt.as_ref().map_or(Size::FALLBACK, Vt::size).columns;
+                let width = self.vt.as_ref().map_or(Size::FALLBACK, Surface::size).columns;
                 self.message = Some(raba_core::sanitise(&text, width));
                 (Reply::Ok, None)
             }
@@ -416,8 +465,8 @@ impl<'a> Session<'a> {
             ("protocol", crate::control::VERSION.to_string()),
             ("version", env!("CARGO_PKG_VERSION").to_owned()),
             ("phase", self.life.phase().name().to_owned()),
-            ("terminal", self.vt.as_ref().map_or(0, Vt::number).to_string()),
-            ("previous", self.vt.as_ref().map_or(0, Vt::previous).to_string()),
+            ("terminal", self.vt.as_ref().map_or(0, Screen::number).to_string()),
+            ("previous", self.vt.as_ref().map_or(0, Screen::previous).to_string()),
             ("theme", self.settings.theme.display().to_string()),
             ("frame", self.player.as_ref().map_or(0, Player::frame).to_string()),
             ("uptime_ms", uptime.to_string()),
@@ -580,13 +629,13 @@ impl<'a> Session<'a> {
             // Nothing is cleared on this path, which is the point: the screen is
             // still showing the frame the dead instance left, so continuing from
             // the next one is a pause rather than a flash of black.
-            Some(state) => Vt::adopt(state.terminal, state.previous)?,
+            Some(state) => self.console.adopt(state.terminal, state.previous)?,
             None => {
                 let mut vt = match self.settings.tty {
                     // Asked for by name, and taken whatever is on it: that is
                     // what naming one means. `Vt::acquire` is the other case.
-                    Some(number) => Vt::take(number)?,
-                    None => Vt::acquire()?,
+                    Some(number) => self.console.take(number)?,
+                    None => self.console.acquire()?,
                 };
                 // Start from a known screen, and hide the cursor so it does not
                 // blink in the middle of the art. `Vt::restore` shows it again

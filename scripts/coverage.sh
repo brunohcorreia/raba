@@ -81,12 +81,49 @@ for binary in "${binaries[@]}"; do
     objects+=(--object "$binary")
 done
 
-llvm-profdata merge -sparse "${out}/raw"/*.profraw -o "${out}/all.profdata" \
+# What the virtual machine ran, if anybody has asked it. `crates/raba/src/vt`
+# is the half of this program that needs a real console and root, so on a host
+# alone it reads 0% and the total is a sentence with a hole in it. The profile
+# comes out of the guest over the serial line — see `scripts/vm-test.sh
+# --coverage` — and the binary that wrote it is a different object from any of
+# the test binaries above, built for musl, so llvm-cov needs both.
+profiles=("${out}/raw"/*.profraw)
+if [ -s "${out}/vm/objects.txt" ]; then
+    guest_count=$(find "${out}/vm" -name '*.profraw' | wc -l)
+    if [ "$guest_count" -gt 0 ]; then
+        while read -r guest; do
+            [ -x "$guest" ] || die "the guest binary ${guest} is gone; run scripts/vm-test.sh --coverage again"
+            objects+=(--object "$guest")
+        done < "${out}/vm/objects.txt"
+        while IFS= read -r profile; do
+            profiles+=("$profile")
+        done < <(find "${out}/vm" -name '*.profraw')
+        echo "coverage: including ${guest_count} profile(s) from the virtual machine"
+    fi
+else
+    echo "coverage: no virtual-machine profile; crates/raba/src/vt will read 0%."
+    echo "coverage: run scripts/vm-test.sh --coverage first to include it."
+fi
+
+llvm-profdata merge -sparse "${profiles[@]}" -o "${out}/all.profdata" \
     || die "the profiles would not merge"
 
-# Only our own code. Without this the report is nine tenths registry sources,
-# and "the standard library is 3% covered" is not a finding.
-ignore=(--ignore-filename-regex='(/\.cargo/registry/|/rustc/|/tests?/|/target/)')
+# Only our own product code. Three things are left out, and each omission is a
+# claim about what the number means:
+#
+#   registry and rustc sources   not ours; without this the report is nine
+#                                tenths dependencies and "the standard library
+#                                is 3% covered" is not a finding.
+#   anything under tests/ and    the tests themselves. A suite is 100% covered
+#   any file named tests.rs      by definition — it is what ran — so counting it
+#                                inflates the one number anybody reads. This is
+#                                why `#[cfg(test)]` blocks live in a sibling
+#                                `tests.rs` in this tree rather than at the foot
+#                                of the module they test.
+#   crates/raba-vmtest           the harness that runs the QEMU tier. It is the
+#                                instrument, not the thing being measured, and
+#                                no `cargo test` executes it.
+ignore=(--ignore-filename-regex='(/\.cargo/registry/|/rustc/|/tests?/|/tests\.rs$|/target/|/crates/raba-vmtest/)')
 
 common=("${objects[@]}" --instr-profile="${out}/all.profdata" "${ignore[@]}")
 

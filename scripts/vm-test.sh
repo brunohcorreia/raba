@@ -11,6 +11,9 @@
 #   scripts/vm-test.sh --self-test     assert that a failing run comes back failed
 #   scripts/vm-test.sh --keep          leave the initramfs behind for inspection
 #   scripts/vm-test.sh --console       show the guest's VGA console as well
+#   scripts/vm-test.sh --coverage      also measure what the guest ran, line
+#                                      by line, and leave the profile where
+#                                      scripts/coverage.sh will find it
 #
 # See docs/development.md on the tiers and crates/raba-vmtest for the guest side.
 
@@ -25,11 +28,13 @@ timeout_seconds="${RABA_VM_TIMEOUT:-60}"
 self_test=0
 keep=0
 show_console=0
+coverage=0
 for arg in "$@"; do
     case "$arg" in
         --self-test) self_test=1 ;;
         --keep) keep=1 ;;
         --console) show_console=1 ;;
+        --coverage) coverage=1 ;;
         -h|--help) sed -n '2,18p' "$0" | sed 's/^# \?//'; exit 0 ;;
         *) echo "vm-test: unknown option $arg" >&2; exit 2 ;;
     esac
@@ -83,6 +88,29 @@ cargo build --release --target "$target" -p raba-vmtest -p raba >/dev/null
 cargo build --release -p raba-gen >/dev/null
 
 bin="${root}/target/${target}/release"
+
+# The instrumented `raba`, when asked for. Only `raba` and not the harness: a
+# process that leaves through isa-debug-exit runs no `atexit`, so PID 1 could
+# never write its own counters, while every `raba` the checks start exits the
+# ordinary way and writes them for free. Its own target directory, so an
+# ordinary run that follows a coverage run does not boot an instrumented binary
+# and wonder why the image doubled in size.
+cover_out="${root}/target/coverage/vm"
+if [ "$coverage" = 1 ]; then
+    command -v base64 >/dev/null || die "base64 is not installed (package: coreutils)"
+    echo "vm-test: building an instrumented raba for the guest"
+    rm -rf "$cover_out"
+    mkdir -p "$cover_out"
+    CARGO_TARGET_DIR="${root}/target/coverage/guest" \
+        RUSTFLAGS="-C instrument-coverage" \
+        cargo build --release --target "$target" -p raba >/dev/null
+    bin_covered="${root}/target/coverage/guest/${target}/release"
+    [ -x "${bin_covered}/raba" ] || die "the instrumented raba did not build"
+    # The object the counters belong to: llvm-cov needs the binary that wrote a
+    # profile, and this one never existed on the host.
+    echo "${bin_covered}/raba" > "${cover_out}/objects.txt"
+fi
+
 [ -x "${bin}/raba-vmtest" ] || die "raba-vmtest did not build"
 [ -x "${bin}/raba-ctl" ] || die "raba-ctl did not build"
 [ -x "${bin}/raba" ] || die "raba did not build"
@@ -96,7 +124,11 @@ mkdir -p "${work}/root"/{dev,proc,run,sys,fixtures}
     -o "${work}/root/fixtures/vmtest.raba" >/dev/null
 
 install -m 755 "${bin}/raba-vmtest" "${work}/root/init"
-install -m 755 "${bin}/raba" "${work}/root/raba"
+if [ "$coverage" = 1 ]; then
+    install -m 755 "${bin_covered}/raba" "${work}/root/raba"
+else
+    install -m 755 "${bin}/raba" "${work}/root/raba"
+fi
 # M4: the daemon checks drive the real client against the real daemon.
 install -m 755 "${bin}/raba-ctl" "${work}/root/raba-ctl"
 
@@ -117,6 +149,11 @@ echo "vm-test: initramfs $(du -h "$image" | cut -f1), kernel $(basename "$kernel
 # /dev/console is where PID 1's output goes. So results leave by the serial line
 # that -serial stdio captures, while tty0 stays free to be drawn on and inspected.
 append="console=tty0 console=ttyS0 panic=-1 loglevel=3"
+
+# An instrumented binary is several times the size of the shipped one, and an
+# initramfs is unpacked into RAM rather than read from a disk.
+memory=256M
+[ "$coverage" = 1 ] && memory=1G
 [ "$self_test" = 1 ] && append="$append rabatest.selftest=fail"
 
 display=(-display none)
@@ -143,7 +180,7 @@ output="$(timeout "$timeout_seconds" qemu-system-x86_64 \
     -kernel "$kernel" \
     -initrd "$image" \
     -append "$append" \
-    -m 256M \
+    -m "$memory" \
     -no-reboot \
     "${accel[@]}" \
     "${display[@]}" \
@@ -159,7 +196,31 @@ set -e
 # failed, because a boot log around five result lines hides them.
 # The YAML block under a failure carries the reason, and it is indented — which
 # is exactly what a naive filter drops, leaving "not ok 14" and no way to know why.
-echo "$output" | grep -E '^(ok|not ok|# |1\.\.|TAP| +(---|\.\.\.|reason:))' || true
+# The profile blocks are cut out first: a megabyte of base64 in a terminal
+# helps nobody, and it is not a result.
+echo "$output" \
+    | sed '/^# raba-profile-begin/,/^# raba-profile-end/d' \
+    | grep -E '^(ok|not ok|# |1\.\.|TAP| +(---|\.\.\.|reason:))' || true
+
+if [ "$coverage" = 1 ]; then
+    # One block per profile, `# raba-profile-begin <name> <bytes>` to
+    # `# raba-profile-end`. See crates/raba-vmtest/src/profile.rs.
+    blocks=0
+    while read -r name; do
+        blocks=$((blocks + 1))
+        echo "$output" \
+            | sed -n "/^# raba-profile-begin ${name} /,/^# raba-profile-end/p" \
+            | sed '1d;$d' \
+            | tr -d '\r' \
+            | base64 -d > "${cover_out}/${name}" \
+            || die "the guest's profile did not decode"
+    done < <(echo "$output" | sed -n 's/^# raba-profile-begin \([^ ]*\) .*/\1/p')
+    if [ "$blocks" = 0 ]; then
+        die "the guest produced no profile. Either every raba it started was
+killed, or the binary in the image was not the instrumented one."
+    fi
+    echo "vm-test: ${blocks} profile(s) in ${cover_out}; scripts/coverage.sh merges them"
+fi
 
 # --- verdict -----------------------------------------------------------------
 

@@ -42,6 +42,9 @@
 //! See `docs/early-boot.md` and `docs/coexistence.md`.
 
 pub mod ioctl;
+mod screen;
+
+pub use screen::{Console, Kernel, Screen};
 
 use raba_core::surface::{Size, Surface};
 use std::fmt;
