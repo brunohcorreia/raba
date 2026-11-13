@@ -98,6 +98,17 @@ truncates whatever is on the other end. A rule written in a document and applied
 of three places is a rule the next writer will miss too, which is why it is a function
 now and not a habit.
 
+Two details in it are worth naming, because both are places where the obvious code is
+the wrong code. It preserves the destination's permissions, so that replacing a file
+cannot silently widen it — read with `std::fs::metadata`, that courtesy *is* the attack,
+because `metadata` follows the symlink the function exists to refuse and would hand a
+setuid `st_mode` from the far end to a root-owned file about to be renamed into place.
+It reads with `symlink_metadata` and copies a mode only from a regular file. And there
+are two of it: `replace` is ordered, which is what `/run` needs, and `replace_durably`
+adds the `fsync` that `/etc/raba/raba.conf` needs, because the usual thing a power cut
+leaves behind after an un-`fsync`ed rename is a zero-length file — which for that file
+is a machine whose next image has no theme in it.
+
 ### 5. Malformed or hostile animation file · **medium, structurally mitigated**
 
 We parse a file as root with no supervision.

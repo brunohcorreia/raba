@@ -623,10 +623,10 @@ impl<'a> Session<'a> {
         if let Err(error) = state::save(&self.settings.state, &state) {
             if !self.save_complained {
                 self.save_complained = true;
-                report(&format!(
-                    "{}: could not write the resume state: {error}",
-                    self.settings.state.display()
-                ));
+                // No path of our own in front: `error` already names the file
+                // that refused, which on a failure is as often the staging
+                // name as the state file itself.
+                report(&format!("could not write the resume state: {error}"));
             }
         }
     }

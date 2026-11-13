@@ -225,6 +225,30 @@ fn a_symlink_is_neither_followed_nor_written_through() {
     assert!(!std::fs::symlink_metadata(scratch.file()).expect("stat").file_type().is_symlink());
 }
 
+/// And the mode is the third half of it.
+///
+/// The writer preserves the destination's permissions so that replacing a file
+/// cannot silently widen it. Read with `metadata`, that courtesy becomes the
+/// attack: `metadata` follows a symlink, so a link pointing at a setuid file
+/// hands its `st_mode` to a root-owned file that is then renamed into place. A
+/// symlink has no mode worth preserving, and a destination that is one gets
+/// what any new file gets.
+#[test]
+fn the_mode_is_never_taken_from_the_far_end_of_a_symlink() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let scratch = Scratch::new("symlink-mode");
+    let target = scratch.0.join("elsewhere");
+    std::fs::write(&target, "untouched").expect("target");
+    std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o4777)).expect("chmod");
+    std::os::unix::fs::symlink(&target, scratch.file()).expect("symlink");
+
+    state::save(scratch.file(), &sample()).expect("saving");
+
+    let mode = std::fs::symlink_metadata(scratch.file()).expect("stat").permissions().mode();
+    assert_eq!(mode & 0o7000, 0, "setuid came across the link: {mode:o}");
+    assert_eq!(mode & 0o022, 0, "world- or group-writable: {mode:o}");
+}
+
 /// The staging path is the other half of the same attack.
 #[test]
 fn a_symlink_at_the_staging_path_is_not_written_through() {

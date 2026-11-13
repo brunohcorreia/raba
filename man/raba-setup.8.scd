@@ -58,8 +58,14 @@ boot.
 
 	_name_ is a theme in _/usr/share/raba/themes_ without the _.raba_, an
 	absolute path to a file, or *auto* for the one matching *os-release*(5). It
-	is checked before anything is written; a name that does not resolve would
-	otherwise leave a valid-looking file and an image with no splash in it.
+	is checked before anything is written -- *auto* included, which on a machine
+	with neither matching art nor a _generic.raba_ resolves to nothing; a name
+	that does not resolve would otherwise leave a valid-looking file and an image
+	with no splash in it.
+
+	On a machine with no initramfs generator the edit is the whole command:
+	there is no image to bake the setting into, and a *raba*(8) started by the
+	init system reads _/etc/raba/raba.conf_ directly.
 
 	This is the only file *raba-setup* ever writes, and it is RABA's own. Your
 	comments and your other settings are left exactly as they were.

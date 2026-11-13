@@ -250,7 +250,9 @@ fn phase_named(name: &str) -> Option<Phase> {
 /// If `/run` is not writable, or the staging path exists as something we did not
 /// create. The caller carries on without a state file: not being resumable is
 /// worse than not drawing, and not drawing is already not worth stopping a boot.
-pub fn save(path: impl AsRef<Path>, state: &State) -> io::Result<()> {
+/// The error names whichever of the two paths refused, so a caller must not
+/// prepend a path of its own.
+pub fn save(path: impl AsRef<Path>, state: &State) -> Result<(), crate::write::Failed> {
     crate::write::replace(path.as_ref(), state.render().as_bytes())
 }
 

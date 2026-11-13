@@ -388,17 +388,18 @@ fn check(root: &Root, places: &config::Places) -> ExitCode {
 
 // ----------------------------------------------------------------- apply ----
 
-/// Rebuild the initramfs, and nothing else.
-///
-/// The one state-changing thing this program does, and it is somebody else's
-/// program doing it. Everything that would mean editing a file we do not own is
-/// printed by the dry run instead.
-/// The answer to "may I rebuild this machine's initramfs?"
+/// The answer to "may I change this machine?"
 enum Permission {
     /// Yes, and this is the machine to do it to.
     Granted(Box<machine::Survey>),
+    /// Yes, but there is no initramfs generator here, so there is no image to
+    /// rebuild. Not a failure for an edit — a machine started by its init
+    /// system reads `/etc` directly, and the dry run says so — and the end of
+    /// the road for `--apply`, whose whole subject is the rebuild.
+    NothingToRebuild,
     /// No. The reason has already been printed in full, including what to do
-    /// about it.
+    /// about it. The caller says what was not changed, because only the caller
+    /// knows what it was about to change.
     Refused,
 }
 
@@ -413,7 +414,8 @@ enum Permission {
 ///
 /// `needs_theme` is false for `--set-theme`, which is about to supply one: a
 /// machine whose configuration currently resolves to nothing is exactly the
-/// machine that command is for.
+/// machine that command is for — it checks the name it was given instead,
+/// before it gets here.
 fn permission(
     root: &Root,
     places: &config::Places,
@@ -428,7 +430,7 @@ fn permission(
     }
     let survey = machine::survey(root);
     if survey.generators.is_empty() {
-        return Err("no initramfs generator found; there is nothing to rebuild".to_owned());
+        return Ok(Permission::NothingToRebuild);
     }
     // Asked before the rebuild rather than discovered during it: the hooks all
     // decline quietly when there is no theme, so without this the command would
@@ -448,7 +450,6 @@ fn permission(
     if let Tpm::Sealed(devices) = &survey.tpm {
         tpm_advice(&survey.tpm);
         if !yes && !agreed(devices) {
-            println!("Nothing was changed.");
             return Ok(Permission::Refused);
         }
     }
@@ -475,9 +476,20 @@ fn rebuild(survey: &machine::Survey) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// `--apply`: rebuild the initramfs, and nothing else.
+///
+/// The one state-changing thing this program does, and it is somebody else's
+/// program doing it. Everything that would mean editing a file we do not own is
+/// printed by the dry run instead.
 fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, String> {
     match permission(root, places, yes, true)? {
-        Permission::Refused => Ok(ExitCode::FAILURE),
+        Permission::NothingToRebuild => {
+            Err("no initramfs generator found; there is nothing to rebuild".to_owned())
+        }
+        Permission::Refused => {
+            println!("Nothing was changed.");
+            Ok(ExitCode::FAILURE)
+        }
         Permission::Granted(survey) => rebuild(&survey),
     }
 }
@@ -491,9 +503,12 @@ fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, St
 /// until the image is regenerated. A person who edits the file and reboots sees
 /// the old logo and concludes the program is broken.
 ///
-/// The theme is checked before the file is touched. A name that does not resolve
-/// would otherwise produce a valid-looking configuration, a thirty-second
-/// rebuild, and an image with no splash in it.
+/// The theme is checked before the file is touched, through the same
+/// [`config::candidates`] the splash itself uses — including `auto`, which is a
+/// name that resolves to a *list*, and on a machine whose `ID` has no art and
+/// which has no `generic.raba` resolves to nothing at all. A name that does not
+/// resolve would otherwise produce a valid-looking configuration, a
+/// thirty-second rebuild, and an image with no splash in it.
 fn set_theme(
     root: &Root,
     places: &config::Places,
@@ -501,19 +516,26 @@ fn set_theme(
     wanted: &str,
 ) -> Result<ExitCode, String> {
     let parsed = config::Theme::parse(wanted).map_err(|why| format!("{wanted}: {why}"))?;
-    match &parsed {
-        config::Theme::Auto => {}
-        config::Theme::Named(name) => {
-            let file = places.themes.join(format!("{name}.raba"));
-            if !file.exists() {
-                return Err(format!("{}: no such theme. {}", file.display(), available(places)));
+    // An unreadable os-release is an empty identity, which is what `auto` gets
+    // on a machine without one anyway: `generic.raba` and nothing else.
+    let identity = std::fs::read_to_string(&places.os_release)
+        .map(|text| config::identity(&text))
+        .unwrap_or_default();
+    let tried = config::candidates(&parsed, &places.themes, &identity);
+    if !tried.iter().any(|file| file.exists()) {
+        let looked: Vec<String> = tried.iter().map(|file| file.display().to_string()).collect();
+        return Err(match &parsed {
+            config::Theme::Path(_) => format!("{}: no such file", looked.join(", ")),
+            config::Theme::Named(_) => {
+                format!("{}: no such theme. {}", looked.join(", "), available(places))
             }
-        }
-        config::Theme::Path(path) => {
-            if !path.exists() {
-                return Err(format!("{}: no such file", path.display()));
-            }
-        }
+            config::Theme::Auto => format!(
+                "auto resolves to nothing on this machine; there would be no splash. \
+                 Looked for {}. {}",
+                looked.join(", "),
+                available(places)
+            ),
+        });
     }
 
     // Everything that could refuse, before anything is written. The order is
@@ -522,8 +544,16 @@ fn set_theme(
     // running system's configuration and *then* say it would not touch somebody
     // else's boot.
     let survey = match permission(root, places, yes, false)? {
-        Permission::Refused => return Ok(ExitCode::FAILURE),
-        Permission::Granted(survey) => survey,
+        Permission::Refused => {
+            // Said here rather than by `permission`, which does not know what
+            // was about to happen: the HOOKS refusal talks only about
+            // rebuilding, and a person reading it would otherwise reasonably
+            // conclude that the theme line had been written first.
+            println!("Nothing was changed; the theme line is as it was.");
+            return Ok(ExitCode::FAILURE);
+        }
+        Permission::NothingToRebuild => None,
+        Permission::Granted(survey) => Some(survey),
     };
 
     let before = match std::fs::read_to_string(&places.config) {
@@ -541,8 +571,18 @@ fn set_theme(
         println!("raba-setup: {}: Theme={wanted}", places.config.display());
     }
 
-    // And now the half that makes it true at boot.
-    rebuild(&survey)
+    // And now the half that makes it true at boot — unless there is no image
+    // to bake it into, in which case the edit *was* the whole operation and
+    // `/etc/raba/raba.conf` is read directly by a splash started after the root
+    // filesystem is mounted.
+    match survey {
+        Some(survey) => rebuild(&survey),
+        None => {
+            println!("raba-setup: no initramfs generator here, so nothing to rebuild.");
+            println!("  The splash reads this file when your init system starts it.");
+            Ok(ExitCode::SUCCESS)
+        }
+    }
 }
 
 /// The names a person could have meant, so the error is useful rather than only
@@ -581,8 +621,16 @@ fn available(places: &config::Places) -> String {
 /// path, the destination's permissions preserved, and nothing of ours left
 /// behind on any failure. `docs/security.md` finding 4 is the rule and this is
 /// a root process writing into `/etc`.
+///
+/// Durably, because `/etc` is on real storage and the failure this is here to
+/// prevent — a zero-length `raba.conf` — is exactly what an un-`fsync`ed rename
+/// leaves behind after a power cut.
+///
+/// The error is passed through without a path in front of it: it already names
+/// whichever of the two paths refused, and most of what goes wrong goes wrong
+/// on `raba.conf.new` rather than on `raba.conf`.
 fn write_config(path: &std::path::Path, text: &str) -> Result<(), String> {
-    raba::write::replace(path, text.as_bytes()).map_err(|why| format!("{}: {why}", path.display()))
+    raba::write::replace_durably(path, text.as_bytes()).map_err(|why| why.to_string())
 }
 
 /// Ask, once, in words that say what is about to happen.
