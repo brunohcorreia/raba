@@ -64,7 +64,7 @@ fn main() -> ExitCode {
     match run(&args) {
         Ok(code) => code,
         Err(message) => {
-            eprintln!("raba: {message}");
+            report(&message);
             ExitCode::FAILURE
         }
     }
@@ -306,6 +306,23 @@ fn boot(startup: &config::Startup) {
         let _ = std::fs::write(&startup.config.log.file, report);
         return;
     }
+    // Caught here rather than in the boot path, because this is the one reason
+    // for not drawing that is almost always somebody's *mistake* — a theme name
+    // with a typo in it, a themes directory that was never installed, an
+    // initramfs built before the art package was. The boot path would report it
+    // as the empty path it is ("not drawing: : No such file or directory"),
+    // which tells the person nothing at all. Here the list of what was looked
+    // for still exists, so the message can be the list.
+    if startup.settings.theme.as_os_str().is_empty() {
+        let looked: Vec<String> =
+            startup.tried.iter().map(|path| path.display().to_string()).collect();
+        report(&if looked.is_empty() {
+            "not drawing: no theme is configured".to_owned()
+        } else {
+            format!("not drawing: no theme found; looked for {}", looked.join(", "))
+        });
+        return;
+    }
     let outcome = raba::boot::run(&startup.settings);
     match outcome {
         raba::boot::Outcome::Finished => {}
@@ -316,7 +333,45 @@ fn boot(startup: &config::Startup) {
         ref displaced @ raba::boot::Outcome::Displaced(_) => {
             let _ = std::fs::write(&startup.config.log.file, format!("raba: {displaced}\n"));
         }
-        ref other => eprintln!("raba: {other}"),
+        ref other => report(other),
+    }
+}
+
+/// One line about something that went wrong, in whichever log this machine
+/// actually has.
+///
+/// stderr first, always. Under an init system that *is* the journal and there is
+/// nothing more to do. When stderr is not a socket, nobody is capturing it — an
+/// initramfs, where it is a file, a console or `/dev/null` — and the line is
+/// repeated into `/dev/kmsg`, so `dmesg` and `journalctl -b` both have it once
+/// the boot is over and somebody is asking why there was no splash.
+///
+/// The test is a `getsockopt` on stderr rather than a flag, because
+/// `docs/compatibility.md` forbids an initramfs hook from requiring a flag that
+/// the installed binary might not have, and because an fd cannot go out of date
+/// the way a baked-in hook can.
+///
+/// Errors only, never the ordinary course of a boot: `integration/tests/distro`
+/// asserts that a healthy boot leaves nothing of ours in the kernel log at all.
+fn report(message: &dyn std::fmt::Display) {
+    eprintln!("raba: {message}");
+    // Two ways the message has already arrived somewhere a person will look.
+    // A socket: an init system is capturing it, so it is in the journal
+    // (ENOTSOCK is how the kernel says nobody is). A terminal: somebody typed
+    // the command and is reading the answer — putting a typo at a prompt into
+    // `dmesg` would be the opposite of leaving the system log alone.
+    let stderr = std::io::stderr();
+    if rustix::net::sockopt::socket_type(&stderr).is_ok() || rustix::termios::isatty(&stderr) {
+        return;
+    }
+    // Best effort, and quiet about it: there is no /dev/kmsg in a container and
+    // no permission to write it as an ordinary user, and in neither case would
+    // anything be done differently.
+    if let Ok(mut kmsg) = std::fs::OpenOptions::new().write(true).open("/dev/kmsg") {
+        use std::io::Write as _;
+        // <3> is KERN_ERR: journald files it at the priority the line deserves
+        // instead of burying it among debug chatter.
+        let _ = writeln!(kmsg, "<3>raba: {message}");
     }
 }
 
@@ -328,10 +383,10 @@ fn boot(startup: &config::Startup) {
 fn complain(startup: &config::Startup) {
     const SHOWN: usize = 5;
     for problem in startup.problems.iter().take(SHOWN) {
-        eprintln!("raba: {problem}");
+        report(problem);
     }
     if let Some(more) = startup.problems.len().checked_sub(SHOWN).filter(|more| *more > 0) {
-        eprintln!("raba: and {more} more; run `raba --check`");
+        report(&format!("and {more} more; run `raba --check`"));
     }
 }
 

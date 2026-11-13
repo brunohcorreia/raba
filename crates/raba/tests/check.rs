@@ -113,6 +113,28 @@ fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
+/// A missing theme is the most common mistake there is — a typo in a name, a
+/// themes directory that was never installed, an initramfs built before the art
+/// package was — and until this test existed the boot path reported it as
+/// `not drawing: : No such file or directory`: the empty path that the failed
+/// resolution left behind, and nothing a person could act on.
+#[test]
+fn a_theme_that_does_not_exist_says_what_it_looked_for() {
+    let scratch = Scratch::new("nowhere");
+    scratch.write("raba.conf", "[Boot]\nTheme=nosuchtheme\n");
+    // No `--check`: this is the boot path, the one that runs on the machine of
+    // somebody who is not watching.
+    let output = raba(&scratch, &[]);
+    let said = String::from_utf8_lossy(&output.stderr).into_owned();
+
+    // Never fatal. The alternative to a splash is no splash.
+    assert!(output.status.success(), "{said}");
+    assert!(said.contains("no theme found"), "{said}");
+    assert!(said.contains("nosuchtheme.raba"), "{said}");
+    // One line for one problem. A boot log is not the place to say it twice.
+    assert_eq!(said.lines().filter(|line| line.contains("no theme")).count(), 1, "{said}");
+}
+
 #[test]
 fn a_configuration_that_names_a_real_theme_checks_out() {
     let scratch = Scratch::new("good");

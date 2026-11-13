@@ -17,8 +17,16 @@ esac
 
 # Backgrounded: init-premount scripts are sourced in order and the boot has to
 # carry on. Being killed later is not an event; see docs/early-boot.md.
+# A splash that complains onto the screen it is drawing on has defeated itself,
+# so raba's own output goes to a file. /run is carried into the real root by
+# every initramfs generator worth the name, so what it said is still readable
+# after the boot it happened on. If /run is not mounted yet the output goes
+# away, never the splash: a missing log directory must not cost a boot its
+# animation.
+raba_log=/dev/null
+[ -w /run ] && raba_log=/run/raba.early.log
 if command -v raba > /dev/null; then
-    raba &
+    raba > "$raba_log" 2>&1 &
 fi
 
 exit 0

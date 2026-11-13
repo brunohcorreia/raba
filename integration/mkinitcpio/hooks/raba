@@ -8,8 +8,14 @@ run_hook() {
     # killed is not an event: /run/raba.state carries the terminal and the frame
     # across switch_root, and whatever starts next picks the animation back up.
     # See docs/early-boot.md.
+    # Output to a file and not to the console: a splash that complains onto
+    # the screen it is drawing has defeated itself, and /run survives into the
+    # real root, so the complaint is readable after the boot. With no /run the
+    # output goes away, never the splash.
+    raba_log=/dev/null
+    [ -w /run ] && raba_log=/run/raba.early.log
     if command -v raba > /dev/null; then
-        raba &
+        raba > "$raba_log" 2>&1 &
     fi
     return 0
 }
