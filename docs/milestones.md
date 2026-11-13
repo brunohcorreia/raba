@@ -717,11 +717,19 @@ maintainer could package and default to". Everything that is not that waits.
 |---|---|---|
 | 1 | A PKGBUILD that builds and installs: `raba`, `raba-themes`, `raba-gen` | done |
 | 2 | A fallback theme in the `raba` package, so an unknown distribution still draws | done |
-| 3 | Hold the screen from boot until the compositor has drawn, with no display manager in between | half |
+| 3 | Hold the screen from boot across `switch_root` to the display manager, with no console in between | done |
 | 4 | One real Arch VM, mkinitcpio + systemd, boot to login | done |
 | 5 | A machine that boots anyway: power cuts and a sabotaged install | done |
 | 6 | A mistake says what it was, and the system log is left alone | done |
 | 7 | Tag 0.1.0, release notes, publish to the AUR | |
+
+Row 3 was written as "until the compositor has drawn, with no display manager in
+between" — the Omarchy shape. What 0.1.0 ships is the first two thirds of that journey:
+the splash survives `switch_root` and is displaced by the display manager taking its
+terminal, with no console in between. Holding the animation *past* a greeter to a
+compositor's first frame is a different problem — it needs the greeter to be in on it —
+and it moved to M6 with the rest of the Omarchy work rather than holding up a release
+that is otherwise finished.
 
 Rows 5 and 6 were added on 13 Nov 2026, at Bruno's request, after he asked whether
 crashes were being simulated and the honest answer was "half of them". Rows 1–4 and
@@ -1011,6 +1019,8 @@ separate decision from having a shutdown theme at all.
 - Man pages built with scdoc; packaging
 - Progress overlay, `pulse` by default
 - **Measured against Plymouth**, once there is something to measure
+- Hold past the greeter to the compositor's first frame — the Omarchy shape, moved out
+  of MVP row 3; see that row's note
 
 ### Measured against Plymouth
 
