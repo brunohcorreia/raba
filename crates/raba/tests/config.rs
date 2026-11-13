@@ -671,3 +671,50 @@ fn the_files_an_image_needs_are_the_art_and_only_the_art() {
         [scratch.path("themes/generic.raba"), scratch.path("themes/generic-outro.raba")]
     );
 }
+
+#[test]
+fn an_os_release_line_that_is_not_a_key_and_a_value_is_stepped_over() {
+    // Real `/etc/os-release` files have blank lines and comments in them, and
+    // one Fedora release shipped a stray continuation. None of that is a
+    // reason to stop reading the file.
+    let names = config::identity(
+        "# a comment\n\nNAME=\"Thing\"\nnonsense\nID=thing\n   \nID_LIKE=\"arch\"\n",
+    );
+    assert_eq!(names, ["thing", "arch"]);
+}
+
+#[test]
+fn an_os_release_that_says_nothing_useful_resolves_auto_to_generic_alone() {
+    assert!(config::identity("").is_empty());
+    assert_eq!(
+        config::candidates(&Theme::Auto, Path::new("/t"), &[]),
+        [PathBuf::from("/t/generic.raba")]
+    );
+}
+
+#[test]
+fn an_auto_outro_is_named_after_the_theme_it_follows_and_is_nothing_without_one() {
+    // `Outro.Theme = auto` means "the outro that goes with this logo", which
+    // only has an answer once a logo has been resolved. On a machine where
+    // none was, there is no outro rather than a wrong one.
+    let beside = config::outro_candidates(
+        &Theme::Auto,
+        Path::new("/t"),
+        Some(Path::new("/usr/share/raba/themes/arch.raba")),
+    );
+    assert_eq!(beside, [PathBuf::from("/usr/share/raba/themes/arch-outro.raba")]);
+
+    assert!(config::outro_candidates(&Theme::Auto, Path::new("/t"), None).is_empty());
+    assert!(
+        config::outro_candidates(&Theme::Auto, Path::new("/t"), Some(Path::new("/"))).is_empty(),
+        "a path with no file name is not a theme to hang an outro off"
+    );
+}
+
+#[test]
+fn a_named_outro_is_looked_for_where_every_other_theme_is() {
+    assert_eq!(
+        config::outro_candidates(&Theme::Named("fade".to_owned()), Path::new("/t"), None),
+        [PathBuf::from("/t/fade.raba")]
+    );
+}

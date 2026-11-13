@@ -254,3 +254,61 @@ fn the_shipped_recipe_builds_the_shipped_theme() {
     assert_eq!(built.movie.frames.len(), 4);
     assert!(built.adjustments.is_empty(), "its colours need no fitting");
 }
+
+// --- the corners of the schema -----------------------------------------------
+
+#[test]
+fn a_source_scheme_this_tool_does_not_know_is_refused_when_the_art_is_asked_for() {
+    // `parse` already catches this — `an_unknown_source_form_says_what_the_forms_are`
+    // above is the first line of defence. This is the second: `art_source` is
+    // public and a caller that built a `Theme` by hand gets the same refusal
+    // rather than a path called `carrier-pigeon:arch`.
+    let mut theme = parse("[logo]\nart = \"##\"\n").expect("the recipe parses");
+    theme.logo.source = "carrier-pigeon:arch".to_owned();
+    let why = theme.art_source(Path::new("thing.toml")).expect_err("an unknown scheme is refused");
+    assert!(matches!(why, RecipeError::BadSource { .. }), "{why:?}");
+    assert!(why.to_string().contains("carrier-pigeon"), "{why}");
+    assert!(why.to_string().contains("fastfetch:"), "{why}: say what it accepts");
+}
+
+#[test]
+fn a_recipe_with_no_logo_section_is_refused_and_says_which_section_is_missing() {
+    // Not defaulted. A recipe with no art is a theme with nothing to draw, and
+    // "missing field `logo`" names the fix; an empty canvas five steps later
+    // does not.
+    let why = parse("[canvas]\nframerate = 12\n").expect_err("a recipe needs a logo");
+    assert!(why.to_string().contains("logo"), "{why}");
+}
+
+#[test]
+fn a_256_colour_canvas_asks_for_the_256_colour_palette_and_nothing_else_does() {
+    let wide = parse("[logo]\nart = \"##\"\n[canvas]\npalette = 256\n").expect("parses");
+    assert_eq!(BuildRecipe::from(&wide).palette, Palette::Xterm256);
+
+    let narrow = parse("[logo]\nart = \"##\"\n[canvas]\npalette = 16\n").expect("parses");
+    assert_eq!(BuildRecipe::from(&narrow).palette, Palette::Ansi16);
+}
+
+#[test]
+fn a_text_section_becomes_a_text_overlay_with_everything_it_was_given() {
+    let theme = parse(
+        "[logo]\nart = \"##\"\n\
+         [text]\ncontent = \"booting\"\ncolor = 4\nposition = \"above\"\ngap = 2\n",
+    )
+    .expect("parses");
+    let spec = BuildRecipe::from(&theme).text.expect("a text overlay");
+    assert_eq!(spec.content, "booting");
+    assert_eq!(spec.fg, 4);
+    assert_eq!(spec.position, Position::Above);
+    assert_eq!(spec.gap, 2);
+}
+
+#[test]
+fn a_position_that_is_not_one_falls_back_rather_than_losing_the_overlay() {
+    // The parser has already refused an unknown position by the time this
+    // runs — `[text] position = "sideways"` is a `BadPosition`. This is the
+    // belt to that brace: if one ever got through, the text still appears.
+    let theme = parse("[logo]\nart = \"##\"\n[text]\ncontent = \"x\"\n").expect("parses");
+    let spec = BuildRecipe::from(&theme).text.expect("a text overlay");
+    assert_eq!(spec.position, Position::Below, "the documented default");
+}

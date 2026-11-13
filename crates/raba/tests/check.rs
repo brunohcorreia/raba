@@ -650,3 +650,20 @@ fn tty_auto_on_the_command_line_means_the_same_as_not_saying_which() {
     assert!(!stdout(&auto).contains("tty7"), "--tty auto left Tty=7 in place:\n{}", stdout(&auto));
     assert!(stdout(&auto).contains("auto"), "{}", stdout(&auto));
 }
+
+#[test]
+fn check_says_the_kill_switch_is_on_rather_than_reporting_a_splash_that_will_not_appear() {
+    // Somebody running `raba --check` because no splash appeared has already
+    // forgotten about the `raba.enable=0` they added to the bootloader three
+    // months ago. A report that lists a resolved theme and a terminal and says
+    // nothing about the kernel command line sends them to look at the theme.
+    let scratch = Scratch::new("check-disabled");
+    theme(&scratch, "arch");
+    scratch.write("raba.conf", "[Boot]\nTheme=arch\n");
+    scratch.write("cmdline", "root=/dev/sda2 quiet raba.enable=0\n");
+    let output = raba(&scratch, &["--check"]);
+
+    let text = stdout(&output);
+    assert!(text.contains("raba.enable=0"), "{text}");
+    assert!(text.contains("nothing will be drawn"), "{text}");
+}

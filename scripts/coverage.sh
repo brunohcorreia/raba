@@ -146,7 +146,16 @@ llvm-profdata merge -sparse "${profiles[@]}" -o "${out}/all.profdata" \
 #   crates/raba-vmtest           the harness that runs the QEMU tier. It is the
 #                                instrument, not the thing being measured, and
 #                                no `cargo test` executes it.
-ignore=(--ignore-filename-regex='(/\.cargo/registry/|/rustc/|/tests?/|/tests\.rs$|/target/|/crates/raba-vmtest/)')
+#   raba-core/src/testing/       the renderer's oracle: a terminal modelled well
+#                                enough to assert against. Behind the `testing`
+#                                feature, which only this crate's own dev
+#                                dependency turns on, so it is never in a
+#                                shipped library and never in the boot binary.
+#                                Its uncovered lines are the `panic!` arms that
+#                                fire when the renderer emits something it
+#                                should not — reaching them would mean a *test*
+#                                failing, which is the opposite of coverage.
+ignore=(--ignore-filename-regex='(/\.cargo/registry/|/rustc/|/tests?/|/tests\.rs$|/target/|/crates/raba-vmtest/|/raba-core/src/testing/)')
 
 common=("${objects[@]}" --instr-profile="${out}/all.profdata" "${ignore[@]}")
 

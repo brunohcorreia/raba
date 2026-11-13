@@ -669,3 +669,65 @@ fn a_dry_run_on_a_machine_with_no_configuration_at_all_still_reports() {
     let code = setup(&scratch, &mut host, &[]).expect("a dry run");
     assert!(succeeded(&code));
 }
+
+// ------------------------------------------------------- the one question ---
+
+/// What was typed, as if at a terminal.
+fn typed(answer: &str) -> bool {
+    super::answered_yes(&mut std::io::BufReader::new(answer.as_bytes()))
+}
+
+#[test]
+fn only_a_yes_is_a_yes_and_everything_else_is_a_no() {
+    // What this decides is whether an initramfs is rebuilt on a machine whose
+    // disk will stop unlocking itself afterwards. The only safe way to be
+    // wrong is to read a yes as a no.
+    for yes in ["y\n", "Y\n", "yes\n", "YES\n", "  yes  \n", "Yes"] {
+        assert!(typed(yes), "{yes:?} was not taken as a yes");
+    }
+    for no in ["n\n", "no\n", "", "\n", "  \n", "yeah\n", "yes please\n", "ok\n", "sim\n", "1\n"] {
+        assert!(!typed(no), "{no:?} was taken as a yes");
+    }
+}
+
+#[test]
+fn end_of_file_is_a_no_so_a_command_run_from_a_script_does_not_rebuild_by_accident() {
+    // `raba-setup --apply < /dev/null` from a post-install hook reads nothing.
+    // Nobody said yes.
+    assert!(!typed(""));
+}
+
+// ---------------------------------------------------------- the real one ----
+
+/// The shipped [`Host`] is four lines of delegation and the fake cannot prove
+/// any of them. If `run` reported failure as success, every test above would
+/// still pass and `raba-setup --apply` would say "done" over an mkinitcpio
+/// that exited 1.
+#[test]
+fn the_real_host_reports_what_actually_happened() {
+    let mut host = super::ThisMachine;
+
+    let ran = host.run("true", &[]).expect("`true` is installed");
+    assert!(ran.success());
+    let failed = host.run("false", &[]).expect("`false` is installed");
+    assert!(!failed.success(), "a program that exited 1 was reported as success");
+    let missing = host.run("raba-no-such-program", &[]);
+    assert!(missing.is_err(), "a program that cannot be started was reported as a run");
+
+    let scratch = Scratch::new("real-host");
+    let at = scratch.at("written.conf");
+    host.write(&at, "[Boot]\nTheme=arch\n").expect("writing");
+    assert_eq!(std::fs::read_to_string(&at).expect("reading back"), "[Boot]\nTheme=arch\n");
+
+    // And a path that cannot be written is an error rather than a silent
+    // nothing: `raba-setup --set-theme` reports success on what `write`
+    // returns.
+    let blocked = scratch.at("themes");
+    assert!(host.write(&blocked, "x").is_err(), "writing over a directory was reported as done");
+
+    // A survey of a directory that is not a machine finds no generator, which
+    // is the answer `permission` turns into `NothingToRebuild`.
+    let looked = host.survey(&Root::new(scratch.at("nowhere")));
+    assert!(looked.generators.is_empty());
+    assert!(matches!(looked.tpm, machine::Tpm::Unknown(_)), "{:?}", looked.tpm);
+}

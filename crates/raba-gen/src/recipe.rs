@@ -16,7 +16,12 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 /// A theme recipe, as written in TOML.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+///
+/// Not `Default`: a recipe with no `[logo]` is a theme with nothing to draw,
+/// and `parse` refuses it by name. There was a `Default` here, and for both
+/// this and `Logo` it was dead — nothing in the tree ever built a recipe
+/// except by parsing one, which is as it should be.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Theme {
     pub logo: Logo,
@@ -131,18 +136,6 @@ fn default_repeat() -> bool {
 }
 fn default_align() -> String {
     "center".to_owned()
-}
-
-impl Default for Logo {
-    fn default() -> Self {
-        Logo {
-            source: default_source(),
-            art: String::new(),
-            colors: Vec::new(),
-            background: 0,
-            default_color: default_foreground(),
-        }
-    }
 }
 
 impl Default for Canvas {

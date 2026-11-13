@@ -347,3 +347,98 @@ fn every_reason_ansi_art_is_refused_says_what_the_limit_is() {
         }
     }
 }
+
+// --- the sequences real art uses that nothing had fed it ---------------------
+
+#[test]
+fn erase_in_line_clears_the_half_the_parameter_asks_for() {
+    // 0 (or nothing) is cursor to end, 1 is start to cursor inclusive, 2 is the
+    // whole line. BBS art uses all three to repaint a status line in place.
+    assert_eq!(screen(b"abcdef\x1b[4G\x1b[K"), vec!["abc"]);
+    // 1 erases up to and including the cursor's own column and leaves the
+    // rest; the `z` then lands on that column, where the cursor still is.
+    assert_eq!(screen(b"abcdef\x1b[4G\x1b[1Kz"), vec!["   zef"]);
+    assert_eq!(screen(b"abcdef\x1b[2Kz"), vec!["      z"]);
+}
+
+#[test]
+fn cursor_up_and_down_move_without_erasing_what_is_already_there() {
+    // \x1b[A and \x1b[B, which is how an ANSImation redraws one changed line
+    // without sending the rest of the screen again.
+    assert_eq!(screen(b"one\ntwo\x1b[A\x1b[GX"), vec!["Xne", "two"]);
+    assert_eq!(screen(b"one\x1b[B\x1b[Gtwo"), vec!["one", "two"]);
+}
+
+#[test]
+fn cursor_next_and_previous_line_go_to_the_start_of_a_line_and_not_to_the_column() {
+    // \x1b[E and \x1b[F differ from \x1b[B and \x1b[A in exactly that, which is
+    // the difference between art that lands in column 0 and art that staircases.
+    assert_eq!(screen(b"abc\x1b[Exyz"), vec!["abc", "xyz"]);
+    assert_eq!(screen(b"abc\ndef\x1b[Fxyz"), vec!["xyz", "def"]);
+}
+
+#[test]
+fn a_cursor_move_above_the_first_line_stops_there_rather_than_wrapping_around() {
+    // Saturating, because art written for an 80x25 terminal is routinely
+    // replayed somewhere taller and a wrap here would scatter it.
+    assert_eq!(screen(b"top\x1b[99A\x1b[GX"), vec!["Xop"]);
+    assert_eq!(screen(b"top\x1b[99F=="), vec!["==p"]);
+}
+
+#[test]
+fn hiding_the_cursor_is_accepted_and_changes_nothing_that_gets_imported() {
+    // \x1b[?25l and \x1b[?25h bracket almost every ANSImation. There is no
+    // cursor in a .raba, so the right behaviour is to take them and carry on
+    // rather than to let them reach the screen as text.
+    assert_eq!(screen(b"\x1b[?25labc\x1b[?25h"), vec!["abc"]);
+    assert_eq!(screen(b"ab\x1b[25mc"), vec!["abc"]);
+}
+
+#[test]
+fn save_and_restore_put_the_cursor_back_where_it_was() {
+    assert_eq!(screen(b"ab\x1b[s\ncd\x1b[uZ"), vec!["abZ", "cd"]);
+}
+
+#[test]
+fn an_sgr_sequence_with_no_parameters_resets_the_colours() {
+    // `\x1b[m` is `\x1b[0m` written short, and art does write it short.
+    let imported = parsed(b"\x1b[31mred\x1b[mplain");
+    assert_eq!(colour_at(&imported, 0, 0).0, 1);
+    assert_eq!(colour_at(&imported, 3, 0), (7, 0));
+}
+
+#[test]
+fn an_sgr_parameter_this_importer_has_no_use_for_is_stepped_over() {
+    // 53 is overlined. Skipping it must not swallow the parameter after it,
+    // which is the bug this shape of loop invites.
+    let imported = parsed(b"\x1b[53;31mred");
+    assert_eq!(colour_at(&imported, 0, 0).0, 1);
+}
+
+#[test]
+fn a_truncated_extended_colour_sequence_does_not_eat_the_rest_of_the_line() {
+    // `38;` with nothing after it is malformed. The importer steps over one
+    // parameter and keeps going, rather than consuming the colour that follows.
+    let imported = parsed(b"\x1b[38m\x1b[41mx");
+    assert_eq!(colour_at(&imported, 0, 0).1, 1);
+}
+
+#[test]
+fn a_csi_sequence_this_importer_does_not_implement_is_skipped_rather_than_printed() {
+    // \x1b[2L inserts lines. Not supported, and the one thing that must not
+    // happen is `2L` appearing in the art as two characters.
+    assert_eq!(screen(b"ab\x1b[2Lcd"), vec!["abcd"]);
+}
+
+#[test]
+fn a_file_that_is_only_blank_lines_is_empty_rather_than_a_canvas_of_spaces() {
+    // Trailing blank rows are an artefact of the file ending in newlines, and
+    // stripping them to nothing means there was no art.
+    let why = ansi::parse(b"\n\n\n   \n", &Options::default()).expect_err("nothing to import");
+    assert!(matches!(why, AnsiError::Empty), "{why:?}");
+}
+
+#[test]
+fn blank_rows_at_the_end_are_dropped_and_blank_rows_in_the_middle_are_not() {
+    assert_eq!(screen(b"top\n\n\nbottom\n\n\n\n"), vec!["top", "", "", "bottom"]);
+}

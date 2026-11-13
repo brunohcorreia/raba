@@ -701,8 +701,20 @@ fn agreed(devices: &[String]) -> bool {
     print!("Rebuild anyway, knowing {} will ask for a passphrase? [y/N] ", devices.join(" and "));
     use std::io::Write as _;
     let _ = std::io::stdout().flush();
+    answered_yes(&mut std::io::stdin().lock())
+}
+
+/// Read one line and decide whether it was a yes.
+///
+/// Separate from the question so that the decision can be tested without a
+/// terminal. What it decides is whether an initramfs is rebuilt on a machine
+/// whose disk will stop unlocking itself afterwards, and the only safe way to
+/// be wrong is to read a yes as a no.
+fn answered_yes(input: &mut dyn std::io::BufRead) -> bool {
     let mut answer = String::new();
-    if std::io::stdin().read_line(&mut answer).is_err() {
+    // Including end of file, which is what a `</dev/null` or a closed pipe
+    // gives: nobody said yes, so the answer is no.
+    if input.read_line(&mut answer).is_err() {
         return false;
     }
     matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
