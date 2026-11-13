@@ -17,6 +17,7 @@ pub mod config;
 pub mod conflict;
 pub mod control;
 pub mod lifecycle;
+pub mod report;
 pub mod signals;
 pub mod state;
 pub mod vt;

@@ -68,14 +68,27 @@ case "$case_name" in
         applied "case garbage-config: /etc/raba/raba.conf replaced with nonsense"
         ;;
     impossible-tty)
-        # A terminal number the kernel will not hand out. A person who read the
-        # manual too quickly writes this.
-        printf '[Boot]\nTty=63\n' > /etc/raba/raba.conf
-        applied "case impossible-tty: Tty=63"
+        # A terminal number the kernel does not have. 63 was the first guess and
+        # it was wrong: MAX_NR_CONSOLES is 63, devtmpfs makes /dev/tty63, and
+        # RABA drew on it perfectly well — no error, nothing in the log, and a
+        # case that asserted a complaint nobody had any reason to make. 64 is
+        # one past the end: the device node does not exist and the open fails
+        # with a sentence naming the path.
+        printf '[Boot]\nTty=64\n' > /etc/raba/raba.conf
+        applied "case impossible-tty: Tty=64"
         ;;
     socket-in-the-way)
         # Something else is already at the control socket's path, and it is not
         # a socket. bind() has to replace it rather than give up.
+        #
+        # The `rm` is not tidiness. By the time this runs the splash from the
+        # initramfs is usually already listening, so the path is a live socket —
+        # and opening a socket inode for writing fails with ENXIO, which on a
+        # redirection into the special built-in `:` kills the whole shell. That
+        # is how the first run of this case ended: the sabotage never happened,
+        # the marker was never written, and the strict checks ran against a
+        # machine nobody had broken.
+        rm -f /run/raba.sock
         : > /run/raba.sock
         applied "case socket-in-the-way: a plain file at /run/raba.sock"
         ;;

@@ -80,6 +80,14 @@ elif [ "$said" -gt 0 ]; then
     grep 'raba: ' <<< "$journal" | head -3 | sed 's/^/#   /'
 else
     tap 1 'the reason is in the log' 'nothing in the journal and nothing in dmesg'
+    # Everything of ours that this boot did say, because the alternative is
+    # reinstalling the guest to find out. A failure of this check means the
+    # machine survived something and never said what, and the first question is
+    # always whether the units ran at all.
+    echo '#   what the raba units said:'
+    journalctl -b --no-pager --no-hostname -u 'raba*' 2>/dev/null | tail -20 | sed 's/^/#     /'
+    echo '#   how they ended:'
+    systemctl --no-pager --no-legend list-units 'raba*' --all 2>/dev/null | sed 's/^/#     /'
 fi
 
 echo "1..${count}"

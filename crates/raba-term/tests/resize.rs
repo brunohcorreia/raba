@@ -54,7 +54,8 @@ fn movie() -> Movie {
     for line in 0..6u16 {
         for column in 0..12u16 {
             let n = usize::from(line) * 12 + usize::from(column);
-            let cell = Cell { ch: ['#', '+', 'o', '='][n % 4], fg: u8::try_from(n % 8).unwrap(), bg: 0 };
+            let cell =
+                Cell { ch: ['#', '+', 'o', '='][n % 4], fg: u8::try_from(n % 8).unwrap(), bg: 0 };
             canvas.set(column, line, cell);
             ops.push(Op { cell: u32::try_from(n).unwrap(), ch: cell.ch, fg: cell.fg, bg: cell.bg });
         }

@@ -13,8 +13,8 @@
 use crate::report::Report;
 use raba::vt::ioctl;
 use std::fs::OpenOptions;
-use std::os::unix::fs::OpenOptionsExt as _;
 use std::io;
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};

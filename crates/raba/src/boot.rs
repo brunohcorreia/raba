@@ -37,6 +37,7 @@ use crate::conflict::{self, Conflict};
 use crate::control::wire::{Command, Rejection, Reply};
 use crate::control::{Connection, Listener};
 use crate::lifecycle::{Event, Lifecycle, Phase};
+use crate::report::report;
 use crate::signals::{Signal, Signals};
 use crate::state::{self, State};
 use crate::vt::{Displaced, Vt};
@@ -191,6 +192,15 @@ struct Session<'a> {
     /// `switch_root`, which is an interruption and not an ending: see
     /// [`Session::finish`].
     interrupted: bool,
+    /// Whether the resume file has already been complained about once.
+    ///
+    /// Saving it is best effort and happens on every frame, so a path that
+    /// cannot be written is a failure sixty times a second and must never be
+    /// said sixty times. It is said once: something is at a path RABA owns in
+    /// `/run`, and the person looking at a splash that does not survive
+    /// `switch_root` deserves the sentence that explains it. See
+    /// `docs/security.md` findings 3 and 4 for why that path is interesting.
+    save_complained: bool,
     /// The console size the current player was built for. A console that
     /// changes size under us is a console that was replaced, and everything
     /// drawn before that is gone.
@@ -219,6 +229,7 @@ impl<'a> Session<'a> {
             message: None,
             resume,
             interrupted: false,
+            save_complained: false,
             screen: None,
             started: Instant::now(),
             outro_started: None,
@@ -438,7 +449,9 @@ impl<'a> Session<'a> {
             _ => &self.boot,
         };
         let Some(vt) = self.vt.as_mut() else {
-            return Some(self.give_up("the terminal went away between taking it and drawing on it"));
+            return Some(
+                self.give_up("the terminal went away between taking it and drawing on it"),
+            );
         };
 
         // Has the console changed under us? Early in a boot it can: with no
@@ -488,7 +501,9 @@ impl<'a> Session<'a> {
         match player.step(vt, movie, if self.outro_started.is_some() { 1 } else { 0 }) {
             Some(hold) => {
                 let Some(next) = Instant::now().checked_add(hold) else {
-                    return Some(self.give_up("the frame delay does not fit in this machine's clock"));
+                    return Some(
+                        self.give_up("the frame delay does not fit in this machine's clock"),
+                    );
                 };
                 self.next_frame = next;
             }
@@ -605,7 +620,15 @@ impl<'a> Session<'a> {
             theme: self.settings.theme.clone(),
             written_ms: state::now_ms(),
         };
-        let _ = state::save(&self.settings.state, &state);
+        if let Err(error) = state::save(&self.settings.state, &state) {
+            if !self.save_complained {
+                self.save_complained = true;
+                report(&format!(
+                    "{}: could not write the resume state: {error}",
+                    self.settings.state.display()
+                ));
+            }
+        }
     }
 
     /// Everything that has to be true after RABA stops.
