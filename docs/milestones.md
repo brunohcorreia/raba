@@ -719,10 +719,71 @@ maintainer could package and default to". Everything that is not that waits.
 | 2 | A fallback theme in the `raba` package, so an unknown distribution still draws | done |
 | 3 | Hold the screen from boot until the compositor has drawn, with no display manager in between | done |
 | 4 | One real Arch VM, mkinitcpio + systemd, boot to login | done |
-| 5 | Tag 0.1.0, release notes, publish to the AUR | |
+| 5 | A machine that boots anyway: power cuts and a sabotaged install | |
+| 6 | A mistake says what it was, and the system log is left alone | done |
+| 7 | Tag 0.1.0, release notes, publish to the AUR | |
+
+Rows 5 and 6 were added on 13 Nov 2026, at Bruno's request, after he asked whether
+crashes were being simulated and the honest answer was "half of them". Rows 1–4 and
+the whole test suite below them cover RABA failing *at its own job*: art that does not
+decode, a state file somebody wrote by hand, a second instance, the screen being taken
+away, SIGKILL at `switch_root` — which `panic = "abort"` makes the same case as a panic,
+so that one is covered by construction. What none of them covered is RABA costing
+somebody their computer, which is the first thing `notas/ideia.md` says must never
+happen, and what a power cut does to a machine in the middle of all this.
 
 Explicitly **not** in it: LUKS passphrase in the splash, the progress overlay, the
 full distribution matrix, the Plymouth benchmarks. Those are M6 and later.
+
+### Row 4, and the thing a photograph cannot tell you
+
+Fedora photographed its splash and Debian never did, through five runs, with the
+guest's own evidence saying the splash was there: `/run/raba.state` recorded the
+terminal and the frame, and a watcher sampling `/sys/class/tty/tty0/active` ten times
+a second showed the screen sitting on tty2 — RABA's terminal — for 3.3 seconds. Every
+screenshot across those seconds was black, at 800x600, while the guest's kernel said
+its framebuffer was 1280x800.
+
+That gap is the whole explanation. Debian's cloud initramfs carries no KMS driver, so
+the console is `efifb` writing into a linear framebuffer the firmware set up, and
+QEMU's `screendump` still renders the VGA device in the mode *it* last saw programmed.
+Fedora's dracut image has the DRM module, the device gets programmed, and the
+screenshot is real. A correctly drawn console photographs as a black screen on one of
+those machines and not on the other, and nothing about that is RABA's behaviour.
+
+So the harness stopped photographing and started reading: `/dev/vcsN` is the kernel's
+own copy of the text on virtual console *N*, and asking the guest for it answers "was
+the art on the console" without the emulator having an opinion. The screenshots stay,
+because a picture is still the best evidence to show a person, but the assertion no
+longer depends on them.
+
+### Row 6, and where a message belongs
+
+Asked for in the same breath as row 5: a mistake has to be obvious, and the standard
+Linux log must not be disturbed by a splash being a splash.
+
+| where it is running | what captures stderr | where an error goes |
+|---|---|---|
+| under an init system | the journal (a socket) | stderr, once |
+| at a prompt | a person | stderr, once |
+| in an initramfs | nothing | `/run/raba.early.log`, **and** one `<3>` line to `/dev/kmsg` |
+
+The test is a `getsockopt` on stderr and an `isatty`, not a flag: `docs/compatibility.md`
+forbids an initramfs hook from requiring a flag that the installed binary might not have,
+and an fd cannot go out of date the way a hook baked into an image can.
+
+Three rules behind the table:
+
+1. **A healthy boot writes nothing of ours anywhere.** Not to the console, not to
+   `dmesg`, not to the journal beyond systemd's own `Started raba-start.service`.
+2. **One line per problem**, capped at five with "and N more; run `raba --check`".
+3. **Never onto the console being drawn on.** The initramfs scripts redirect, falling
+   back to `/dev/null` if `/run` is not mounted yet: a missing log directory must not
+   cost a boot its animation.
+
+The case that made the point: a theme name with a typo in it used to report
+`not drawing: : No such file or directory` — the empty path the failed resolution left
+behind, which tells a person nothing. It now lists every path it looked at.
 
 ### Row 4, and the three things it caught
 

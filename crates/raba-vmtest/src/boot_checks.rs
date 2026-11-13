@@ -13,6 +13,7 @@
 use crate::report::Report;
 use raba::vt::ioctl;
 use std::fs::OpenOptions;
+use std::os::unix::fs::OpenOptionsExt as _;
 use std::io;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -469,6 +470,112 @@ pub fn the_splash_leaves_when_the_screen_is_taken(report: &mut Report) {
         let _ = ioctl::activate(&control, home);
         let _ = ioctl::wait_active(&control, home);
         outcome
+    });
+}
+
+/// Everything in the kernel's ring buffer, oldest first.
+///
+/// Each open of `/dev/kmsg` starts at the oldest record it still holds, so this
+/// is the whole buffer and not a tail. Non-blocking, because a reader that has
+/// caught up blocks forever otherwise.
+fn kernel_log() -> Result<String, String> {
+    use std::io::Read as _;
+    let file = OpenOptions::new()
+        .read(true)
+        // O_NONBLOCK. A constant rather than a dependency: this crate exists
+        // only inside the test VM and has no business pulling in libc for one
+        // number that Linux has never changed.
+        .custom_flags(0o4000)
+        .open("/dev/kmsg")
+        .map_err(|e| format!("opening /dev/kmsg: {e}"))?;
+    // One `read` per record, which is how this device works: it is not a stream
+    // and `read_to_string` on it either blocks or throws away what it collected
+    // when the buffer runs out. EAGAIN *is* the end of the buffer here, and the
+    // ordinary ending of this loop.
+    let mut file = file;
+    let mut text = String::new();
+    let mut record = [0u8; 8192];
+    loop {
+        match file.read(&mut record) {
+            Ok(0) | Err(_) => break,
+            Ok(read) => text.push_str(&String::from_utf8_lossy(record.get(..read).unwrap_or(&[]))),
+        }
+    }
+    if text.is_empty() {
+        return Err("/dev/kmsg read back empty, which no running kernel does".to_owned());
+    }
+    Ok(text)
+}
+
+fn ours(log: &str) -> usize {
+    log.lines().filter(|line| line.contains("raba: ")).count()
+}
+
+/// A person's mistake reaches the kernel log, and a healthy boot does not.
+///
+/// Two halves of one promise, and neither is worth much without the other. The
+/// splash is allowed one line when something is wrong, because in an initramfs
+/// there is no journal yet and `/run/raba.early.log` is not somewhere anybody
+/// thinks to look. It is allowed *nothing* when all is well: a boot splash that
+/// writes to `dmesg` every time it runs is a boot splash that has made the
+/// system log worse for everybody who was using it to debug something else.
+pub fn a_mistake_reaches_the_kernel_log_and_a_good_boot_does_not(report: &mut Report) {
+    report.check("a broken configuration leaves exactly one line in dmesg", || {
+        let conf = "/run/raba-test-broken.conf";
+        std::fs::write(conf, "[Boot]\nTheme=nosuchtheme\n")
+            .map_err(|e| format!("writing {conf}: {e}"))?;
+        let before = ours(&kernel_log()?);
+
+        // stderr to a file: not a socket, not a terminal, which is what an
+        // initramfs looks like and is the only case that should reach kmsg.
+        let log = std::fs::File::create("/run/raba-test-stderr.log")
+            .map_err(|e| format!("creating the stderr file: {e}"))?;
+        let status = Command::new(RABA)
+            .args(["--socket", SOCKET, "--state", STATE])
+            .args(["--config", conf, "--defaults", "/nonexistent", "--themes", "/nonexistent"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::from(log))
+            .status()
+            .map_err(|e| format!("starting raba: {e}"))?;
+        if !status.success() {
+            return Err(format!("a missing theme exited {status}, and it exits 0"));
+        }
+
+        let said = std::fs::read_to_string("/run/raba-test-stderr.log").unwrap_or_default();
+        if !said.contains("no theme found") {
+            return Err(format!("stderr did not say what it looked for: {said:?}"));
+        }
+        let after = ours(&kernel_log()?);
+        match after.checked_sub(before) {
+            Some(1) => {}
+            Some(0) => return Err("nothing reached the kernel log".to_owned()),
+            Some(many) => return Err(format!("{many} lines reached the kernel log, not one")),
+            None => return Err("the kernel log lost records mid-check".to_owned()),
+        }
+
+        // And now the other half: a boot that works says nothing at all.
+        let before = ours(&kernel_log()?);
+        let control = control()?;
+        let home = active(&control)?;
+        let mut child = start(&["--timeout", "1"]).map_err(|e| format!("starting raba: {e}"))?;
+        let taken = wait_for_the_splash(&control, home, &mut child)?;
+        let _ = Command::new(CTL).args(["quit", "--wait"]).status();
+        let _ = child.wait();
+        println!("# drew on tty{taken} and said nothing");
+        let after = ours(&kernel_log()?);
+        if after != before {
+            let log = kernel_log()?;
+            let added: Vec<&str> = log
+                .lines()
+                .filter(|line| line.contains("raba: "))
+                .rev()
+                .take(after.saturating_sub(before))
+                .map(str::trim)
+                .collect();
+            return Err(format!("a healthy splash wrote to the kernel log: {added:?}"));
+        }
+        let _ = std::fs::remove_file(conf);
+        Ok(())
     });
 }
 
