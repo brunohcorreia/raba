@@ -183,24 +183,35 @@ fi
 # "which console has the most on it" instead — an earlier version of this —
 # gets you the boot log on tty1 every time, three thousand characters of it,
 # and a check that passes on a machine where the splash never drew.
-splash_tty=$(sed -n 's/.*terminal: \([0-9]*\).*/\1/p' /run/raba-watch-status.log 2>/dev/null | tail -1)
-if [ -z "$splash_tty" ]; then
+# Two ways to have seen the art, and a machine will offer one or the other.
+#
+# While it was drawing: the watcher asked RABA which terminal it held and read
+# that console there and then. This is the only way on a machine where the
+# splash ends properly, because ending properly means handing the console back
+# and clearing it.
+#
+# After the fact: on an initramfs that does not kill its own processes, the
+# instance is still holding its terminal when the checks run, and the art is
+# still on it. The state file names the terminal.
+splash_tty=$(cat /run/raba-watch-tty 2>/dev/null)
+ink=$(cat /run/raba-held-ink 2>/dev/null || echo 0)
+art=/run/raba-held.txt
+if [ "${ink:-0}" -le 100 ]; then
     splash_tty=$(sed -n 's/.*terminal=\([0-9]*\).*/\1/p' /run/raba.state 2>/dev/null | head -1)
-fi
-if [ -z "$splash_tty" ]; then
-    tap 1 'the splash was on the console' 'nothing ever said which terminal it took'
-else
-    ink=$(tr -cd '[:graph:]' < "/dev/vcs${splash_tty}" 2>/dev/null | wc -c)
-    # A hundred characters is a logo. A console nobody drew on reads zero, and
-    # a cursor or a stray prompt is a handful.
-    if [ "${ink:-0}" -gt 100 ]; then
-        tap 0 "the art is on tty${splash_tty} (${ink} characters)"
-        # The console, as the kernel holds it, folded back into lines.
-        fold -w "$(stty size < /dev/tty1 2>/dev/null | cut -d' ' -f2 || echo 80)" \
-            "/dev/vcs${splash_tty}" 2>/dev/null | sed 's/^/#   |/' | head -25
-    else
-        tap 1 "the art is on tty${splash_tty}" "that console holds ${ink} characters"
+    if [ -n "$splash_tty" ]; then
+        art="/dev/vcs${splash_tty}"
+        ink=$(tr -cd '[:graph:]' < "$art" 2>/dev/null | wc -c)
     fi
+fi
+# A hundred characters is a logo. A console nobody drew on reads zero, and a
+# cursor or a stray prompt is a handful.
+if [ -z "$splash_tty" ]; then
+    tap 1 'the art was on the console' 'nothing ever said which terminal it took'
+elif [ "${ink:-0}" -gt 100 ]; then
+    tap 0 "the art was on tty${splash_tty} (${ink} characters)"
+    fold -w 160 "$art" 2>/dev/null | sed 's/^/#   |/' | grep -v '^#   |  *$' | head -22
+else
+    tap 1 "the art was on tty${splash_tty}" "that console held ${ink} characters"
 fi
 
 # What the instance inside the initramfs said, if anything. This is the only

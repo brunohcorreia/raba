@@ -119,8 +119,17 @@ one_distro() {
 
     if [ "$payload_kind" = packages ]; then
         local packages="${root}/target/package-test"
-        if ! ls "${packages}"/*.pkg.tar.* > /dev/null 2>&1; then
-            echo "distro-test: building the packages"
+        # Rebuilt whenever the tree has moved on. Caching them on existence
+        # alone meant an Arch run could install a package built before the fix
+        # it was meant to be testing — which happened, and cost a run and the
+        # half hour of looking at the wrong thing afterwards.
+        local newest_package
+        newest_package=$(ls -t "${packages}"/*.pkg.tar.* 2> /dev/null | head -1)
+        if [ -z "$newest_package" ] || [ -n "$(find "$root" -type f \
+                -not -path "${root}/target/*" -not -path "${root}/.git/*" \
+                -newer "$newest_package" -print -quit 2> /dev/null)" ]; then
+            echo "distro-test: building the packages (the tree is newer than the last build)"
+            rm -f "${packages}"/*.pkg.tar.*
             "${root}/packaging/tests/package.sh" > /dev/null \
                 || die "the packages did not build"
         fi
@@ -244,8 +253,26 @@ MID
           # finds it — so `status` is the one probe that reports the phase and
           # the frame from inside the loop rather than inferring them.
           if [ -S /run/raba.sock ]; then
-              printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime)" \
-                  "$(raba-ctl status 2>&1 | tr '\n' ' ')" >> /run/raba-watch-status.log
+              said=$(raba-ctl status 2>&1 | tr '\n' ' ')
+              printf '%s %s\n' "$(cut -d' ' -f1 /proc/uptime)" "$said" \
+                  >> /run/raba-watch-status.log
+              # The console the splash says it holds, photographed while it
+              # still holds it. Reading it after the boot works only where the
+              # instance was killed and left the art behind; where the splash
+              # ends properly it hands the console back and clears it, and by
+              # then there is nothing to find.
+              held=$(printf '%s' "$said" | sed -n 's/.*terminal: \([0-9]*\).*/\1/p')
+              if [ -n "$held" ] && [ "$held" != 0 ]; then
+                  echo "$held" > /run/raba-watch-tty
+                  if cat "/dev/vcs$held" > /run/raba-held.new 2>/dev/null; then
+                      held_ink=$(tr -cd '[:graph:]' < /run/raba-held.new | wc -c)
+                      if [ "$held_ink" -gt "$(cat /run/raba-held-ink 2>/dev/null || echo 0)" ]
+                      then
+                          echo "$held_ink" > /run/raba-held-ink
+                          mv /run/raba-held.new /run/raba-held.txt
+                      fi
+                  fi
+              fi
           fi
           # Written every pass, not at the end: the post-boot checks run while
           # this is still sampling, and a verdict that arrives after they have
@@ -258,9 +285,13 @@ MID
     content: |
       [Unit]
       Description=RABA test: which terminal is on screen
+      # No default dependencies, so this starts beside the splash rather than
+      # after the filesystems — and therefore no condition on a file under
+      # /var either, which on Fedora is not mounted yet at that point and
+      # skipped the whole unit. Running on the install boot too costs twelve
+      # seconds of sampling a console nobody is drawing on.
       DefaultDependencies=no
       After=raba-start.service
-      ConditionPathExists=/var/lib/raba-installed
       [Service]
       Type=simple
       ExecStart=/usr/local/bin/raba-watch
