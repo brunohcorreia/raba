@@ -54,6 +54,31 @@ raba --check
 
 Reports a missing or unreadable theme without drawing anything.
 
+**Is it running, and does it think it is drawing?**
+
+```sh
+raba-ctl status
+```
+
+`phase: boot` with `frame:` changing between two runs of this is a splash that is
+drawing. `terminal:` is the console it is drawing on, and
+
+```sh
+sudo tr -cd '[:graph:]' < /dev/vcs2 | wc -c
+```
+
+counts the characters the kernel has on that console — zero means nothing was drawn
+there, a few hundred is a logo. `/dev/vcsN` is the only way to ask what is *on* a
+console; a photograph of the screen can disagree with it, and on a machine whose
+initramfs has no KMS driver a correctly drawn console can appear blank to a virtual
+machine's display.
+
+Do not use the modification time of `/run/raba.state` to decide whether it is alive.
+On an initramfs that survives into the real root, a splash started before
+`switch_root` keeps the old root directory, so its later writes to `/run` land
+somewhere nobody can see and the file stops changing while the animation carries on.
+See `docs/early-boot.md`.
+
 **Is there a framebuffer console at all?**
 
 ```sh

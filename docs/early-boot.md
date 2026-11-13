@@ -113,6 +113,35 @@ mounted under `/sysroot` at that moment.
 
 Copying that gives us a systemd-only solution to an agnostic requirement.
 
+### What a survivor's `/run` actually is
+
+Measured on a Debian 13 guest, 13 Nov 2026, and worth writing down because it looks
+like a bug in RABA and is not one.
+
+`switch_root` is `chroot` in **the calling process**. Every other process — including a
+splash started from `/scripts/init-premount` — keeps the root directory it was started
+with, which is the initramfs rootfs that has just been deleted. And initramfs-tools
+hands `/run` to the new root with `mount --move`, so from that moment the survivor's own
+`/run` is an empty directory in a filesystem nobody else can see.
+
+Three consequences, all observed in one boot:
+
+- **The control socket keeps working.** The listener holds the inode, and the inode went
+  with the tmpfs, so a client in the real root reaches it at `/run/raba.sock`. This is
+  why a second instance correctly declines.
+- **The state file stops updating.** Every `save` after the move writes somewhere
+  invisible. The file a later instance would read is whatever was written *last before*
+  the move — in that boot, frame 2 at 1.522s, while `raba-ctl status` showed the splash
+  still looping frames at 1.8s and beyond. A successor resuming from it restarts a few
+  frames earlier than the truth, which is a blink, and the freshness check in
+  `state::load` refuses it outright if the gap grows.
+- **It looks exactly like a wedged process.** It is not. The test for "is it still
+  drawing" is `raba-ctl status`, whose `frame:` advances, and not the mtime of a file.
+
+Nothing to fix in the program: a process cannot climb out of a root directory it has
+been left holding. What this changes is the diagnosis, and `docs/troubleshooting.md`
+should not send anybody to the state file to answer "is it alive".
+
 ## Instead: be resumable, and stop caring whether we died
 
 The state RABA needs to continue is tiny:

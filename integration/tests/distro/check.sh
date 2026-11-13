@@ -178,12 +178,29 @@ if [ -s /run/raba-watch.err ]; then
     sed 's/^/#   watcher: /' /run/raba-watch.err
 fi
 
-ink=$(cat /run/raba-watch-ink 2>/dev/null || echo 0)
-if [ "${ink:-0}" -gt 200 ]; then
-    tap 0 "the splash was on the console (${ink} characters of art)"
-    head -c 2000 /run/raba-watch-screen.txt 2>/dev/null | sed 's/^/#   |/'
+# The console RABA actually drew on, named by RABA: the last `terminal:` the
+# daemon reported about itself, or the one the state file remembers. Asking
+# "which console has the most on it" instead — an earlier version of this —
+# gets you the boot log on tty1 every time, three thousand characters of it,
+# and a check that passes on a machine where the splash never drew.
+splash_tty=$(sed -n 's/.*terminal: \([0-9]*\).*/\1/p' /run/raba-watch-status.log 2>/dev/null | tail -1)
+if [ -z "$splash_tty" ]; then
+    splash_tty=$(sed -n 's/.*terminal=\([0-9]*\).*/\1/p' /run/raba.state 2>/dev/null | head -1)
+fi
+if [ -z "$splash_tty" ]; then
+    tap 1 'the splash was on the console' 'nothing ever said which terminal it took'
 else
-    tap 1 'the splash was on the console' "only ${ink} characters were ever drawn"
+    ink=$(tr -cd '[:graph:]' < "/dev/vcs${splash_tty}" 2>/dev/null | wc -c)
+    # A hundred characters is a logo. A console nobody drew on reads zero, and
+    # a cursor or a stray prompt is a handful.
+    if [ "${ink:-0}" -gt 100 ]; then
+        tap 0 "the art is on tty${splash_tty} (${ink} characters)"
+        # The console, as the kernel holds it, folded back into lines.
+        fold -w "$(stty size < /dev/tty1 2>/dev/null | cut -d' ' -f2 || echo 80)" \
+            "/dev/vcs${splash_tty}" 2>/dev/null | sed 's/^/#   |/' | head -25
+    else
+        tap 1 "the art is on tty${splash_tty}" "that console holds ${ink} characters"
+    fi
 fi
 
 # What the instance inside the initramfs said, if anything. This is the only
