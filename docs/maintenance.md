@@ -181,16 +181,35 @@ Semantic versioning applies to all of them, not just the library.
 You get one shot at collecting information, from a user who is frustrated and possibly
 reading this on a phone.
 
-- `/run/raba.log` written always, regardless of `Level`, for the current boot.
-- A post-boot unit copies it to `/var/log/raba/last-boot.log`, because `/run` is a tmpfs
-  and a failed boot otherwise leaves nothing.
-- `raba --check` validates config and theme with no side effects and a meaningful exit
-  code — safe to run on a live system.
-- `raba-report` collects log, config, initramfs contents, `/proc/cmdline`, console font,
-  terminal size and versions into something pasteable.
+What 0.1.0 does:
 
-The last one sounds like polish. It is the difference between a reproducible bug and a
-closed-as-stale issue.
+- **One line on stderr for anything that went wrong**, and when nothing is capturing
+  stderr — an initramfs, where it is a file or `/dev/null` — the same line again as a
+  `<3>` record in `/dev/kmsg`, so `dmesg` and `journalctl -b` both have it exactly once.
+  The test is a `getsockopt` on stderr and an `isatty`, not a flag. A healthy boot
+  leaves nothing of ours in the kernel log at all, and
+  `integration/tests/distro/check.sh` asserts both halves.
+- **`/run/raba.log`** for the two cases a message cannot go to the console: `raba.debug=1`
+  writes its whole report there, and a splash displaced by something taking the screen
+  writes why — printing that one would draw it over whatever just took the screen.
+- **`raba --check`** validates configuration and theme with no side effects and a
+  meaningful exit code. Safe on a live system.
+- **`raba-ctl status`** asks a *running* splash what it thinks it is doing: phase,
+  terminal, theme, frame. It is what proved a "stalled" Debian boot was advancing at
+  125ms a frame all along.
+
+What is not built, and why it is listed rather than forgotten:
+
+- **A post-boot unit copying the log to `/var/log/raba/last-boot.log`.** `/run` is a
+  tmpfs, so the evidence from a boot that went wrong is gone by the time somebody
+  reboots to ask about it. Nothing writes persistent storage today and adding the first
+  thing that does deserves its own decision.
+- **`raba-report`**, collecting log, configuration, initramfs contents, `/proc/cmdline`,
+  console font, terminal size and versions into something pasteable.
+
+That last one sounds like polish. It is the difference between a reproducible bug and an
+issue closed as stale, and it is the first thing to build the day somebody other than us
+files one.
 
 ---
 

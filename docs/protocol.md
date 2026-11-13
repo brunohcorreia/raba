@@ -1,8 +1,10 @@
 # The control socket protocol
 
 `raba`(8) listens on `/run/raba.sock`. `raba-ctl`(1) connects to it. This document is
-the contract between them, and it is written before either end so that the protocol is
-something both were built against rather than something the first client happened to do.
+the contract between them. It was written before either end existed, so that the
+protocol is something both were built against rather than something the first client
+happened to do; both ends have been implemented against it since, and where they differ
+from this page, this page is the bug.
 
 It is listed in [maintenance.md](maintenance.md#5-written-down-contracts) as public API:
 semantic versioning applies to it the same way it applies to the config file keys.

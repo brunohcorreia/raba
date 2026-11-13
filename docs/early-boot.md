@@ -1,7 +1,12 @@
 # Starting as early as possible
 
-> Design note. Supersedes the "run after `switch_root`" proposal in
-> [risks.md](risks.md) §1, which traded too much away.
+> Implemented, and measured: the splash starts inside the initramfs and the display
+> stays on its terminal across `switch_root` — 1.53s to 6.62s on Fedora, 3.98s onward on
+> Arch, with no console in between. See [milestones.md](milestones.md), "Row 3,
+> reopened", for the journal lines.
+>
+> Supersedes the "run after `switch_root`" proposal in [risks.md](risks.md) §1, which
+> traded too much away.
 
 The goal is for the splash to appear at the earliest moment the hardware can show it,
 and to stay up continuously until something replaces it.

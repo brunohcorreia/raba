@@ -95,8 +95,10 @@ It is built around three constraints:
   It writes escape codes to a virtual terminal, which is what ASCII art wants anyway.
   It lowers the *console* log level while it draws and restores it on exit — `dmesg` and
   the journal are untouched.
-- **It must not care what you run.** systemd or runit, GRUB or Limine, Arch or Void,
-  any display manager or none. At run time it depends on no other program.
+- **It must not care what you run.** At run time it depends on no other program: no
+  D-Bus, no logind, no graphics stack. The design is init-agnostic and the service files
+  for runit, OpenRC, s6 and dinit ship in the box — but only systemd has been booted, so
+  read that as the intent and `docs/milestones.md` for how far the evidence goes.
 
 ## Why not Plymouth
 
@@ -136,9 +138,10 @@ Two animations: one that loops until the system is ready, and one that plays a s
 time on the way out. If the last frame of your outro matches the first frame of the
 `.dur` your display manager shows, the transition is invisible.
 
-The `.dur` file is the background. Anything that reacts to runtime state — a passphrase
-prompt, a status message, a progress indicator — is drawn over it by RABA. Themes stay
-pure data, which is what lets them be validated at build time and shared with Ly.
+The animation is the background. Anything that reacts to runtime state — a status
+message, and one day a passphrase prompt — is drawn over it by RABA. Themes stay pure
+data, which is what lets them be validated at build time and shared with a display
+manager that plays the same art.
 
 ## Animations
 
@@ -284,6 +287,7 @@ font.
 | [docs/risks.md](docs/risks.md) | pre-mortem: what can break, including upstream |
 | [docs/maintenance.md](docs/maintenance.md) | code structure, dependency budget, testing |
 | [docs/security.md](docs/security.md) | threat model and hardening |
+| [docs/protocol.md](docs/protocol.md) | the control socket's wire protocol |
 | [docs/boot-order.md](docs/boot-order.md) | kernel parameters and hook placement |
 | [docs/coexistence.md](docs/coexistence.md) | Plymouth, getty, and when not to draw |
 | [docs/secure-boot.md](docs/secure-boot.md) | Secure Boot, TPM measurements, lockdown |
@@ -295,6 +299,8 @@ font.
 | [docs/glyphs.md](docs/glyphs.md) | which characters a console can draw, and why |
 | [docs/console-size.md](docs/console-size.md) | why the grid is the size it is, and the font that decides |
 | [docs/3d-logos.md](docs/3d-logos.md) | 3D rotating logos, and where they would live |
+| [CHANGELOG.md](CHANGELOG.md) | what is in each release, and what is deliberately not |
+| [DEPENDENCIES.md](DEPENDENCIES.md) | every direct dependency, and the budget it came from |
 
 ## If your machine will not boot
 

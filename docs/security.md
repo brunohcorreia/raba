@@ -1,7 +1,10 @@
 # Security
 
-> Design note. Threat model and hardening plan for a program that runs as root, early in
-> boot, parsing a file.
+> Threat model for a program that runs as root, early in boot, parsing a file.
+>
+> No longer a plan: the posture below is what the code does, and the findings are
+> numbered so that a change can say which one it is about. What is still only intended
+> says so in its own row.
 
 RABA is cosmetic software with a privileged runtime. That combination deserves an
 explicit threat model rather than an assumption that a splash screen cannot matter.

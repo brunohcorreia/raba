@@ -1,23 +1,21 @@
 # Development plan
 
-## Can we start?
+## Where this is
 
-Yes, and we should. The design docs have outrun what has been validated, which is its own
-risk — every decision recorded so far rests on an assumption nobody has tested:
+0.1.0 is released. [milestones.md](milestones.md) is the log of what was built and what
+each step cost; this document is the part a contributor needs: how the code is laid out,
+what the test tiers are, and what CI will refuse.
 
-> **Does ASCII art at console cell size actually look good enough to justify this?**
+The question this file used to open with was whether ASCII art at console cell size
+looks good enough to justify the project at all — nobody had looked at one on a screen,
+and every design decision rested on the answer. It was answered in M0, in a weekend, and
+the answer was yes. It is recorded here because the habit that produced it is the useful
+part: the most existential question goes first, and it goes first even when it is the
+least interesting one to build.
 
-A console font is typically 8x16 pixels. A fastfetch logo is roughly 40x20 cells. Nobody
-in this project has yet looked at one on a screen. If the answer is "it looks bad", no
-amount of correct `switch_root` handling fixes that.
-
-That question should be answered this week, not in month six. It shapes the first
-milestone.
-
-Nothing else is blocking. The byte layout of `.raba` is a sketch, but freezing it *is*
-the first task — a format gets specified by being implemented, not by being described.
-
----
+> The three sections that follow are the original plan, kept because the reasoning in
+> them — parser first, by risk rather than by dependency — is what the code still looks
+> like. [milestones.md](milestones.md) is what actually happened.
 
 ## Milestone 0 — see a logo animate
 
