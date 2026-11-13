@@ -393,7 +393,39 @@ fn check(root: &Root, places: &config::Places) -> ExitCode {
 /// The one state-changing thing this program does, and it is somebody else's
 /// program doing it. Everything that would mean editing a file we do not own is
 /// printed by the dry run instead.
-fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, String> {
+/// The answer to "may I rebuild this machine's initramfs?"
+enum Permission {
+    /// Yes, and this is the machine to do it to.
+    Granted(Box<machine::Survey>),
+    /// No. The reason has already been printed in full, including what to do
+    /// about it.
+    Refused,
+}
+
+/// Everything that has to be true before anything changes.
+///
+/// Separated from the rebuild for one reason: `--set-theme` edits a file first,
+/// and every question here has to be answered before that edit, not after it. A
+/// review found all three ways the old arrangement got this wrong — a declined
+/// TPM prompt that printed "Nothing was changed" over a file that had just
+/// changed, a `raba` missing from `HOOKS`, and `--root` pointing at somebody
+/// else's filesystem while the edit landed on the running one.
+///
+/// `needs_theme` is false for `--set-theme`, which is about to supply one: a
+/// machine whose configuration currently resolves to nothing is exactly the
+/// machine that command is for.
+fn permission(
+    root: &Root,
+    places: &config::Places,
+    yes: bool,
+    needs_theme: bool,
+) -> Result<Permission, String> {
+    // First, because it is the only one that is about the caller rather than
+    // the machine, and because getting it wrong means writing to the wrong
+    // computer.
+    if !root.is_the_running_system() {
+        return Err("--root is for inspecting, not for rebuilding somebody else's boot".to_owned());
+    }
     let survey = machine::survey(root);
     if survey.generators.is_empty() {
         return Err("no initramfs generator found; there is nothing to rebuild".to_owned());
@@ -401,7 +433,7 @@ fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, St
     // Asked before the rebuild rather than discovered during it: the hooks all
     // decline quietly when there is no theme, so without this the command would
     // run for thirty seconds and produce an image with no splash in it.
-    if config::start(places).freeze().is_none() {
+    if needs_theme && config::start(places).freeze().is_none() {
         return Err("no theme resolved; the image would have no splash in it (try: raba --check)"
             .to_owned());
     }
@@ -410,20 +442,22 @@ fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, St
             println!("mkinitcpio has no `raba` in HOOKS, so rebuilding would change nothing.");
             println!("Make the line read:");
             println!("    {}", machine::suggested(hooks));
-            return Ok(ExitCode::FAILURE);
+            return Ok(Permission::Refused);
         }
     }
     if let Tpm::Sealed(devices) = &survey.tpm {
         tpm_advice(&survey.tpm);
         if !yes && !agreed(devices) {
             println!("Nothing was changed.");
-            return Ok(ExitCode::FAILURE);
+            return Ok(Permission::Refused);
         }
     }
-    if !root.is_the_running_system() {
-        return Err("--root is for inspecting, not for rebuilding somebody else's boot".to_owned());
-    }
+    Ok(Permission::Granted(Box::new(survey)))
+}
 
+/// Run each generator this machine has. The only state-changing thing here, and
+/// it is somebody else's program doing it.
+fn rebuild(survey: &machine::Survey) -> Result<ExitCode, String> {
     for generator in &survey.generators {
         let Some((program, arguments)) = generator.rebuild().split_first() else {
             continue;
@@ -439,6 +473,13 @@ fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, St
     }
     println!("raba-setup: done. `raba-setup --check` confirms what is in the image.");
     Ok(ExitCode::SUCCESS)
+}
+
+fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, String> {
+    match permission(root, places, yes, true)? {
+        Permission::Refused => Ok(ExitCode::FAILURE),
+        Permission::Granted(survey) => rebuild(&survey),
+    }
 }
 
 /// `--set-theme <name>`: change the line, then rebuild the image.
@@ -475,6 +516,16 @@ fn set_theme(
         }
     }
 
+    // Everything that could refuse, before anything is written. The order is
+    // the finding: a declined TPM prompt used to print "Nothing was changed"
+    // over a file that had already changed, and `--root` used to edit the
+    // running system's configuration and *then* say it would not touch somebody
+    // else's boot.
+    let survey = match permission(root, places, yes, false)? {
+        Permission::Refused => return Ok(ExitCode::FAILURE),
+        Permission::Granted(survey) => survey,
+    };
+
     let before = match std::fs::read_to_string(&places.config) {
         Ok(text) => text,
         // No file is not a failure: the setting has a compiled-in default, and
@@ -491,7 +542,7 @@ fn set_theme(
     }
 
     // And now the half that makes it true at boot.
-    apply(root, places, yes)
+    rebuild(&survey)
 }
 
 /// The names a person could have meant, so the error is useful rather than only
@@ -524,20 +575,65 @@ fn available(places: &config::Places) -> String {
 
 /// Replace the file without ever leaving a half-written one in its place: a
 /// truncated `raba.conf` is a machine whose next initramfs build has no theme.
+///
+/// `O_NOFOLLOW` and `O_CREAT|O_EXCL` on the staging file, which is the rule
+/// `docs/security.md` finding 4 sets for this whole project and which
+/// `raba::state::save` already follows. Without them this is a root process
+/// writing the contents of a configuration file through whatever symlink
+/// somebody left at `raba.conf.new` — cheap to arrange whenever the directory
+/// is writable by anyone else, which `--config` makes possible by design.
 fn write_config(path: &std::path::Path, text: &str) -> Result<(), String> {
+    use std::io::Write as _;
+    use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+
+    // Spelled out rather than taken from `libc`, which this crate does not
+    // depend on and should not grow a dependency for one integer. The same
+    // constant, with the same reasoning, is in `raba::state`.
+    const O_NOFOLLOW: i32 = 0o400_000;
+
     let staging = path.with_extension("conf.new");
-    std::fs::write(&staging, text).map_err(|why| format!("{}: {why}", staging.display()))?;
-    if let Some(mode) = std::fs::metadata(path).ok().map(|meta| {
-        use std::os::unix::fs::PermissionsExt as _;
-        meta.permissions().mode()
-    }) {
-        use std::os::unix::fs::PermissionsExt as _;
-        let _ = std::fs::set_permissions(&staging, std::fs::Permissions::from_mode(mode));
-    }
-    std::fs::rename(&staging, path).map_err(|why| {
+    let blame = |why: std::io::Error| format!("{}: {why}", staging.display());
+
+    let open = || {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .custom_flags(O_NOFOLLOW)
+            .open(&staging)
+    };
+    let mut file = match open() {
+        Ok(file) => file,
+        // Ours, from a run that died between creating and renaming. Removing it
+        // is safe for the same reason creating it was: nothing followed a link
+        // to get here.
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            std::fs::remove_file(&staging).map_err(blame)?;
+            open().map_err(blame)?
+        }
+        Err(error) => return Err(blame(error)),
+    };
+
+    // From here on, every failure takes the staging file with it. A half-written
+    // raba.conf.new left in /etc is litter at best, and at worst the file the
+    // *next* run finds and deletes without knowing what is in it.
+    let written = file.write_all(text.as_bytes()).and_then(|()| file.flush()).and_then(|()| {
+        // The mode the real file had, so a rename does not silently widen
+        // it. A file that was never there gets whatever the umask says.
+        if let Ok(meta) = std::fs::metadata(path) {
+            file.set_permissions(std::fs::Permissions::from_mode(meta.permissions().mode()))?;
+        }
+        Ok(())
+    });
+    drop(file);
+    if let Err(error) = written {
         let _ = std::fs::remove_file(&staging);
-        format!("{}: {why}", path.display())
-    })
+        return Err(blame(error));
+    }
+    if let Err(error) = std::fs::rename(&staging, path) {
+        let _ = std::fs::remove_file(&staging);
+        return Err(format!("{}: {error}", path.display()));
+    }
+    Ok(())
 }
 
 /// Ask, once, in words that say what is about to happen.

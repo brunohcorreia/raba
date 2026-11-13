@@ -365,6 +365,50 @@ enum Within {
     In(&'static str),
 }
 
+/// What one line of a configuration file turned out to be.
+///
+/// The parser's view, and the only one: anything that wants to know what a file
+/// says — reading it, or editing it — goes through [`scan`] rather than
+/// splitting lines again. A second reader that disagrees with this one about
+/// what counts as the `[Boot]` section is a tool that edits a line nobody
+/// obeys, which is worse than a tool that refuses.
+enum Step<'a> {
+    /// `[Name]`, and whether the bracket was closed.
+    Header { name: &'a str, closed: bool },
+    /// `Key=Value`, both already trimmed.
+    Pair { key: &'a str, value: &'a str },
+    /// Something that is none of the above.
+    Junk,
+}
+
+/// Every meaningful line, with its 1-based number and its trimmed text.
+///
+/// Blank lines and whole-line comments are not yielded at all — they are the
+/// one thing every caller agrees to ignore. A `#` *inside* a value is part of
+/// the value: paths and messages contain them, and a parser that ate the rest
+/// of the line would turn `Theme=/opt/#1.raba` into a file that does not exist.
+fn scan(text: &str) -> impl Iterator<Item = (usize, &str, Step<'_>)> {
+    text.lines().enumerate().filter_map(|(index, raw)| {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            return None;
+        }
+        let number = index.saturating_add(1);
+        if let Some(rest) = line.strip_prefix('[') {
+            return Some(match rest.strip_suffix(']') {
+                Some(name) => (number, line, Step::Header { name: name.trim(), closed: true }),
+                None => (number, line, Step::Header { name: "", closed: false }),
+            });
+        }
+        Some(match line.split_once('=') {
+            Some((key, value)) => {
+                (number, line, Step::Pair { key: key.trim(), value: value.trim() })
+            }
+            None => (number, line, Step::Junk),
+        })
+    })
+}
+
 /// Apply one file's text onto a configuration, returning what was wrong with it.
 ///
 /// Pure: no file is read here and no path is touched. `file` is carried only so
@@ -377,54 +421,107 @@ pub fn apply(text: &str, file: &Path, config: &mut Config) -> Vec<Problem> {
         problems.push(Problem { file: file.to_path_buf(), line, text });
     };
 
-    for (index, raw) in text.lines().enumerate() {
-        let number = index.saturating_add(1);
-        let line = raw.trim();
-        // Whole-line comments only. A `#` inside a value is part of the value:
-        // paths and messages contain them, and a parser that ate the rest of the
-        // line would turn `Theme=/opt/#1.raba` into a file that does not exist.
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some(rest) = line.strip_prefix('[') {
-            let Some(name) = rest.strip_suffix(']') else {
+    for (number, line, step) in scan(text) {
+        match step {
+            Step::Header { closed: false, .. } => {
                 complain(number, format!("{line:?} starts a section and does not finish it"));
                 within = Within::Unknown;
-                continue;
-            };
-            let name = name.trim();
-            within = match SECTIONS.iter().find(|known| **known == name) {
-                Some(known) => Within::In(known),
-                None => {
-                    complain(number, format!("[{name}] is not a section this version knows"));
-                    Within::Unknown
-                }
-            };
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            complain(number, format!("{line:?} is not a comment, a section, or Key=Value"));
-            continue;
-        };
-        let (key, value) = (key.trim(), value.trim());
-        let section = match within {
-            Within::In(section) => section,
-            Within::Unknown => continue,
-            Within::Nowhere => {
-                complain(number, format!("{key} is before any [Section]"));
-                continue;
             }
-        };
-        match set(config, section, key, value) {
-            Ok(name) => {
-                if !config.seen.contains(&name) {
-                    config.seen.push(name);
+            Step::Header { name, closed: true } => {
+                within = match SECTIONS.iter().find(|known| **known == name) {
+                    Some(known) => Within::In(known),
+                    None => {
+                        complain(number, format!("[{name}] is not a section this version knows"));
+                        Within::Unknown
+                    }
+                };
+            }
+            Step::Junk => {
+                complain(number, format!("{line:?} is not a comment, a section, or Key=Value"));
+            }
+            Step::Pair { key, value } => {
+                let section = match within {
+                    Within::In(section) => section,
+                    Within::Unknown => continue,
+                    Within::Nowhere => {
+                        complain(number, format!("{key} is before any [Section]"));
+                        continue;
+                    }
+                };
+                match set(config, section, key, value) {
+                    Ok(name) => {
+                        if !config.seen.contains(&name) {
+                            config.seen.push(name);
+                        }
+                    }
+                    Err(why) => complain(number, why),
                 }
             }
-            Err(why) => complain(number, why),
         }
     }
     problems
+}
+
+/// Where a file sets one key, as [`apply`] sees it.
+///
+/// Exists so that an editor — `raba-setup --set-theme` — can change the line
+/// that is actually obeyed instead of the first one that looks right. The three
+/// ways those differ are all reachable by hand:
+///
+/// * **Two lines set the key.** `apply` runs through the whole file and the last
+///   assignment wins. An editor that stops at the first one reports success and
+///   changes nothing.
+/// * **The section is spelled `[boot]`.** `SECTIONS` is matched exactly, so that
+///   is an unknown section and every key in it is skipped. Editing a line there
+///   edits something no boot will read.
+/// * **The header is unterminated.** `[Boot` leaves the parser in
+///   [`Within::Unknown`], and so everything under it is skipped too.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Placement {
+    /// 1-based line numbers of every line that sets it, in file order. The last
+    /// is the one that decides the value.
+    pub lines: Vec<usize>,
+    /// 1-based line number of the `[Section]` header, if the file has one that
+    /// the parser accepts.
+    pub header: Option<usize>,
+}
+
+impl Placement {
+    /// The line that decides the value, if any does.
+    #[must_use]
+    pub fn effective(&self) -> Option<usize> {
+        self.lines.last().copied()
+    }
+}
+
+/// Find where `section.key` is set. Pure; the same rules as [`apply`].
+#[must_use]
+pub fn placement(text: &str, section: &str, key: &str) -> Placement {
+    let mut found = Placement::default();
+    let mut within = Within::Nowhere;
+    for (number, _, step) in scan(text) {
+        match step {
+            Step::Header { closed: false, .. } => within = Within::Unknown,
+            Step::Header { name, closed: true } => {
+                within = match SECTIONS.iter().find(|known| **known == name) {
+                    Some(known) => {
+                        if *known == section && found.header.is_none() {
+                            found.header = Some(number);
+                        }
+                        Within::In(known)
+                    }
+                    None => Within::Unknown,
+                };
+            }
+            Step::Junk => {}
+            Step::Pair { key: found_key, .. } => {
+                if matches!(within, Within::In(name) if name == section) && found_key == key {
+                    found.lines.push(number);
+                }
+            }
+        }
+    }
+    found
 }
 
 /// One key. Returns its canonical name, so that the caller can record that a
