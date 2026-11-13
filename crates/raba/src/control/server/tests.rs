@@ -166,3 +166,27 @@ fn our_own_connection_passes_the_peer_check() {
     assert_eq!(serve_one(&listener), Some(Command::Ping));
     assert_eq!(client.join().expect("client"), "+OK\n");
 }
+
+#[test]
+fn a_bind_that_cannot_be_moved_into_place_leaves_nothing_of_ours_behind() {
+    // The socket is bound under a name nobody is told about and renamed into
+    // place, so that it is never reachable at `path` in the wrong mode. If
+    // that rename fails — here because something that is not a socket is
+    // already sitting at the path — the staging file must go with it.
+    // `/run` is shared, and a .raba.sock.new nobody owns outlives the boot.
+    let scratch = Scratch::new("bind-blocked");
+    let blocked = scratch.socket();
+    std::fs::create_dir_all(&blocked).expect("something in the way");
+    std::fs::write(blocked.join("occupied"), b"x").expect("making it non-empty");
+
+    let why = Listener::bind(blocked.clone()).expect_err("a rename onto a directory fails");
+    assert!(why.kind() != std::io::ErrorKind::NotFound, "{why}");
+
+    let left: Vec<String> = std::fs::read_dir(&scratch.0)
+        .expect("reading the directory")
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.contains(".new"))
+        .collect();
+    assert!(left.is_empty(), "a staging socket was left behind: {left:?}");
+}

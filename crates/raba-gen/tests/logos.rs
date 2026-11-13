@@ -223,3 +223,22 @@ fn the_shipped_art_matches_what_upstream_actually_has() {
         "art differs from upstream without a recorded hand edit: {differing:?}"
     );
 }
+
+#[test]
+fn a_logo_prints_the_size_of_its_art_and_not_the_art() {
+    // The `Debug` here is written by hand for one reason: 534 logos, some of
+    // them several kilobytes of string, and a derived `Debug` puts all of it
+    // into every error message that happens to mention one. An `assert_eq!`
+    // against a logo would print an entire distribution's ASCII art twice.
+    let logo = Logo {
+        name: "testdistro",
+        aliases: &["td"],
+        art: "$1####\n$1#  #\n$1####\n",
+        colors: &["34"],
+    };
+    let shown = format!("{logo:?}");
+    assert!(shown.contains("testdistro"), "{shown}");
+    assert!(shown.contains("art_bytes"), "{shown}");
+    assert!(shown.contains("21"), "{shown}: the length, not the art");
+    assert!(!shown.contains('#'), "{shown}: the art itself reached the debug line");
+}

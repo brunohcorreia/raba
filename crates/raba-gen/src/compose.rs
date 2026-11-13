@@ -18,7 +18,7 @@
 //! changed. A spinner over a static logo therefore costs one cell per frame rather
 //! than a canvas, which is the entire reason the format is shaped this way.
 
-use raba_core::format::{limits, Palette};
+use raba_core::format::limits;
 use raba_core::{Cell, Frame, Grid, Movie, Op};
 use std::fmt;
 
@@ -277,14 +277,4 @@ fn check_colours(cells: impl Iterator<Item = Cell>, max: u8) -> Result<(), Compo
         }
     }
     Ok(())
-}
-
-/// The palette a grid should declare. Convenience for callers building art.
-#[must_use]
-pub fn palette_for(colours: &[u8]) -> Palette {
-    if colours.iter().any(|&c| c > 15) {
-        Palette::Xterm256
-    } else {
-        Palette::Ansi16
-    }
 }

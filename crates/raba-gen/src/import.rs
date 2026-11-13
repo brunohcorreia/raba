@@ -16,11 +16,3 @@ pub struct Imported {
     /// Anything a person should know: a guessed orientation, a clamped colour.
     pub notes: Vec<String>,
 }
-
-impl Imported {
-    /// A bare import with no metadata.
-    #[must_use]
-    pub fn new(movie: Movie) -> Self {
-        Imported { movie, name: String::new(), artist: String::new(), notes: Vec::new() }
-    }
-}

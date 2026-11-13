@@ -264,3 +264,36 @@ fn the_whole_authoring_chain_runs() {
     // And the art underneath is untouched by the spinner.
     assert_eq!(frames[2].get(1, 0).unwrap().ch, '/');
 }
+
+#[test]
+fn an_overlay_with_no_steps_is_refused_rather_than_dividing_by_its_own_period() {
+    // `Overlay` is public and `steps` is a plain `Vec`, so an empty one is one
+    // typo away for anybody building overlays by hand. The cycle length is a
+    // least common multiple over the periods, and a period of zero has no
+    // answer — the refusal says which, rather than the arithmetic deciding.
+    let empty = Overlay { column: 0, line: 0, steps: Vec::new() };
+    let why = compose(&logo(), &[empty], 100, true).expect_err("an empty overlay is refused");
+    assert!(matches!(why, ComposeError::EmptyOverlay), "{why:?}");
+}
+
+#[test]
+fn painting_a_step_steps_over_an_overlay_that_has_nothing_to_draw() {
+    // `paint` is the reference a delta reconstruction is checked against and
+    // is called per frame by `--preview`. It must not panic on the input
+    // `compose` refuses: an author looking at a half-finished recipe gets the
+    // preview, not a crash.
+    let base = logo();
+    let painted = paint(&base, &[Overlay { column: 0, line: 0, steps: Vec::new() }], 3);
+    assert_eq!(painted.cells(), base.cells(), "an empty overlay drew something");
+}
+
+#[test]
+fn painting_past_the_end_of_a_cycle_wraps_rather_than_running_out() {
+    // Step 7 of a three-step spinner is step 1. The caller is a frame counter
+    // and does not do the modulo itself.
+    let base = logo();
+    let spinner = Overlay::spinner(0, 0, &['-', '\\', '|'], 7, 0);
+    let first = paint(&base, std::slice::from_ref(&spinner), 1);
+    let again = paint(&base, std::slice::from_ref(&spinner), 7);
+    assert_eq!(first.cells(), again.cells());
+}
