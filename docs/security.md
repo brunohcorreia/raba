@@ -86,6 +86,18 @@ If `/run/raba.log` is pre-created as a symlink, RABA writes through it as root.
 > and never follow a path we did not create. Exposure is small because `/run` is
 > root-owned this early, which is a reason to be careful rather than a reason to skip it.
 
+**Where it is enforced:** `raba::write::replace`, which is the only code in the project
+that puts bytes in a file. Every writer goes through it — the resume state, both log
+writes, and `raba-setup`'s edit of `raba.conf` — so the property is one a reader can
+check in one function rather than one that has to hold at every call site.
+
+It did not start that way, and the gap was where the finding's own example is. The
+mitigation was applied to `/run/raba.state` and the two writes to `/run/raba.log` — the
+file this finding names — were a plain `std::fs::write`, which follows a symlink and
+truncates whatever is on the other end. A rule written in a document and applied in one
+of three places is a rule the next writer will miss too, which is why it is a function
+now and not a habit.
+
 ### 5. Malformed or hostile animation file · **medium, structurally mitigated**
 
 We parse a file as root with no supervision.

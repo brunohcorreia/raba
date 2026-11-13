@@ -304,7 +304,7 @@ fn boot(startup: &config::Startup) {
     if startup.debug {
         let report = startup.report();
         eprint!("{report}");
-        let _ = std::fs::write(&startup.config.log.file, report);
+        let _ = raba::write::replace(&startup.config.log.file, report.as_bytes());
         return;
     }
     // Caught here rather than in the boot path, because this is the one reason
@@ -332,7 +332,8 @@ fn boot(startup: &config::Startup) {
         // that leaves no trace is an exit nobody can debug, and "the splash
         // stopped early" is exactly the report that needs one.
         ref displaced @ raba::boot::Outcome::Displaced(_) => {
-            let _ = std::fs::write(&startup.config.log.file, format!("raba: {displaced}\n"));
+            let line = format!("raba: {displaced}\n");
+            let _ = raba::write::replace(&startup.config.log.file, line.as_bytes());
         }
         ref other => report(other),
     }

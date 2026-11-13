@@ -21,3 +21,4 @@ pub mod report;
 pub mod signals;
 pub mod state;
 pub mod vt;
+pub mod write;

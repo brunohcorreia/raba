@@ -11,7 +11,9 @@
 
 use raba::lifecycle::Phase;
 use raba::state::{self, Invalid, State, FRESH};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 const FRAMES: u32 = 600;
 const NOW: u64 = 8_000;
@@ -20,6 +22,17 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(name: &str) -> Scratch {
+        // Two tests with the same name would share a directory, and the first
+        // thing this does is empty it — so they would delete each other's
+        // files, in parallel, and the symptom would be a *security* test
+        // failing for no reason anybody could reproduce. Cheaper to refuse.
+        static TAKEN: Mutex<BTreeSet<&'static str>> = Mutex::new(BTreeSet::new());
+        let name: &'static str = Box::leak(name.to_owned().into_boxed_str());
+        assert!(
+            TAKEN.lock().expect("the name registry").insert(name),
+            "two tests use the scratch name {name:?}; they would erase each other"
+        );
+
         let mut path = std::env::temp_dir();
         path.push(format!("raba-state-test-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&path);

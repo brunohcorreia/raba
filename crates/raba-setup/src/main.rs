@@ -576,64 +576,13 @@ fn available(places: &config::Places) -> String {
 /// Replace the file without ever leaving a half-written one in its place: a
 /// truncated `raba.conf` is a machine whose next initramfs build has no theme.
 ///
-/// `O_NOFOLLOW` and `O_CREAT|O_EXCL` on the staging file, which is the rule
-/// `docs/security.md` finding 4 sets for this whole project and which
-/// `raba::state::save` already follows. Without them this is a root process
-/// writing the contents of a configuration file through whatever symlink
-/// somebody left at `raba.conf.new` — cheap to arrange whenever the directory
-/// is writable by anyone else, which `--config` makes possible by design.
+/// Through [`raba::write::replace`], which is the one place in this project
+/// that puts bytes in a file: `O_NOFOLLOW`, `O_CREAT|O_EXCL` on the staging
+/// path, the destination's permissions preserved, and nothing of ours left
+/// behind on any failure. `docs/security.md` finding 4 is the rule and this is
+/// a root process writing into `/etc`.
 fn write_config(path: &std::path::Path, text: &str) -> Result<(), String> {
-    use std::io::Write as _;
-    use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
-
-    // Spelled out rather than taken from `libc`, which this crate does not
-    // depend on and should not grow a dependency for one integer. The same
-    // constant, with the same reasoning, is in `raba::state`.
-    const O_NOFOLLOW: i32 = 0o400_000;
-
-    let staging = path.with_extension("conf.new");
-    let blame = |why: std::io::Error| format!("{}: {why}", staging.display());
-
-    let open = || {
-        std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .custom_flags(O_NOFOLLOW)
-            .open(&staging)
-    };
-    let mut file = match open() {
-        Ok(file) => file,
-        // Ours, from a run that died between creating and renaming. Removing it
-        // is safe for the same reason creating it was: nothing followed a link
-        // to get here.
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            std::fs::remove_file(&staging).map_err(blame)?;
-            open().map_err(blame)?
-        }
-        Err(error) => return Err(blame(error)),
-    };
-
-    // From here on, every failure takes the staging file with it. A half-written
-    // raba.conf.new left in /etc is litter at best, and at worst the file the
-    // *next* run finds and deletes without knowing what is in it.
-    let written = file.write_all(text.as_bytes()).and_then(|()| file.flush()).and_then(|()| {
-        // The mode the real file had, so a rename does not silently widen
-        // it. A file that was never there gets whatever the umask says.
-        if let Ok(meta) = std::fs::metadata(path) {
-            file.set_permissions(std::fs::Permissions::from_mode(meta.permissions().mode()))?;
-        }
-        Ok(())
-    });
-    drop(file);
-    if let Err(error) = written {
-        let _ = std::fs::remove_file(&staging);
-        return Err(blame(error));
-    }
-    if let Err(error) = std::fs::rename(&staging, path) {
-        let _ = std::fs::remove_file(&staging);
-        return Err(format!("{}: {error}", path.display()));
-    }
-    Ok(())
+    raba::write::replace(path, text.as_bytes()).map_err(|why| format!("{}: {why}", path.display()))
 }
 
 /// Ask, once, in words that say what is about to happen.

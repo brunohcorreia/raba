@@ -39,7 +39,7 @@
 
 use crate::lifecycle::Phase;
 use std::fmt::Write as _;
-use std::io::{self, Read as _, Write as _};
+use std::io::{self, Read as _};
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
 
@@ -251,48 +251,7 @@ fn phase_named(name: &str) -> Option<Phase> {
 /// create. The caller carries on without a state file: not being resumable is
 /// worse than not drawing, and not drawing is already not worth stopping a boot.
 pub fn save(path: impl AsRef<Path>, state: &State) -> io::Result<()> {
-    let path = path.as_ref();
-    let staging = staging(path);
-    // `O_EXCL` so that a pre-planted file is never written through, and
-    // `O_NOFOLLOW` so that a pre-planted *symlink* is never written through
-    // either — the second is the one that matters, because it is what turns
-    // this into a root process writing to a path somebody else chose.
-    let mut file = match std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .custom_flags(O_NOFOLLOW)
-        .open(&staging)
-    {
-        Ok(file) => file,
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-            // Ours, from an instance that died between creating and renaming.
-            // Removing it is safe for the same reason creating it was.
-            std::fs::remove_file(&staging)?;
-            std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .custom_flags(O_NOFOLLOW)
-                .open(&staging)?
-        }
-        Err(error) => return Err(error),
-    };
-    let rendered = state.render();
-    if let Err(error) = file.write_all(rendered.as_bytes()).and_then(|()| file.flush()) {
-        drop(file);
-        let _ = std::fs::remove_file(&staging);
-        return Err(error);
-    }
-    drop(file);
-    // The rename can fail on its own — something that is not our file sitting at
-    // the destination, a directory at the path — and when it does, the staging
-    // file is ours and has to go. Otherwise a path that cannot be written leaves
-    // `raba.state.new` in /run for the rest of the boot, which is a splash that
-    // failed quietly *and* left litter behind it.
-    if let Err(error) = std::fs::rename(&staging, path) {
-        let _ = std::fs::remove_file(&staging);
-        return Err(error);
-    }
-    Ok(())
+    crate::write::replace(path.as_ref(), state.render().as_bytes())
 }
 
 /// Read the state, if there is one worth having.
@@ -344,10 +303,4 @@ pub fn load(path: impl AsRef<Path>, frames: u32, now: u64) -> Result<Option<Stat
 /// rejected file that stays on disk is a rejection repeated on every start.
 pub fn discard(path: impl AsRef<Path>) {
     let _ = std::fs::remove_file(path.as_ref());
-}
-
-fn staging(path: &Path) -> PathBuf {
-    let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(".new");
-    path.with_file_name(name)
 }
