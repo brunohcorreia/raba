@@ -19,8 +19,8 @@ path = "src/main.rs"
 # libc for the signal mask. Every addition needs an entry in DEPENDENCIES.md.
 # No JSON, no decompression, no async runtime — that is the point of owning .raba.
 [dependencies]
-raba-core = { path = "../raba-core", version = "0.0.0" }
-raba-term = { path = "../raba-term", version = "0.0.0" }
+raba-core = { path = "../raba-core", version = "0.1.0" }
+raba-term = { path = "../raba-term", version = "0.1.0" }
 rustix = { version = "1", features = ["termios", "system", "net", "process", "time"] }
 # The second and last direct dependency. See DEPENDENCIES.md: `std` has no signal
 # API, and this one has no transitive dependencies and adds no bytes — musl libc
@@ -37,5 +37,5 @@ workspace = true
 [dev-dependencies]
 # The signal tests send signals, which needs the same bindings the module uses.
 libc = { version = "0.2", default-features = false }
-raba-core = { path = "../raba-core", version = "0.0.0", features = ["testing"] }
+raba-core = { path = "../raba-core", version = "0.1.0", features = ["testing"] }
 rustix = { version = "1", features = ["pty", "termios", "process"] }

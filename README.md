@@ -5,11 +5,20 @@
 ---
 
 > [!WARNING]
-> **Status: pre-alpha. There is no boot splash yet.**
-> The format, the renderer and the theme builder work; nothing touches a virtual
-> terminal, an initramfs or your bootloader. This README otherwise describes the
-> intended design rather than shipped behaviour.
-> Do not install this on a machine you need to boot.
+> **Status: 0.1.0, a first release.** The splash works and is installed, booted and
+> checked in virtual machines on Arch, Debian and Fedora on every change — including
+> five power cuts and a seven-case sabotage matrix whose only assertion is that the
+> machine boots anyway. All three run systemd.
+>
+> **Not yet proven:** runit, OpenRC, s6 and dinit ship service files that have never
+> been booted; Alpine's `mkinitfs` has no hook at all; immutable distributions are
+> unsupported; there is no LUKS passphrase prompt, so on an encrypted root the splash
+> gets out of the way and lets the prompt through. See
+> [docs/milestones.md](docs/milestones.md) for what is next.
+>
+> Keep [`raba.enable=0`](#if-your-machine-will-not-boot) in mind before you install:
+> it is a kernel parameter, it needs no working RABA, and it is the whole escape
+> hatch.
 
 ---
 
@@ -168,12 +177,18 @@ See [docs/format.md](docs/format.md).
 
 ## Install
 
-> Not packaged yet.
+From source. `make install` puts everything where the PKGBUILD puts it, so a
+distribution with no package of its own and one with a package cannot disagree about
+where anything goes:
 
 ```sh
-# planned
-paru -S raba raba-themes
+make all
+sudo make install
 ```
+
+On Arch and derivatives there is a PKGBUILD in
+[`packaging/aur/raba`](packaging/aur/raba), and `paru -S raba raba-themes` once 0.1.0
+is published to the AUR.
 
 > [!CAUTION]
 > **If your disk unlocks automatically via TPM, read

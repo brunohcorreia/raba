@@ -18,8 +18,8 @@ path = "src/main.rs"
 # No dependency budget here. This never enters the boot path, so a crate that
 # breaks is a build failure someone fixes at leisure. See docs/maintenance.md.
 [dependencies]
-raba-core = { path = "../raba-core", version = "0.0.0" }
-raba-term = { path = "../raba-term", version = "0.0.0" }
+raba-core = { path = "../raba-core", version = "0.1.0" }
+raba-term = { path = "../raba-term", version = "0.1.0" }
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.2.1"
 # .dur import: gzipped JSON. Both are budgeted for in DEPENDENCIES.md -- raba-gen

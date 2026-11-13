@@ -293,7 +293,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "raba"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "libc",
  "raba-core",
@@ -303,7 +303,7 @@ dependencies = [
 
 [[package]]
 name = "raba-core"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "proptest",
  "raba-core",
@@ -311,7 +311,7 @@ dependencies = [
 
 [[package]]
 name = "raba-gen"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "flate2",
  "raba-core",
@@ -323,14 +323,14 @@ dependencies = [
 
 [[package]]
 name = "raba-setup"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "raba",
 ]
 
 [[package]]
 name = "raba-term"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "raba-core",
  "rustix",
@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "raba-vmtest"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "raba",
  "raba-core",

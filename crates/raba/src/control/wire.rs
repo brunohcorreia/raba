@@ -289,7 +289,7 @@ mod tests {
     #[test]
     fn replies_render_as_the_document_says() {
         assert_eq!(Reply::Ok.render(), "+OK\n");
-        assert_eq!(Reply::OkWith("raba 0.0.0".to_owned()).render(), "+OK raba 0.0.0\n");
+        assert_eq!(Reply::OkWith("raba 0.1.0".to_owned()).render(), "+OK raba 0.1.0\n");
         assert_eq!(Reply::Failed(Rejection::TooLong).render(), "-ERR too long\n");
         assert_eq!(
             Reply::Report(vec![("protocol", "1".to_owned()), ("phase", "boot".to_owned())])

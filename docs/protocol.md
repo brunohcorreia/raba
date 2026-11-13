@@ -73,7 +73,7 @@ Lines, UTF-8, each terminated by `\n`. The **first** line is the result:
 ```
 +OK
 protocol: 1
-version: 0.0.0
+version: 0.1.0
 phase: boot
 terminal: 2
 previous: 1

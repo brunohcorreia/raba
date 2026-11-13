@@ -17,7 +17,7 @@ path = "src/main.rs"
 # the file the hook freezes has to be read by exactly the code that will read it
 # back at boot.
 [dependencies]
-raba = { path = "../raba", version = "0.0.0" }
+raba = { path = "../raba", version = "0.1.0" }
 
 [lints]
 workspace = true
