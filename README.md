@@ -271,6 +271,7 @@ font.
 | [docs/development.md](docs/development.md) | implementation order, test environment and suite |
 | [docs/milestones.md](docs/milestones.md) | what is being built, in what order |
 | [docs/glyphs.md](docs/glyphs.md) | which characters a console can draw, and why |
+| [docs/console-size.md](docs/console-size.md) | why the grid is the size it is, and the font that decides |
 | [docs/3d-logos.md](docs/3d-logos.md) | 3D rotating logos, and where they would live |
 
 ## If your machine will not boot

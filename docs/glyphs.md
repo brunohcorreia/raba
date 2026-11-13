@@ -87,3 +87,13 @@ braille is one finding with a large count, not four hundred findings.
 `--allow-unsafe-glyphs` builds anyway. It exists for themes aimed at a console you
 control, and it is the first thing to suspect when art looks wrong on someone else's
 machine.
+
+---
+
+## The way out, and what it costs
+
+All of the above follows from RABA not knowing which font is loaded. It could load
+one itself — that is all `setfont`(8) does — and then it would know. The catch is
+that a font with more than 256 glyphs costs the intensity bit and halves the
+console to eight colours, and that the font has to be put back on every exit path.
+See [console-size.md](console-size.md).

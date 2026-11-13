@@ -394,3 +394,22 @@ about half the canvas every frame and still costs less than a dense format would
 and the black hole that drove the importer changes only 6.8%. The worry recorded in
 `3d-logos.md` — that the format stops earning its place once the art is not a logo
 with a spinner — turns out not to apply to real animation.
+
+---
+
+## Not scheduled: loading a console font
+
+Raised while fixing the preview size. The console grid is the screen divided by
+the font cell, so the font decides how many characters exist — on 1920x1080 that
+ranges from 240x180 at 8x6 to 80x33 at 24x32, sixteen times the resolution on the
+same screen. RABA could load a font itself, which is all `setfont`(8) does, and
+that would remove the whole glyph problem: a font it loaded is a font it knows.
+
+The costs are real and one of them is easy to get backwards. A font with more
+than 256 glyphs takes the intensity bit for the second glyph page, so the console
+drops to **eight** colours, not sixteen — every theme here uses the bright half.
+A 256-glyph font keeps the colours and is still larger than the safe set in use
+today. The font also has to be restored on every exit path including a crash.
+
+Recorded in [console-size.md](console-size.md). It belongs after M3 because it
+needs the same VT ioctl machinery and the same restore discipline.
