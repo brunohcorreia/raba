@@ -68,6 +68,7 @@ fi
 
 work="${root}/target/distro/${distro}"
 installed="${work}/installed.qcow2"
+seed="${work}/seed.img"
 firmware=/usr/share/edk2/x64/OVMF.4m.fd
 [ -r "$firmware" ] || firmware=/usr/share/OVMF/OVMF_CODE.fd
 [ -r "$firmware" ] || die "no OVMF firmware found (package: edk2-ovmf)"
@@ -90,6 +91,11 @@ fi
 boot() {
     local disk="$1" limit="$2" cut="${3:-}" extra="${4:-}"
     local disks=(-drive "file=${disk},if=virtio,format=qcow2")
+    # The cloud-init seed goes back in on every boot. Without it the datasource
+    # is gone, and cloud-init spends a minute of each case looking for it before
+    # giving up — which is a minute per boot of a harness whose whole point is
+    # that each boot is cheap.
+    [ -s "$seed" ] && disks+=(-drive "file=${seed},if=virtio,format=raw")
     [ -n "$extra" ] && disks+=(-drive "file=${extra},if=virtio,format=raw")
     local accel=(-cpu max)
     [ -w /dev/kvm ] && accel=(-enable-kvm -cpu host)
@@ -180,6 +186,52 @@ if [ "$run_cuts" = 1 ]; then
             ok "nothing failed on the boot after the cut at ${when}s"
         fi
         [ "$keep" = 1 ] || rm -f "$cut"
+    done
+fi
+
+# --- sabotage ---------------------------------------------------------------
+
+# Each case is a word on a small vfat disk the guest reads before the splash
+# starts. The same trick as the cloud-init seed: the host chooses what to break
+# without ever editing the guest's filesystem.
+case_disk() {
+    local name="$1" disk="${work}/case.img"
+    rm -f "$disk" "${work}/case"
+    echo "$name" > "${work}/case"
+    mkfs.vfat -n RABACASE -C "$disk" 64 > /dev/null 2>&1 \
+        || die "could not make the case disk"
+    mcopy -i "$disk" "${work}/case" :: || die "could not write the case disk"
+    echo "$disk"
+}
+
+CASES=(none no-binary truncated-art garbage-config impossible-tty socket-in-the-way
+       state-in-the-way)
+
+if [ "$run_sabotage" = 1 ]; then
+    echo "# sabotage"
+    for name in "${CASES[@]}"; do
+        [ -n "$only_case" ] && [ "$only_case" != "$name" ] && continue
+        disk="$(case_disk "$name")"
+        broken="${work}/broken.qcow2"
+        rm -f "$broken"
+        qemu-img create -f qcow2 -F qcow2 -b "$installed" "$broken" > /dev/null \
+            || die "could not make an overlay"
+
+        boot "$broken" 180 "" "$disk"
+        text="$(tap_of)"
+        if came_up; then
+            ok "${name}: the machine still boots"
+        else
+            no "${name}: the machine still boots" "$(tail -3 <<< "$text" | tr '\n' ' ')"
+        fi
+        if grep -qa '^not ok' <<< "$text"; then
+            no "${name}: every survival check passed" \
+               "$(grep -a '^not ok' <<< "$text" | head -1)"
+        else
+            ok "${name}: every survival check passed"
+        fi
+        grep -aE '^(ok|not ok|# sabotage|#   )' <<< "$text" | sed 's/^/#   /' | head -14
+        [ "$keep" = 1 ] || rm -f "$broken" "$disk"
     done
 fi
 

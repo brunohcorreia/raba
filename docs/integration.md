@@ -164,9 +164,19 @@ Three ways to arrange for it to be called, in order of preference.
 
 ### 1. Let the packaged unit do it
 
-`raba-quit.service` is ordered before `display-manager.service` and fires on
-`multi-user.target`. For most systemd setups this is all you need, and it works the same
-whether you run GDM, SDDM, LightDM, greetd, Ly or no display manager at all.
+`raba-quit.service` fires on `multi-user.target`, ordered *after*
+`display-manager.service`. For most systemd setups this is all you need, and it works the
+same whether you run GDM, SDDM, LightDM, greetd, Ly or no display manager at all.
+
+After, rather than before, so that the machine with a display manager gets route 3 by
+default: the display manager takes its terminal, RABA sees the display move and exits
+without restoring anything, and the screen goes from the animation to the greeter with
+no console in between. By the time this unit runs there is usually nothing left to quit
+and `raba-ctl` exits 0. On a machine with no display manager the ordering names a unit
+that does not exist, systemd ignores it, and this is what ends the splash.
+
+Under all of it is `Boot.Timeout` in `raba.conf` — the console comes back after thirty
+seconds whatever else does or does not happen.
 
 ### 2. Tie it to a specific display manager
 

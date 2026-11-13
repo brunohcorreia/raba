@@ -3,11 +3,32 @@
 # The difference from raba-quit.service is the waiting: this one returns when
 # raba has exited, so whatever is ordered after it starts on a terminal nobody
 # else is drawing on.
+#
+# Ordering, and why it is not `Before=display-manager.service`.
+#
+# It was, and that made the seamless path unreachable for anybody using the
+# packaged units: the splash ended, the console came back, and the screen showed
+# a boot log or a blank terminal for however long the display manager took to
+# draw its first frame. Plymouth's own arrangement, and worth having only if the
+# splash cannot survive the display manager taking a terminal. RABA can — it
+# watches the screen it was given and leaves, without switching anything back,
+# the moment the display moves or its terminal goes into graphics mode. See
+# docs/integration.md, "Do nothing", and `Vt::displaced`.
+#
+# So this fires *after* the display manager has started, by which time there is
+# usually nothing left to quit, and the splash has handed the screen straight to
+# the thing that took it. On a machine with no display manager the ordering
+# names a unit that does not exist, systemd ignores it, and this stays what it
+# always was: the thing that ends the splash at multi-user.target.
+#
+# `Boot.Timeout` is the backstop under all of it. A display manager that never
+# starts gets the console back after thirty seconds rather than a splash
+# forever.
 [Unit]
 Description=Hold until the RABA boot splash has finished
 Documentation=man:raba-ctl(1)
 After=rc-local.service raba-start.service systemd-user-sessions.service
-Before=display-manager.service
+After=display-manager.service
 
 [Service]
 Type=oneshot

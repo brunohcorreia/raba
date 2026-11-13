@@ -101,7 +101,17 @@ fn the_systemd_units_say_what_the_documentation_says_they_say() {
         // absent would be the splash breaking a boot.
         assert!(exec.iter().all(|line| line.starts_with('-')), "{name}: {exec:?}");
         assert_eq!(directives(&unit, "WantedBy"), ["multi-user.target"], "{name}");
-        assert_eq!(directives(&unit, "Before"), ["display-manager.service"], "{name}");
+        // After, not Before. A quit ordered before the display manager hands the
+        // screen back to a bare console for as long as the display manager takes
+        // to draw; ordered after it, there is usually nothing left to quit,
+        // because RABA saw the display move and left on its own. See the units'
+        // own header, and docs/integration.md, "Do nothing".
+        assert!(
+            directives(&unit, "After").contains(&"display-manager.service"),
+            "{name}: {:?}",
+            directives(&unit, "After")
+        );
+        assert!(directives(&unit, "Before").is_empty(), "{name}");
         // Not Plymouth's TimeoutSec=0. A splash that hangs must not own the
         // boot it was supposed to decorate.
         let timeout = directives(&unit, "TimeoutSec");

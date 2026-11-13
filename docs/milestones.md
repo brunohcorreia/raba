@@ -717,7 +717,7 @@ maintainer could package and default to". Everything that is not that waits.
 |---|---|---|
 | 1 | A PKGBUILD that builds and installs: `raba`, `raba-themes`, `raba-gen` | done |
 | 2 | A fallback theme in the `raba` package, so an unknown distribution still draws | done |
-| 3 | Hold the screen from boot until the compositor has drawn, with no display manager in between | done |
+| 3 | Hold the screen from boot until the compositor has drawn, with no display manager in between | half |
 | 4 | One real Arch VM, mkinitcpio + systemd, boot to login | done |
 | 5 | A machine that boots anyway: power cuts and a sabotaged install | |
 | 6 | A mistake says what it was, and the system log is left alone | done |
@@ -734,6 +734,64 @@ happen, and what a power cut does to a machine in the middle of all this.
 
 Explicitly **not** in it: LUKS passphrase in the splash, the progress overlay, the
 full distribution matrix, the Plymouth benchmarks. Those are M6 and later.
+
+### Row 3, reopened: what the VM check was not checking
+
+Recorded as done, and it was not. The check behind it — `the_splash_leaves_when_the
+_screen_is_taken` — runs inside a VM that never performs a `switch_root`, so the half of
+the claim that matters most had never been exercised. The first tier 3b run that looked
+at the journal found this, on two machines:
+
+```
+Arch    [1.347] Starting RABA boot splash...
+        [3.984] raba-start.service: Deactivated successfully.
+        [9.608] Starting Terminate the RABA boot splash...
+
+Fedora  [4.228] raba-start.service: Deactivated successfully.
+        [6.790] Starting raba-quit.service
+```
+
+The splash ended at `switch_root` and nothing brought it back: six seconds of boot log
+on Arch, two and a half on Fedora, before the login prompt. systemd carries unit state
+across `switch_root`, so the real root's `raba-start.service` — the same unit name the
+image carried — was already satisfied and never started.
+
+Fixed by giving the image its own unit name and by distinguishing the two endings; see
+`integration/systemd/raba-initrd.service` and `Session::finish`. Measured after:
+
+```
+Arch    [1.330] Starting RABA boot splash (initramfs)...
+        [3.977] raba-initrd.service: Deactivated successfully.
+        [4.044] Starting RABA boot splash...
+        [9.298] raba-start.service: Deactivated successfully.
+```
+
+and `screen was showing: tty2 x41 tty1 x60` — the display sits on RABA's terminal for
+the whole crossing. Fedora the same, 1.53s to 6.62s.
+
+The other end was the quit, and it was one line in two unit files.
+`raba-quit.service` shipped with `Before=display-manager.service`: the splash ended, the
+console came back, and the screen showed a boot log for however long the display manager
+took to draw. That is Plymouth's arrangement, and it is only worth having if the splash
+*cannot* survive a display manager taking its terminal. RABA can — it watches the screen
+it was given and leaves, without switching anything back, the moment the display moves
+or its terminal goes into graphics mode. The packaged unit was the only thing standing
+between a default install and the seamless path `docs/integration.md` already described
+under "Do nothing".
+
+So the directive is now `After=display-manager.service`. On a machine with a display
+manager, the greeter takes its terminal, RABA sees the display move and exits on its
+own, and by the time the quit unit runs there is nothing left to quit — `raba-ctl` exits
+0, which is what it is specified to do. On a machine without one, the ordering names a
+unit that does not exist, systemd ignores it, and the unit is what it always was: the
+thing that ends the splash at `multi-user.target`. `Boot.Timeout` is under all of it, so
+a display manager that never starts costs thirty seconds, not a boot.
+
+**Still open** for the Omarchy shape specifically: a display manager is not a
+compositor. `After=display-manager.service` hands the screen to SDDM's greeter, which is
+what Omarchy boots into; holding the animation past the greeter and all the way to
+Hyprland's first frame is a different question, and it belongs with the LUKS work in M6
+rather than in the MVP.
 
 ### Row 4, and the thing a photograph cannot tell you
 

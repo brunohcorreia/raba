@@ -31,6 +31,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 distros=(arch)
 keep=0
+keep_installed=0
 show_console=0
 refresh=0
 
@@ -42,6 +43,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --all) distros=(arch debian fedora) ;;
         --keep) keep=1 ;;
+        # Leave an installed disk behind for scripts/resilience.sh, which boots
+        # one over and over — power cut at a chosen second, a sabotage case on a
+        # disk — and has no business spending ten minutes installing each time.
+        --keep-installed) keep_installed=1 ;;
         --console) show_console=1 ;;
         --refresh) refresh=1 ;;
         -h | --help)
@@ -190,7 +195,49 @@ INSTALL
     content: |
 MID
         indented "${root}/integration/tests/distro/check.sh"
-        cat << 'TAIL'
+        cat << 'CASE'
+  - path: /usr/local/bin/raba-case
+    permissions: '0755'
+    content: |
+CASE
+        indented "${root}/integration/tests/distro/case.sh"
+        cat << 'SURVIVED'
+  - path: /usr/local/bin/raba-survived
+    permissions: '0755'
+    content: |
+SURVIVED
+        indented "${root}/integration/tests/distro/survived.sh"
+        cat << 'WATCH'
+  - path: /etc/systemd/system/raba-case.service
+    content: |
+      [Unit]
+      Description=RABA test: break the splash on purpose
+      # Before the splash and after the root filesystem is writable, which is
+      # the whole window in which an installed RABA can be sabotaged.
+      DefaultDependencies=no
+      After=systemd-remount-fs.service
+      Before=raba-start.service
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/bin/raba-case
+      StandardOutput=journal+console
+      StandardError=journal+console
+      [Install]
+      WantedBy=sysinit.target
+  - path: /etc/systemd/system/raba-survived.service
+    content: |
+      [Unit]
+      Description=RABA post-boot checks after a sabotage
+      After=multi-user.target
+      ConditionPathExists=/run/raba-case-applied
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/raba-survived
+      StandardOutput=journal+console
+      StandardError=journal+console
+      [Install]
+      WantedBy=multi-user.target
   - path: /usr/local/bin/raba-watch
     permissions: '0755'
     content: |
@@ -303,6 +350,10 @@ MID
       Description=RABA post-boot checks
       After=multi-user.target
       ConditionPathExists=/var/lib/raba-installed
+      # A sabotaged boot gets raba-survived.service instead: asking whether the
+      # initramfs still has a theme in it, on a machine whose themes were
+      # truncated on purpose, is asking the wrong question.
+      ConditionPathExists=!/run/raba-case-applied
       [Service]
       Type=oneshot
       ExecStart=/usr/local/bin/raba-check
@@ -312,12 +363,29 @@ MID
       WantedBy=multi-user.target
 runcmd:
   - /usr/local/bin/raba-install
-  - systemctl enable raba-check.service raba-watch.service
+  - systemctl enable raba-check.service raba-watch.service raba-case.service raba-survived.service
   - touch /var/lib/raba-installed
   - [sh, -c, "echo raba-test-rebooting > /dev/console"]
   - systemctl reboot
-TAIL
+WATCH
     } > "${work}/seed/user-data"
+
+    # Look at it before a VM has to. cloud-init does not fail a boot over a
+    # broken cloud-config: it logs a warning nobody is reading, installs
+    # nothing, and leaves a login prompt that looks exactly like a machine still
+    # working. One mismatched heredoc delimiter in the block above cost a
+    # forty-minute run that way, and the script it was supposed to embed ended
+    # up in the file as prose.
+    #
+    # Not a YAML parser — PyYAML is not a dependency this harness is allowed to
+    # grow. The check is narrower and catches the thing that actually happens:
+    # everything the heredocs emit is either a top-level key we know about or
+    # indented under one, so an unindented line that is not in this list is text
+    # that escaped a heredoc.
+    local leaked
+    leaked=$(grep -vn '^[[:space:]]' "${work}/seed/user-data" \
+        | grep -Ev '^[0-9]+:(#cloud-config|write_files:|runcmd:|users:)?$' || true)
+    [ -z "$leaked" ] || die "the cloud-config has lines that escaped a heredoc: ${leaked}"
 
     mkfs.vfat -n CIDATA -C "$seed" 1440 > /dev/null 2>&1 || die "could not make the seed"
     mcopy -i "$seed" "${work}/seed/meta-data" "${work}/seed/user-data" :: \
@@ -448,8 +516,17 @@ TAIL
     fi
     [ "$keep" = 1 ] || rm -f "${work}/shots"/*.ppm
 
+    if [ "$keep_installed" = 1 ]; then
+        # The overlay as the guest left it: RABA installed, the units enabled,
+        # cloud-init already done with this instance. The seed stays with it
+        # because a boot without the datasource it was installed from spends a
+        # minute looking for it.
+        mv -f "$run" "${work}/installed.qcow2"
+        echo "distro-test: kept ${work}/installed.qcow2"
+    fi
     if [ "$keep" != 1 ]; then
-        rm -f "$run" "$seed" "$payload" "$monitor"
+        rm -f "$run" "$payload" "$monitor"
+        [ "$keep_installed" = 1 ] || rm -f "$seed"
         rm -rf "$staging"
     fi
 
