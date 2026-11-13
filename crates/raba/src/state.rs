@@ -283,7 +283,16 @@ pub fn save(path: impl AsRef<Path>, state: &State) -> io::Result<()> {
         return Err(error);
     }
     drop(file);
-    std::fs::rename(&staging, path)
+    // The rename can fail on its own — something that is not our file sitting at
+    // the destination, a directory at the path — and when it does, the staging
+    // file is ours and has to go. Otherwise a path that cannot be written leaves
+    // `raba.state.new` in /run for the rest of the boot, which is a splash that
+    // failed quietly *and* left litter behind it.
+    if let Err(error) = std::fs::rename(&staging, path) {
+        let _ = std::fs::remove_file(&staging);
+        return Err(error);
+    }
+    Ok(())
 }
 
 /// Read the state, if there is one worth having.

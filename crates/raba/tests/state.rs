@@ -261,3 +261,26 @@ fn the_clock_counts_from_boot_and_moves_forwards() {
     // this test, so a zero here would mean the wrong clock.
     assert!(first > 0);
 }
+
+/// The sabotage case `state-in-the-way`, as a host test.
+///
+/// A directory at the resume file's path makes every save fail, and for a long
+/// time it failed silently — `let _ = state::save(..)` on every frame, sixty
+/// discarded errors a second, and a boot that could not survive `switch_root`
+/// with nothing anywhere to say why. The boot loop now reports the first one.
+/// What is asserted here is the part that makes that possible: the failure
+/// reaches the caller as an error rather than being swallowed inside `save`.
+#[test]
+fn a_directory_at_the_path_is_an_error_and_not_a_silent_no_op() {
+    let scratch = Scratch::new("directory");
+    let path = scratch.file();
+    std::fs::create_dir_all(&path).expect("a directory where the file goes");
+
+    let error = state::save(&path, &sample()).expect_err("saving onto a directory");
+    assert!(!error.to_string().is_empty(), "the error has to say something: {error:?}");
+    // And nothing of ours is left behind. The staging file is created before
+    // the rename that fails, so a save that cannot finish has to take it away
+    // again or every frame of a sabotaged boot leaves litter in /run.
+    let staging = path.with_file_name("raba.state.new");
+    assert!(!staging.exists(), "a failed save left {} behind", staging.display());
+}

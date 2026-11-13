@@ -64,16 +64,39 @@ else
     tap 0 'nothing of raba is left holding the screen'
 fi
 
-# 5. Whatever went wrong is written down somewhere a person would look. The
-#    deleted-binary case is the exception: systemd reports that one itself, as
-#    a failed unit, and RABA is not there to say anything.
+# 5. Whatever went wrong is written down somewhere a person would look.
+#
+#    Three expectations, because the cases are not all the same shape and
+#    demanding one sentence from all of them was how this check first failed.
+#
+#      systemd   The binary is gone, so RABA is not there to say anything and
+#                systemd reports the failed unit itself. Nothing else can.
+#      silence   RABA was *supposed* to cope. A plain file at the control
+#                socket's path is something bind() replaces; coping with it
+#                correctly means there is nothing to report, and a complaint
+#                would be the defect. The assertion is the absence.
+#      reason    The rest: RABA could not do its job and has to say why, once,
+#                in words, in the log this machine actually keeps.
+case "$case_name" in
+    no-binary)         expect=systemd ;;
+    socket-in-the-way) expect=silence ;;
+    *)                 expect=reason ;;
+esac
+
 journal=$(journalctl -b --no-pager --no-hostname 2>/dev/null)
 said=$(grep -c 'raba: ' <<< "$journal")
-if [ "$case_name" = no-binary ]; then
+if [ "$expect" = systemd ]; then
     if systemctl is-failed --quiet raba-start.service; then
         tap 0 'systemd reports the missing binary'
     else
         tap 1 'systemd reports the missing binary' "$(systemctl is-active raba-start.service)"
+    fi
+elif [ "$expect" = silence ]; then
+    if [ "$said" = 0 ] && ! systemctl is-failed --quiet raba-start.service; then
+        tap 0 'raba took the path back and had nothing to complain about'
+    else
+        tap 1 'raba took the path back and had nothing to complain about' \
+            "$(grep 'raba: ' <<< "$journal" | head -1)"
     fi
 elif [ "$said" -gt 0 ]; then
     tap 0 "the reason is in the log (${said} line(s))"
