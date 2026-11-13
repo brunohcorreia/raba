@@ -6,6 +6,7 @@
 //! `docs/maintenance.md`.
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+#![allow(clippy::arithmetic_side_effects, clippy::cast_lossless)]
 
 use super::*;
 
@@ -185,4 +186,256 @@ fn with_nothing_readable_inside_the_answer_is_a_guess_and_says_so() {
     );
     assert_eq!(currency(&image(None, Some(900)), frozen, &[None]), Currency::Unknown);
     assert_eq!(currency(&image(None, None), frozen, &[Some(5)]), Currency::Unknown);
+}
+
+// --- what the machine says it is ---------------------------------------------
+
+/// A stand-in for `lsblk` and `cryptsetup`, so that the answers under test can
+/// be arranged. See [`super::really_run`] for why this seam exists.
+fn answering(replies: &[(&'static str, Ran)]) -> impl FnMut(&str, &[&str]) -> Ran {
+    let replies: Vec<(String, Ran)> =
+        replies.iter().map(|(program, ran)| ((*program).to_owned(), ran.clone())).collect();
+    move |program, _arguments| {
+        replies
+            .iter()
+            .find(|(name, _)| name == program)
+            .map_or(Ran::Missing, |(_, ran)| ran.clone())
+    }
+}
+
+/// One LUKS volume and one that is not, as `lsblk --raw` prints them.
+const LSBLK: &str = "/dev/nvme0n1p1 vfat\n/dev/nvme0n1p2 crypto_LUKS\n";
+
+/// The three lines of `cryptsetup luksDump` that matter.
+const SEALED: &str = "\
+Keyslots:
+  0: luks2
+Tokens:
+  0: systemd-tpm2
+";
+
+const NOT_SEALED: &str = "\
+Keyslots:
+  0: luks2
+Tokens:
+";
+
+fn here() -> Root {
+    Root::default()
+}
+
+#[test]
+fn a_root_that_is_not_this_machine_is_never_reported_as_having_no_tpm() {
+    // "I am looking at a directory" and "there is no encryption here" are
+    // opposite statements and the dry run prints them differently.
+    let answer = tpm_with(&Root::new(PathBuf::from("/mnt")), &mut answering(&[]));
+    assert!(
+        matches!(answer, Tpm::Unknown(ref why) if why.contains("running system")),
+        "{answer:?}"
+    );
+}
+
+#[test]
+fn a_machine_with_no_encrypted_volume_is_clear() {
+    let mut run = answering(&[("lsblk", Ran::Said("/dev/sda1 ext4\n/dev/sda2 swap\n".to_owned()))]);
+    assert_eq!(tpm_with(&here(), &mut run), Tpm::Clear);
+}
+
+#[test]
+fn an_encrypted_volume_with_a_tpm_token_is_the_warning_this_whole_check_exists_for() {
+    let mut run = answering(&[
+        ("lsblk", Ran::Said(LSBLK.to_owned())),
+        ("cryptsetup", Ran::Said(SEALED.to_owned())),
+    ]);
+    assert_eq!(tpm_with(&here(), &mut run), Tpm::Sealed(vec!["/dev/nvme0n1p2".to_owned()]));
+}
+
+#[test]
+fn an_encrypted_volume_with_a_passphrase_and_no_token_is_clear() {
+    // Rebuilding an initramfs on this machine is uneventful: the key is not
+    // sealed against anything a changed image would alter.
+    let mut run = answering(&[
+        ("lsblk", Ran::Said(LSBLK.to_owned())),
+        ("cryptsetup", Ran::Said(NOT_SEALED.to_owned())),
+    ]);
+    assert_eq!(tpm_with(&here(), &mut run), Tpm::Clear);
+}
+
+#[test]
+fn a_header_that_could_not_be_read_says_so_and_names_the_device() {
+    // The usual reason is not being root. Reporting it as `Clear` would be
+    // this program telling somebody it is safe to rebuild when it has no idea.
+    let mut run =
+        answering(&[("lsblk", Ran::Said(LSBLK.to_owned())), ("cryptsetup", Ran::Refused)]);
+    let answer = tpm_with(&here(), &mut run);
+    assert!(
+        matches!(answer, Tpm::Unknown(ref why) if why.contains("/dev/nvme0n1p2") && why.contains("root")),
+        "{answer:?}"
+    );
+}
+
+#[test]
+fn a_missing_cryptsetup_is_unknown_rather_than_clear() {
+    let mut run = answering(&[("lsblk", Ran::Said(LSBLK.to_owned()))]);
+    let answer = tpm_with(&here(), &mut run);
+    assert!(matches!(answer, Tpm::Unknown(ref why) if why.contains("cryptsetup")), "{answer:?}");
+}
+
+#[test]
+fn a_missing_lsblk_is_unknown_rather_than_clear() {
+    let answer = tpm_with(&here(), &mut answering(&[]));
+    assert!(matches!(answer, Tpm::Unknown(ref why) if why.contains("lsblk")), "{answer:?}");
+}
+
+#[test]
+fn an_lsblk_that_runs_and_fails_is_as_uninformative_as_one_that_is_missing() {
+    let answer = tpm_with(&here(), &mut answering(&[("lsblk", Ran::Refused)]));
+    assert!(matches!(answer, Tpm::Unknown(_)), "{answer:?}");
+}
+
+#[test]
+fn every_sealed_volume_is_reported_and_not_only_the_first() {
+    let two = "/dev/sda2 crypto_LUKS\n/dev/sdb1 crypto_LUKS\n";
+    let mut run = answering(&[
+        ("lsblk", Ran::Said(two.to_owned())),
+        ("cryptsetup", Ran::Said(SEALED.to_owned())),
+    ]);
+    assert_eq!(
+        tpm_with(&here(), &mut run),
+        Tpm::Sealed(vec!["/dev/sda2".to_owned(), "/dev/sdb1".to_owned()])
+    );
+}
+
+// --- reading inside an image --------------------------------------------------
+
+const FROZEN: &str = "# Generated for the initramfs.\n\n[Boot]\nTheme=/usr/share/raba/arch.raba\n";
+
+#[test]
+fn the_configuration_inside_an_image_is_read_by_whichever_tool_is_installed() {
+    for installed in ["lsinitrd", "bsdtar"] {
+        let mut run = answering(&[(
+            if installed == "lsinitrd" { "lsinitrd" } else { "bsdtar" },
+            Ran::Said(FROZEN.to_owned()),
+        )]);
+        let read = read_from_image_with(Path::new("/boot/initramfs-linux.img"), &mut run);
+        assert_eq!(read.as_deref(), Some(FROZEN), "with only {installed}");
+    }
+}
+
+#[test]
+fn a_machine_with_neither_tool_reads_nothing_rather_than_guessing() {
+    // Which is not a failure: the caller falls back to comparing timestamps
+    // and says in so many words that that is what it did.
+    let read = read_from_image_with(Path::new("/boot/initramfs-linux.img"), &mut answering(&[]));
+    assert_eq!(read, None);
+}
+
+#[test]
+fn an_image_with_no_raba_in_it_reads_nothing_even_though_the_tool_succeeded() {
+    // `bsdtar` extracting a path that is not in the archive prints nothing and
+    // exits 0 on some versions. An empty string is not a configuration.
+    let mut run = answering(&[("bsdtar", Ran::Said(String::new()))]);
+    assert_eq!(read_from_image_with(Path::new("/boot/x.img"), &mut run), None);
+}
+
+#[test]
+fn a_tool_that_fails_is_passed_over_so_the_other_one_still_gets_a_turn() {
+    // lsinitrd is tried first and cannot open an mkinitcpio image on a machine
+    // without dracut's helpers; bsdtar then reads it.
+    let mut run =
+        answering(&[("lsinitrd", Ran::Refused), ("bsdtar", Ran::Said(FROZEN.to_owned()))]);
+    assert_eq!(
+        read_from_image_with(Path::new("/boot/initramfs-linux.img"), &mut run).as_deref(),
+        Some(FROZEN)
+    );
+}
+
+// --- which program builds the image -------------------------------------------
+
+#[test]
+fn every_generator_names_itself_and_the_command_that_rebuilds_everything() {
+    for (generator, name, command) in [
+        (Generator::Mkinitcpio, "mkinitcpio", "mkinitcpio -P"),
+        (Generator::Dracut, "dracut", "dracut --force"),
+        (Generator::InitramfsTools, "initramfs-tools", "update-initramfs -u"),
+    ] {
+        assert_eq!(generator.name(), name);
+        assert_eq!(generator.rebuild().join(" "), command);
+    }
+}
+
+// --- which files in /boot are initramfs images --------------------------------
+
+/// A `/boot` with the given files in it, newest last.
+fn boot(name: &str, files: &[&str]) -> (PathBuf, Root) {
+    let mut path = std::env::temp_dir();
+    path.push(format!("raba-setup-boot-{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&path);
+    std::fs::create_dir_all(path.join("boot")).expect("a /boot");
+    for (order, file) in files.iter().enumerate() {
+        let at = path.join("boot").join(file);
+        std::fs::write(&at, b"not really an image").expect("an image");
+        // Distinct mtimes, increasing, so the ordering assertion is about the
+        // sort and not about what the filesystem's clock granularity was.
+        let when = std::time::SystemTime::UNIX_EPOCH
+            + std::time::Duration::from_secs(1_700_000_000 + order as u64 * 60);
+        let _ = std::fs::File::open(&at).map(|file| file.set_modified(when));
+    }
+    (path.clone(), Root::new(path))
+}
+
+fn names(found: &[Image]) -> Vec<String> {
+    found
+        .iter()
+        .map(|image| image.path.file_name().unwrap_or_default().to_string_lossy().into_owned())
+        .collect()
+}
+
+#[test]
+fn both_spellings_of_an_initramfs_are_found_because_distributions_disagree() {
+    // Arch writes initramfs-linux.img, Debian writes initrd.img-6.1.0.
+    let (dir, root) = boot("spellings", &["initramfs-linux.img", "initrd.img-6.1.0", "vmlinuz"]);
+    let found = images(&root).expect("a readable /boot");
+    let mut listed = names(&found);
+    listed.sort();
+    assert_eq!(listed, vec!["initramfs-linux.img", "initrd.img-6.1.0"]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_fallback_image_and_a_saved_old_one_are_not_reported_on() {
+    // The fallback is built without autodetect and is not the one being
+    // booted; .old is the previous build. Reporting on either doubles every
+    // line of the dry run with an answer about an image nobody boots.
+    let (dir, root) = boot(
+        "fallback",
+        &["initramfs-linux.img", "initramfs-linux-fallback.img", "initramfs-linux.img.old"],
+    );
+    let found = images(&root).expect("a readable /boot");
+    assert_eq!(names(&found), vec!["initramfs-linux.img"]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn images_come_back_newest_first_so_the_dry_run_leads_with_the_one_being_booted() {
+    let (dir, root) =
+        boot("order", &["initramfs-oldest.img", "initramfs-middle.img", "initramfs-newest.img"]);
+    let found = images(&root).expect("a readable /boot");
+    assert_eq!(
+        names(&found),
+        vec!["initramfs-newest.img", "initramfs-middle.img", "initramfs-oldest.img"]
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_boot_directory_that_cannot_be_read_is_an_error_that_names_it() {
+    // `/boot` is drwx------ on a great many machines. "None found" to somebody
+    // with six images is worse than useless, so this has to be told apart from
+    // an empty directory.
+    let mut path = std::env::temp_dir();
+    path.push(format!("raba-setup-boot-{}-missing", std::process::id()));
+    let _ = std::fs::remove_dir_all(&path);
+    let why = images(&Root::new(path)).expect_err("a missing /boot is an error");
+    assert!(why.contains("boot"), "{why}");
 }

@@ -357,18 +357,58 @@ pub fn seconds(path: &Path) -> Option<u64> {
 /// is everywhere pacman is. Neither is a dependency: when both are missing the
 /// caller falls back to comparing timestamps and says that it did.
 fn read_from_image(image: &Path) -> Option<String> {
-    let attempts: [(&str, Vec<String>); 2] = [
-        ("lsinitrd", vec!["-f".into(), "etc/raba/raba.conf".into(), display(image)]),
-        ("bsdtar", vec!["-xOf".into(), display(image), "etc/raba/raba.conf".into()]),
+    read_from_image_with(image, &mut really_run)
+}
+
+/// What came back from running somebody else's program.
+///
+/// Three answers and not two, because the difference between them is the whole
+/// subject here: a `cryptsetup` that is not installed and a `cryptsetup` that
+/// refused to read a header mean opposite things, and reporting either as "no
+/// TPM" is how somebody ends up at a recovery prompt they were never warned
+/// about.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Ran {
+    /// It ran and exited 0. This is its standard output.
+    Said(String),
+    /// It ran and exited non-zero.
+    Refused,
+    /// It could not be started at all; usually it is not installed.
+    Missing,
+}
+
+/// Actually run it. The only implementation that ships.
+///
+/// Everything that decides anything in this module is a pure function over the
+/// text these programs print — see the module docs — and this is the one line
+/// between those functions and a machine. Tests hand the same functions a
+/// closure instead: `lsblk` with four volumes, a `cryptsetup` that is not
+/// installed, an initramfs that nothing here can open. None of those can be
+/// arranged on the machine a test suite happens to run on, and all of them are
+/// two lines of text.
+fn really_run(program: &str, arguments: &[&str]) -> Ran {
+    let Ok(output) = Command::new(program).args(arguments).output() else {
+        return Ran::Missing;
+    };
+    if output.status.success() {
+        Ran::Said(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        Ran::Refused
+    }
+}
+
+fn read_from_image_with(image: &Path, run: &mut dyn FnMut(&str, &[&str]) -> Ran) -> Option<String> {
+    let name = display(image);
+    let attempts: [(&str, [&str; 3]); 2] = [
+        ("lsinitrd", ["-f", "etc/raba/raba.conf", &name]),
+        ("bsdtar", ["-xOf", &name, "etc/raba/raba.conf"]),
     ];
     for (program, arguments) in attempts {
-        let Ok(output) = Command::new(program).args(arguments).output() else {
+        let Ran::Said(text) = run(program, &arguments) else {
             continue;
         };
-        if !output.status.success() {
-            continue;
-        }
-        let text = String::from_utf8_lossy(&output.stdout).into_owned();
+        // An image with no RABA in it extracts nothing and succeeds, and an
+        // `lsinitrd` that printed a warning is not a configuration file.
         if text.contains("[Boot]") {
             return Some(text);
         }
@@ -388,29 +428,39 @@ fn display(path: &Path) -> String {
 /// recovery passphrase instead. That is a bad surprise and one `lsblk` away
 /// from being a warning. See `docs/secure-boot.md`.
 fn tpm(root: &Root) -> Tpm {
+    tpm_with(root, &mut really_run)
+}
+
+fn tpm_with(root: &Root, run: &mut dyn FnMut(&str, &[&str]) -> Ran) -> Tpm {
     if !root.is_the_running_system() {
         return Tpm::Unknown("not looking at the running system".to_owned());
     }
-    let Ok(listing) =
-        Command::new("lsblk").args(["--raw", "--noheadings", "--output", "PATH,FSTYPE"]).output()
-    else {
-        return Tpm::Unknown("lsblk is not installed".to_owned());
+    let listing = match run("lsblk", &["--raw", "--noheadings", "--output", "PATH,FSTYPE"]) {
+        Ran::Said(text) => text,
+        // An `lsblk` that ran and failed is as uninformative as one that is
+        // not there, and both must say so rather than say "no".
+        Ran::Refused | Ran::Missing => {
+            return Tpm::Unknown("lsblk is not installed".to_owned());
+        }
     };
-    let devices = parse_luks(&String::from_utf8_lossy(&listing.stdout));
+    let devices = parse_luks(&listing);
     if devices.is_empty() {
         return Tpm::Clear;
     }
     let mut sealed = Vec::new();
     for device in devices {
-        let Ok(dump) = Command::new("cryptsetup").arg("luksDump").arg(&device).output() else {
-            return Tpm::Unknown("cryptsetup is not installed".to_owned());
-        };
-        if !dump.status.success() {
+        let dump = match run("cryptsetup", &["luksDump", &device]) {
+            Ran::Said(text) => text,
+            Ran::Missing => return Tpm::Unknown("cryptsetup is not installed".to_owned()),
             // The usual reason is not being root, and "I could not look" must
             // never be printed as "there is nothing there".
-            return Tpm::Unknown(format!("cannot read the LUKS header on {device}; run as root"));
-        }
-        if dump_has_tpm2(&String::from_utf8_lossy(&dump.stdout)) {
+            Ran::Refused => {
+                return Tpm::Unknown(format!(
+                    "cannot read the LUKS header on {device}; run as root"
+                ));
+            }
+        };
+        if dump_has_tpm2(&dump) {
             sealed.push(device);
         }
     }
