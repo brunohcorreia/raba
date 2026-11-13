@@ -1,0 +1,52 @@
+post_install() {
+    cat << 'MSG'
+==> RABA is installed and does nothing yet. On purpose: a package that puts
+    itself in your boot path without being asked is not a good neighbour.
+
+    1. Add `raba` to HOOKS in /etc/mkinitcpio.conf, after `encrypt` if you use
+       disk encryption:
+
+           HOOKS=(base udev autodetect modconf kms keyboard block encrypt raba filesystems fsck)
+
+    2. Rebuild the initramfs:
+
+           sudo mkinitcpio -P
+
+    3. Arrange for something to end the splash. The packaged units are the
+       easy answer:
+
+           sudo systemctl enable raba-quit.service raba-quit-wait.service
+
+    `raba-setup` prints all of this for your machine, and `raba-setup --apply`
+    does what it safely can. `raba --check` says what the configuration
+    resolves to.
+
+==> If Plymouth is installed and enabled, RABA will see it at boot, log the
+    reason and exit. Two splashes on one terminal is a black screen. Nothing is
+    removed for you.
+
+==> Test in a virtual machine before rebooting a machine you need.
+MSG
+}
+
+post_upgrade() {
+    cat << 'MSG'
+==> The initramfs carries a copy of /etc/raba/raba.conf and of your theme.
+    After an upgrade that changes either, rebuild it:
+
+        sudo mkinitcpio -P
+
+    `raba-setup --check` says whether the image is current.
+MSG
+}
+
+post_remove() {
+    cat << 'MSG'
+==> Remove `raba` from HOOKS in /etc/mkinitcpio.conf and rebuild the initramfs:
+
+        sudo mkinitcpio -P
+
+    The hook is gone, so an image built with it still in HOOKS simply skips it,
+    but leaving it there is untidy.
+MSG
+}

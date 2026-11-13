@@ -707,6 +707,45 @@ other nine checks could pass.
 
 ---
 
+## MVP — what 0.1.0 has to contain
+
+Scoped 13 Nov 2026, at Bruno's request, after M5 closed. The question this answers is
+not "what would make RABA good" but "what is the smallest thing a distribution
+maintainer could package and default to". Everything that is not that waits.
+
+| # | What | Status |
+|---|---|---|
+| 1 | A PKGBUILD that builds and installs: `raba`, `raba-themes`, `raba-gen` | done |
+| 2 | A fallback theme in the `raba` package, so an unknown distribution still draws | done |
+| 3 | Hold the screen from boot until the compositor has drawn, with no display manager in between | |
+| 4 | One real Arch VM, mkinitcpio + systemd, boot to login | |
+| 5 | Tag 0.1.0, release notes, publish to the AUR | |
+
+Explicitly **not** in it: LUKS passphrase in the splash, the progress overlay, the
+full distribution matrix, the Plymouth benchmarks. Those are M6 and later.
+
+### Row 3 is the Omarchy-shaped row
+
+Bruno's reason for the whole MVP framing: a distribution with a TUI and ASCII
+aesthetic — Omarchy is the example — shipping RABA by default would be worth more
+than any feature. What he describes Plymouth doing there is two separable things:
+
+1. the LUKS passphrase prompt drawn by the splash;
+2. the splash holding the screen until Wayland and Hyprland have drawn, with no
+   greetd or display manager in between.
+
+The second one is nearly free here and is where the visible effect comes from — a boot
+with no flash of console between the initramfs and the desktop. `/run/raba.state`
+already crosses `switch_root`, `raba-ctl quit --wait` already exists; what is missing
+is deciding *who calls quit* when there is no `display-manager.service` to hang it off,
+and documenting that path. The first one is the large, dangerous one — see
+[luks.md](luks.md) — and is deliberately deferred.
+
+Research into how Omarchy actually arranges this has not been done. Saying so is better
+than assuming.
+
+---
+
 ## M6 — Breadth
 
 - runit, OpenRC, s6, dinit service scripts

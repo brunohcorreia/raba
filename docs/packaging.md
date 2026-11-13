@@ -116,3 +116,23 @@ raba-gen        build tool; a makedepends of raba-themes
 
 Keeping themes in a separate package means trademark removal requests touch one package,
 and users who want only the program are not carrying 534 logos.
+
+**And the split is not about size.** Measured, 13 Nov 2026, with the PKGBUILD in
+`packaging/aur/raba`:
+
+| | |
+|---|---|
+| one theme, on disk | 9.5 KB average; `arch.raba` is 9424 bytes |
+| one theme, gzipped into an initramfs | 1.8 KB — and **only one ever goes in**, the frozen one |
+| all 50 themes, installed | 463 KiB |
+| `raba-themes` package | **74 KiB** |
+| `raba` package | 401 KiB |
+| `raba-gen` package | 560 KiB |
+
+So the honest reason for three packages is the trademark one and the tidiness one, not
+bytes. Even all 534 fastfetch logos would be about 800 KiB installed. Anybody arguing
+the split on size is arguing from a number nobody measured.
+
+The `raba` package carries exactly one theme of its own, `generic.raba`, which is not a
+logo. `pacman -S raba` has to produce a splash that draws something, and the fallback
+cannot live in a package that a trademark complaint could remove.

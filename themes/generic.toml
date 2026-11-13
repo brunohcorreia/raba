@@ -1,0 +1,29 @@
+# generic — the theme `Theme=auto` falls back to when a machine's ID= matches
+# nothing we ship, and the only art in the `raba` package itself.
+#
+# Deliberately not a logo: no trademark, nothing to take down, nothing that
+# claims to be a distribution it is not. A terminal prompt is what the thing
+# drawing it actually is.
+#
+# Art is inline so this theme is one file: the package that must always have a
+# theme should not depend on a second one being next to it.
+
+[logo]
+source = "inline"
+default_color = 7
+art = """
+    .--------------.
+    |              |
+    |   >_         |
+    |              |
+    '--------------'
+"""
+
+[spinner]
+style = "ascii"
+position = "below"
+gap = 1
+color = 7
+
+[canvas]
+framerate = 8

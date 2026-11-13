@@ -193,12 +193,16 @@ fn the_shipped_art_matches_what_upstream_actually_has() {
             .and_then(|(_, tail)| tail.split_once('\''))
             .map_or_else(|| stem.clone(), |(name, _)| name.to_owned());
 
-        let Some(logo) = logos::find(&upstream) else {
-            panic!("{stem}: no vendored logo called {upstream:?}");
-        };
+        // No art file next to the recipe means the art is inline and ours —
+        // `generic`, which is deliberately not a logo and has no upstream to be
+        // cross-checked against. Checked before the lookup, so a theme of our
+        // own does not have to pretend to be a fastfetch name.
         let art_path = path.with_extension("txt");
         let Ok(shipped) = std::fs::read_to_string(&art_path) else {
             continue;
+        };
+        let Some(logo) = logos::find(&upstream) else {
+            panic!("{stem}: no vendored logo called {upstream:?}");
         };
 
         compared = compared.saturating_add(1);

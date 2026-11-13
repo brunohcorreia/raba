@@ -1,0 +1,17 @@
+# /usr/share/raba/raba.defaults — the distribution's defaults.
+#
+# This file belongs to the package and is replaced on upgrade. Put your own
+# settings in /etc/raba/raba.conf, which is read after this one and wins.
+#
+# It exists so a distribution can ship an opinion — its own theme, its own
+# timeout — without touching the file that belongs to the user. The upstream
+# package ships no opinion: everything here is commented out, and the values
+# shown are what raba(8) compiles in.
+#
+# Same syntax as raba.conf(5).
+
+#[Boot]
+#Theme=auto
+#Tty=auto
+#ShowDelay=0
+#Timeout=30

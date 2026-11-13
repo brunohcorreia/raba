@@ -61,8 +61,9 @@ that is not boot integration.
 ### Two scripted runs before any of this
 
 ```sh
-scripts/vm-test.sh        # kernel + our own initramfs: the VT layer, ~1s
-scripts/image-test.sh     # an initramfs built by the real mkinitcpio, booted
+scripts/vm-test.sh           # kernel + our own initramfs: the VT layer, ~1s
+scripts/image-test.sh        # an initramfs built by the real mkinitcpio, booted
+packaging/tests/package.sh   # makepkg on the working tree, then what is inside
 ```
 
 Neither touches the machine you are on. The second one needs mkinitcpio and skips
