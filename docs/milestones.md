@@ -523,8 +523,8 @@ where it is supposed to run and the one place none of the tests so far have been
 | 6 | dracut module — **v1, not later**: Void, Gentoo and Chimera are non-systemd | done |
 | 7 | initramfs-tools hook (Debian, Ubuntu) | done |
 | 8 | Service files for OpenRC, runit, s6 and dinit | done |
-| 9 | `raba-setup`: dry run by default, `--apply`, `--check` | |
-| 10 | TPM2 token detected and warned about **before** the initramfs is touched | |
+| 9 | `raba-setup`: dry run by default, `--apply`, `--check` | done |
+| 10 | TPM2 token detected and warned about **before** the initramfs is touched | done |
 | 11 | A real mkinitcpio image, booted in QEMU, draws | |
 
 ### The one rule the hook lives by
@@ -623,6 +623,38 @@ off politely by itself, through `stop_pre`.
 These four are the part of M5 that no test here can execute. They are written
 down, checked for the one decision each gets wrong by default, and they wait for
 the full-distribution matrix in M6. Saying so is better than a green tick.
+
+### The dry run is the default, and the warning comes before the button
+
+`raba-setup` with no arguments changes nothing. Everything `--apply` would do is
+printed first, in the order it would happen, and the one thing in that list that
+can cost somebody a boot is printed *before* the step that causes it: an
+encrypted volume that unlocks itself through a TPM stops doing so the moment the
+initramfs changes, because the measurement its key is sealed against is the
+initramfs. One `lsblk`, one `cryptsetup luksDump`, and a surprise at the next
+boot becomes a paragraph the user reads now.
+
+"Could not look" is kept distinct from "nothing there" throughout — not root, no
+`cryptsetup`, `/boot` at `drwx------`. A tool that reports an unreadable
+directory as "no images found" is worse than one that says nothing.
+
+Everything that decides anything is a pure function over text some other program
+printed: a `HOOKS=` line spread over four lines with a commented-out one above
+it, an `lsblk` listing, a LUKS header dump, the configuration found inside an
+image. None of those can be arranged on a test machine; all of them are two
+lines in a test. 14 of them.
+
+Running it on the machine this was written on immediately earned the two things
+it does not strictly need: `/boot` is root-only here, so "none found under
+/boot" was a lie, and `HOOKS` here contains `plymouth` — which is not a
+build-time conflict and *is* the whole explanation for "I installed RABA and
+nothing changed".
+
+`--check` answers the real question where it can, by reading the frozen
+configuration back out of the image with `lsinitrd` or `bsdtar`, and falls back
+to comparing timestamps when neither is installed — reporting that as the guess
+it is. An image rebuilt for an unrelated reason is newer than your configuration
+and still carries the old copy.
 
 ### raba-setup is a second binary on purpose
 

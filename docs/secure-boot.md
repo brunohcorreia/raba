@@ -98,14 +98,17 @@ cryptsetup luksDump /dev/sdXY            # look for a tpm2 token
   stricter guides do not recommend it by itself.)
 - **Bound to PCR 9, 11, or a set including them** — you will need to re-enroll.
 
-### What `raba-setup` should do about it
+### What `raba-setup` does about it
 
-Detect a TPM2 token on the LUKS header and **warn before touching the initramfs**, with
-the re-enrollment command. Being surprised by a passphrase prompt on a machine you thought
-unlocked itself is a bad first impression, and it is entirely avoidable with one check.
+It detects a TPM2 token on the LUKS header and **warns before touching the initramfs**,
+with the re-enrolment commands. `raba-setup` on its own changes nothing and prints the
+warning; `raba-setup --apply` asks before rebuilding, and `--yes` is how you say you read
+it. Being surprised by a passphrase prompt on a machine you thought unlocked itself is a
+bad first impression, and it is one `lsblk` away from being avoidable.
 
-This belongs in v1. It is a few lines, and it is the difference between a documented
-consequence and a support thread.
+"Could not check" is never printed as "nothing found": without root the LUKS header is
+unreadable, and the warning then says to run it as root rather than giving an all-clear
+it has not earned.
 
 ### Recovering
 

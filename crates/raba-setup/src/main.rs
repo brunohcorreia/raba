@@ -24,19 +24,39 @@
 //! and initramfs-tools counterparts, and both exit non-zero when there is
 //! nothing to say — which is how a hook knows to put nothing in the image
 //! rather than something broken.
+//!
+//! # What it will not do
+//!
+//! Edit `/etc/mkinitcpio.conf`, `/etc/default/grub`, or anything else belonging
+//! to another package. It prints the line and the command; you run it. A
+//! program that rewrites somebody else's configuration file bypasses the
+//! `.pacnew` handling that exists to stop exactly that, and the failure mode of
+//! getting it wrong is a machine that does not boot. See `docs/packaging.md`.
 
+mod machine;
+
+use machine::{Advice, Currency, Generator, Root, Tpm};
 use raba::config;
 use std::path::PathBuf;
-use std::process::ExitCode;
+use std::process::{Command, ExitCode};
 
 const USAGE: &str = "\
 raba-setup - set up and verify a RABA installation
 
 usage:
+    raba-setup                 say what this machine needs; change nothing
+    raba-setup --apply         rebuild the initramfs
+    raba-setup --check         exit non-zero if the image is out of date
+
     raba-setup --freeze        print the configuration an initramfs should carry
     raba-setup --print-files   print the files it should carry beside it
 
+options:
+    --yes                  do not ask before rebuilding an initramfs on a
+                           machine whose disk unlocks itself
+
 paths:
+    --root <dir>           look under <dir> instead of /; for testing
     --config <file>        instead of /etc/raba/raba.conf
     --defaults <file>      instead of /usr/share/raba/raba.defaults
     --themes <dir>         instead of /usr/share/raba/themes
@@ -46,8 +66,8 @@ paths:
     --version              print the version
     --help                 print this
 
-the dry run, --apply and --check are not implemented yet; until they are, the
-manual steps are in docs/integration.md.
+raba-setup never edits a file belonging to another package. It prints the line
+and the command; you run them.
 ";
 
 fn main() -> ExitCode {
@@ -61,8 +81,12 @@ fn main() -> ExitCode {
     }
 }
 
-/// What was asked for. Two of these so far, and a place to put the rest.
+/// What was asked for.
 enum Action {
+    /// The default: look, print, change nothing.
+    DryRun,
+    Apply,
+    Check,
     Usage,
     Version,
     Freeze,
@@ -70,8 +94,10 @@ enum Action {
 }
 
 fn run(args: &[String]) -> Result<ExitCode, String> {
-    let mut action = Action::Usage;
+    let mut action = Action::DryRun;
     let mut places = config::Places::default();
+    let mut root = Root::default();
+    let mut yes = false;
     let mut index = 0;
 
     macro_rules! value {
@@ -89,6 +115,10 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             "--version" => action = Action::Version,
             "--freeze" => action = Action::Freeze,
             "--print-files" => action = Action::PrintFiles,
+            "--apply" => action = Action::Apply,
+            "--check" => action = Action::Check,
+            "--yes" | "-y" => yes = true,
+            "--root" => root = Root::new(value!("--root")),
             "--config" => places.config = value!("--config"),
             "--defaults" => places.defaults = value!("--defaults"),
             "--themes" => places.themes = value!("--themes"),
@@ -109,6 +139,9 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         }
         Action::Freeze => freeze(&places),
         Action::PrintFiles => print_files(&places),
+        Action::DryRun => Ok(dry_run(&root, &places)),
+        Action::Apply => apply(&root, &places, yes),
+        Action::Check => Ok(check(&root, &places)),
     }
 }
 
@@ -156,4 +189,254 @@ fn complain(startup: &config::Startup) {
     for problem in &startup.problems {
         eprintln!("raba-setup: {problem}");
     }
+}
+
+// --------------------------------------------------------------- dry run ----
+
+/// Look at the machine and say what it needs. Changes nothing.
+///
+/// The default, because the dangerous half of this program is one flag away and
+/// should stay that way: everything it would do is printed first, in the order
+/// it would happen, with the one thing that can cost you a boot — a TPM-sealed
+/// disk — printed before the step that breaks it.
+fn dry_run(root: &Root, places: &config::Places) -> ExitCode {
+    let survey = machine::survey(root);
+    let startup = config::start(places);
+
+    println!("configuration:");
+    if startup.files.is_empty() {
+        println!("  no files; every setting is a compiled-in default");
+    }
+    for file in &startup.files {
+        println!("  {}", file.display());
+    }
+    match (startup.settings.theme.as_os_str().is_empty(), startup.tried.first()) {
+        (false, _) => println!("  theme: {}", startup.settings.theme.display()),
+        (true, Some(first)) => {
+            println!("  no theme; nothing to draw. Looked for {}", first.display());
+        }
+        (true, None) => println!("  no theme; nothing to draw"),
+    }
+    for problem in &startup.problems {
+        println!("  {problem}");
+    }
+
+    println!();
+    println!("initramfs:");
+    if survey.generators.is_empty() {
+        println!("  none found. RABA can still be started by your init system;");
+        println!("  the splash then appears after the root filesystem is mounted.");
+    }
+    for generator in &survey.generators {
+        println!("  {}", generator.name());
+    }
+    if survey.generators.contains(&Generator::Mkinitcpio) {
+        hooks_advice(&survey);
+    }
+
+    println!();
+    println!("images:");
+    if let Some(why) = survey.unreadable.as_deref() {
+        println!("  cannot look: {why}");
+        println!("  (/boot is root-only on most machines; try sudo)");
+    } else if survey.images.is_empty() {
+        println!("  none found under /boot");
+    }
+    let frozen = startup.freeze().unwrap_or_default();
+    let sources = source_times(&startup);
+    for image in &survey.images {
+        let currency = machine::currency(image, &frozen, &sources);
+        println!("  {}  {}", image.path.display(), describe(&currency));
+    }
+
+    println!();
+    tpm_advice(&survey.tpm);
+
+    println!();
+    println!("then:");
+    for generator in &survey.generators {
+        println!("  sudo {}", generator.rebuild().join(" "));
+    }
+    println!("  sudo systemctl enable raba-quit.service raba-quit-wait.service");
+    println!("     — or rely on Boot.Timeout, which needs nothing enabled");
+    println!();
+    println!("kernel command line: `quiet loglevel=3`, in that order, is recommended.");
+    println!("Nothing above has been changed. `raba-setup --apply` rebuilds the image.");
+    ExitCode::SUCCESS
+}
+
+fn hooks_advice(survey: &machine::Survey) {
+    let Some(hooks) = survey.hooks.as_ref() else {
+        println!("  /etc/mkinitcpio.conf has no HOOKS= line this could read");
+        return;
+    };
+    if machine::shares_with_plymouth(hooks) {
+        println!("  HOOKS also has `plymouth`. Both end up in the image; RABA sees");
+        println!("  plymouthd running, declines, and logs why — so the splash you get");
+        println!("  is Plymouth's. Remove one of them. See docs/coexistence.md.");
+    }
+    match machine::advise(hooks) {
+        Advice::Good => println!("  HOOKS has `raba`, after `encrypt`"),
+        Advice::NotInHooks => {
+            println!("  HOOKS has no `raba`; the image will have no splash. Edit");
+            println!("  /etc/mkinitcpio.conf and make the line read:");
+            println!("      {}", machine::suggested(hooks));
+        }
+        Advice::BeforeEncrypt => {
+            println!("  HOOKS has `raba` *before* `encrypt`. RABA does not supply the");
+            println!("  passphrase prompt, so the splash would be drawn over it. Move it:");
+            println!("      {}", machine::suggested(hooks));
+        }
+    }
+}
+
+/// The TPM warning, which is the whole reason this command exists before
+/// `--apply` rather than inside it.
+fn tpm_advice(tpm: &Tpm) {
+    println!("disk encryption:");
+    match tpm {
+        Tpm::Clear => println!("  no TPM-sealed volume found; rebuilding is uneventful"),
+        Tpm::Unknown(why) => {
+            println!("  not checked: {why}.");
+            println!("  If your disk unlocks itself without a passphrase, read");
+            println!("  docs/secure-boot.md before rebuilding the initramfs.");
+        }
+        Tpm::Sealed(devices) => {
+            for device in devices {
+                println!("  {device} releases its key against a TPM measurement.");
+            }
+            println!();
+            println!("  Putting RABA in the initramfs changes that measurement (PCR 9, and");
+            println!("  PCR 11 for a UKI). The next boot will ask for your recovery");
+            println!("  passphrase instead of unlocking itself. This is not specific to");
+            println!("  RABA — any change to initramfs contents does it.");
+            println!();
+            println!("  Before: make sure you have a recovery passphrase that works.");
+            println!("  After:  sudo systemd-cryptenroll --wipe-slot=tpm2 <device>");
+            println!("          sudo systemd-cryptenroll --tpm2-device=auto \\");
+            println!("               --tpm2-pcrs=7+11 <device>");
+            println!("  See docs/secure-boot.md, including the signed-policy way out.");
+        }
+    }
+}
+
+const fn describe(currency: &Currency) -> &'static str {
+    match currency {
+        Currency::Current => "carries the current configuration",
+        Currency::Stale(why) => why,
+        Currency::ProbablyStale => "older than your configuration; probably stale",
+        Currency::ProbablyCurrent => "newer than your configuration; probably current",
+        Currency::Unknown => "nothing here could tell whether it is current",
+    }
+}
+
+/// When the things that go into an image last changed.
+fn source_times(startup: &config::Startup) -> Vec<Option<u64>> {
+    startup
+        .files
+        .iter()
+        .chain(startup.settings.outro.iter())
+        .chain(std::iter::once(&startup.settings.theme).filter(|path| !path.as_os_str().is_empty()))
+        .map(|path| machine::seconds(path))
+        .collect()
+}
+
+// ----------------------------------------------------------------- check ----
+
+/// Is the image current? The question a package's post-install asks.
+fn check(root: &Root, places: &config::Places) -> ExitCode {
+    let survey = machine::survey(root);
+    let startup = config::start(places);
+    let Some(frozen) = startup.freeze() else {
+        println!("raba-setup: no theme resolved; there is nothing to put in an image");
+        return ExitCode::FAILURE;
+    };
+    if survey.images.is_empty() {
+        println!("raba-setup: no initramfs found under /boot");
+        return ExitCode::FAILURE;
+    }
+    let sources = source_times(&startup);
+    let mut ok = true;
+    for image in &survey.images {
+        let currency = machine::currency(image, &frozen, &sources);
+        println!("{}: {}", image.path.display(), describe(&currency));
+        if matches!(currency, Currency::Stale(_) | Currency::ProbablyStale | Currency::Unknown) {
+            ok = false;
+        }
+    }
+    if ok {
+        return ExitCode::SUCCESS;
+    }
+    for generator in &survey.generators {
+        println!("rebuild with: sudo {}", generator.rebuild().join(" "));
+    }
+    ExitCode::FAILURE
+}
+
+// ----------------------------------------------------------------- apply ----
+
+/// Rebuild the initramfs, and nothing else.
+///
+/// The one state-changing thing this program does, and it is somebody else's
+/// program doing it. Everything that would mean editing a file we do not own is
+/// printed by the dry run instead.
+fn apply(root: &Root, places: &config::Places, yes: bool) -> Result<ExitCode, String> {
+    let survey = machine::survey(root);
+    if survey.generators.is_empty() {
+        return Err("no initramfs generator found; there is nothing to rebuild".to_owned());
+    }
+    // Asked before the rebuild rather than discovered during it: the hooks all
+    // decline quietly when there is no theme, so without this the command would
+    // run for thirty seconds and produce an image with no splash in it.
+    if config::start(places).freeze().is_none() {
+        return Err("no theme resolved; the image would have no splash in it (try: raba --check)"
+            .to_owned());
+    }
+    if let Some(hooks) = survey.hooks.as_ref() {
+        if machine::advise(hooks) == Advice::NotInHooks {
+            println!("mkinitcpio has no `raba` in HOOKS, so rebuilding would change nothing.");
+            println!("Make the line read:");
+            println!("    {}", machine::suggested(hooks));
+            return Ok(ExitCode::FAILURE);
+        }
+    }
+    if let Tpm::Sealed(devices) = &survey.tpm {
+        tpm_advice(&survey.tpm);
+        if !yes && !agreed(devices) {
+            println!("Nothing was changed.");
+            return Ok(ExitCode::FAILURE);
+        }
+    }
+    if !root.is_the_running_system() {
+        return Err("--root is for inspecting, not for rebuilding somebody else's boot".to_owned());
+    }
+
+    for generator in &survey.generators {
+        let Some((program, arguments)) = generator.rebuild().split_first() else {
+            continue;
+        };
+        println!("raba-setup: {} {}", program, arguments.join(" "));
+        let status = Command::new(program)
+            .args(arguments)
+            .status()
+            .map_err(|why| format!("running {program}: {why}"))?;
+        if !status.success() {
+            return Err(format!("{program} exited {status}; the image was not rebuilt"));
+        }
+    }
+    println!("raba-setup: done. `raba-setup --check` confirms what is in the image.");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Ask, once, in words that say what is about to happen.
+fn agreed(devices: &[String]) -> bool {
+    println!();
+    print!("Rebuild anyway, knowing {} will ask for a passphrase? [y/N] ", devices.join(" and "));
+    use std::io::Write as _;
+    let _ = std::io::stdout().flush();
+    let mut answer = String::new();
+    if std::io::stdin().read_line(&mut answer).is_err() {
+        return false;
+    }
+    matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
 }

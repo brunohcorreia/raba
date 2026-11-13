@@ -169,9 +169,6 @@ _/usr/share/raba/raba.defaults_
 _/usr/share/raba/themes/_
 	Installed themes.
 
-_/run/raba.pid_
-	PID of the running instance.
-
 _/run/raba.sock_
 	Control socket. See *raba-ctl*(1).
 
