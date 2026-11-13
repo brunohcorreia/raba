@@ -11,6 +11,7 @@
 use raba_core::format::Palette;
 use raba_gen::build::{build, Recipe, SpinnerSpec};
 use raba_gen::layout::Position;
+use raba_gen::palette;
 use raba_gen::palette::{clamp_background, downsample, nearest_console_colour, rgb_of_xterm};
 
 #[test]
@@ -170,4 +171,48 @@ fn a_256_colour_theme_keeps_its_colours_when_not_downsampling() {
     let built = build("$1a", &recipe).unwrap();
     assert!(built.adjustments.is_empty());
     assert!(built.movie.ops.iter().any(|op| op.fg == 208));
+}
+
+// --- the corners of the two conversions ---------------------------------------
+
+#[test]
+fn the_first_sixteen_xterm_indices_are_the_console_palette_itself() {
+    // Not part of the 6x6x6 cube and not part of the grey ramp: a conversion
+    // that runs the cube arithmetic on index 1 produces black for red.
+    assert_eq!(palette::rgb_of_xterm(0), (0, 0, 0));
+    assert_ne!(palette::rgb_of_xterm(1), palette::rgb_of_xterm(0));
+    for index in 0..16u8 {
+        let rgb = palette::rgb_of_xterm(index);
+        assert_eq!(
+            palette::nearest_console_colour(rgb),
+            index,
+            "index {index} does not convert back to itself"
+        );
+    }
+}
+
+/// `39` is "default foreground", which on a console is grey — 7, not "no
+/// colour". Reading it as absent is what shipped two distributions' logos in
+/// the wrong colour.
+#[test]
+fn the_default_foreground_code_is_grey_and_not_absence() {
+    assert_eq!(palette::from_sgr("39"), Some(7));
+}
+
+#[test]
+fn an_sgr_run_that_names_no_colour_answers_nothing_rather_than_guessing() {
+    // Each of these is a real shape that appears in art: an attribute with no
+    // colour in it, a truncated extended run, and an extended form nobody
+    // defined. Guessing a colour for any of them is how art changes appearance
+    // between the editor it was drawn in and the console.
+    for params in ["1", "0", "53", "38", "38;9", "38;5", "38;2;1;2", "48;5;3", "", "x"] {
+        assert_eq!(palette::from_sgr(params), None, "{params:?} invented a colour");
+    }
+}
+
+#[test]
+fn the_bright_foreground_codes_are_the_top_eight() {
+    for (code, want) in [("90", 8u8), ("97", 15)] {
+        assert_eq!(palette::from_sgr(code), Some(want), "{code}");
+    }
 }

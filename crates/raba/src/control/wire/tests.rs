@@ -151,3 +151,48 @@ fn a_value_cannot_forge_an_extra_reply_line() {
         assert_eq!(reply.render().matches('\n').count(), reply.render().lines().count());
     }
 }
+
+/// The word `status` reports for a command, and what a log line calls it.
+///
+/// Part of the wire protocol — `docs/protocol.md` — so these are API, and a
+/// renamed variant that quietly renames the word is a client that stops
+/// matching. Nothing exercised them.
+#[test]
+fn every_command_knows_the_word_it_is_spelled_with() {
+    let pairs = [
+        (Command::Ping, "ping"),
+        (Command::Status, "status"),
+        (Command::Quit { wait: false }, "quit"),
+        (Command::Quit { wait: true }, "quit"),
+        (Command::Deactivate, "deactivate"),
+        (Command::Reactivate, "reactivate"),
+        (Command::Message("hello".to_owned()), "message"),
+        (Command::Progress { fraction: 0.5, advance: false }, "progress"),
+    ];
+    for (command, word) in pairs {
+        assert_eq!(command.name(), word);
+    }
+    // And for the commands that take nothing, the word parses back to the same
+    // one — so the name is the protocol's and not a label beside it. `message`
+    // and `progress` are left out because the bare word is a missing argument,
+    // which the test below is about.
+    for word in ["ping", "status", "quit", "deactivate", "reactivate"] {
+        assert_eq!(
+            Command::parse(word).map(|parsed| parsed.name()),
+            Ok(word),
+            "{word} does not parse back"
+        );
+    }
+}
+
+#[test]
+fn message_with_nothing_after_it_is_a_missing_argument_and_not_an_empty_message() {
+    // An empty message would clear the line, which is a different request. A
+    // client that meant that should have to say so.
+    assert_eq!(Command::parse("message"), Err(Rejection::MissingArgument));
+    assert_eq!(Command::parse("progress"), Err(Rejection::MissingArgument));
+    assert_eq!(Command::parse("progress --advance"), Err(Rejection::MissingArgument));
+    // Whitespace is not nothing: `message` takes the rest of the line
+    // verbatim, deliberately, so that there are no quoting rules to get wrong.
+    assert_eq!(Command::parse("message  "), Ok(Command::Message(" ".to_owned())));
+}

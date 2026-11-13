@@ -91,7 +91,29 @@ fn ctl(args: &[&str]) -> Result<(i32, String), String> {
 
 /// Kill and reap, so a failed check does not leave a daemon holding a terminal
 /// for every check after it.
+/// Let the instance finish, then make sure it is gone.
+///
+/// The grace period is not politeness. `quit --wait` returns on EOF, and EOF
+/// arrives when the listener is dropped at the top of `Session::finish` —
+/// before the process has finished restoring the terminal and before it has
+/// returned from `main`. This used to send `SIGKILL` on the next line, which
+/// means every check that ended with a clean `quit` was in fact racing the
+/// tidy-up it had just asked for.
+///
+/// It also cost the coverage run every profile but a handful: an instrumented
+/// binary writes its counters from an `atexit` handler, and `SIGKILL` cannot
+/// be caught. `Vt::adopt` and `Vt::take` read 0% while the checks that use
+/// them were passing. See `crates/raba-vmtest/src/profile.rs`.
 fn clean_up(child: &mut Child) {
+    for _ in 0..200u32 {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            // Only a process that is still here after two seconds is one that
+            // is stuck, and a stuck splash is what SIGKILL is for.
+            Ok(None) => std::thread::sleep(Duration::from_millis(10)),
+            Err(_) => break,
+        }
+    }
     let _ = child.kill();
     let _ = child.wait();
     let _ = std::fs::remove_file(STATE);

@@ -242,3 +242,41 @@ impl Tap for Terminal {
         self.into_screen()
     }
 }
+
+// --- the small corners of the grid --------------------------------------------
+
+#[test]
+fn a_cell_with_nothing_in_it_is_the_blank_one() {
+    // `Cell::default` exists so a grid can be built with `vec![]`; if it ever
+    // stopped meaning `BLANK` every new grid would start full of nulls.
+    assert_eq!(Cell::default(), Cell::BLANK);
+    assert_eq!(Cell::BLANK.ch, ' ');
+}
+
+#[test]
+fn clearing_a_grid_leaves_it_the_way_it_started() {
+    let mut grid = Grid::new(4, 2, raba_core::Palette::Ansi16).expect("a grid");
+    let blank = grid.clone();
+    for column in 0..4 {
+        grid.set(column, 0, Cell { ch: '#', fg: 3, bg: 1 });
+    }
+    assert_ne!(grid, blank);
+    grid.clear();
+    assert_eq!(grid, blank);
+}
+
+#[test]
+fn a_cell_outside_the_canvas_is_nothing_rather_than_a_panic_or_a_wrap() {
+    // Reached from a `.raba` whose ops address a cell the canvas does not
+    // have. Wrapping would draw in the wrong place; panicking would be a boot
+    // splash taking the machine down.
+    let mut grid = Grid::new(4, 2, raba_core::Palette::Ansi16).expect("a grid");
+    assert!(grid.get(4, 0).is_none(), "a column past the end answered");
+    assert!(grid.get(0, 2).is_none(), "a line past the end answered");
+    assert!(grid.get(u16::MAX, u16::MAX).is_none());
+
+    let before = grid.clone();
+    grid.set(4, 0, Cell { ch: '#', fg: 1, bg: 0 });
+    grid.set(0, 2, Cell { ch: '#', fg: 1, bg: 0 });
+    assert_eq!(grid, before, "a write outside the canvas changed something inside it");
+}

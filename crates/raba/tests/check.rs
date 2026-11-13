@@ -477,3 +477,126 @@ fn a_machine_nobody_has_set_up_is_told_every_name_auto_tried() {
     assert!(said.contains("generic.raba"), "auto did not fall through to generic: {said}");
     assert!(output.status.success(), "the absence of a splash is not a boot failure");
 }
+
+// --- the kernel command line, and the settings nothing had set ----------------
+
+#[test]
+fn the_kernel_command_line_can_name_the_terminal_and_auto_means_auto() {
+    let scratch = Scratch::new("cmdline-tty");
+    theme(&scratch, "thing");
+    scratch.write("raba.conf", "[Boot]\nTheme=thing\nTty=5\n");
+
+    scratch.write("cmdline", "quiet raba.tty=9\n");
+    let fixed = raba(&scratch, &["--check"]);
+    assert!(stdout(&fixed).contains("tty9"), "{}", stdout(&fixed));
+
+    // `auto` on the command line is not "no opinion": it overrides a file that
+    // named a terminal, and puts the choice back to VT_OPENQRY.
+    scratch.write("cmdline", "quiet raba.tty=auto\n");
+    let auto = raba(&scratch, &["--check"]);
+    assert!(stdout(&auto).contains("auto"), "{}", stdout(&auto));
+}
+
+#[test]
+fn a_kernel_parameter_with_a_value_that_is_not_one_is_a_problem_naming_the_parameter() {
+    let scratch = Scratch::new("cmdline-bad");
+    theme(&scratch, "thing");
+    scratch.write("raba.conf", "[Boot]\nTheme=thing\n");
+    scratch.write("cmdline", "quiet raba.enable=maybe raba.debug=perhaps raba.tty=left\n");
+
+    let output = raba(&scratch, &["--check"]);
+    let text = stdout(&output);
+    for parameter in ["raba.enable", "raba.debug", "raba.tty"] {
+        assert!(text.contains(parameter), "{parameter} was not reported:\n{text}");
+    }
+    // The file it came from, not just the text: a problem with no provenance
+    // sends somebody to edit the wrong thing.
+    assert!(text.contains("cmdline"), "{text}");
+}
+
+#[test]
+fn a_kernel_parameter_raba_does_not_know_is_reported_rather_than_ignored() {
+    let scratch = Scratch::new("cmdline-unknown");
+    theme(&scratch, "thing");
+    scratch.write("raba.conf", "[Boot]\nTheme=thing\n");
+    scratch.write("cmdline", "quiet raba.sparkles=1\n");
+    let output = raba(&scratch, &["--check"]);
+    assert!(stdout(&output).contains("sparkles"), "{}", stdout(&output));
+}
+
+#[test]
+fn a_setting_whose_value_is_not_one_of_its_words_says_what_it_wanted() {
+    let scratch = Scratch::new("bad-enum");
+    theme(&scratch, "thing");
+    scratch.write("raba.conf", "[Boot]\nTheme=thing\n\n[Log]\nLevel=verbose\n");
+    let output = raba(&scratch, &["--check"]);
+    let text = stdout(&output);
+    assert!(text.contains("verbose"), "{text}");
+    assert!(text.contains("is not"), "it refused the value without saying what it wanted:\n{text}");
+}
+
+#[test]
+fn a_log_file_that_is_not_an_absolute_path_is_refused() {
+    // Relative to what? The daemon's working directory in an initramfs is not
+    // a thing anybody can predict.
+    let scratch = Scratch::new("relative-log");
+    theme(&scratch, "thing");
+    scratch.write("raba.conf", "[Boot]\nTheme=thing\n\n[Log]\nFile=raba.log\n");
+    let output = raba(&scratch, &["--check"]);
+    assert!(stdout(&output).contains("absolute path"), "{}", stdout(&output));
+}
+
+#[test]
+fn an_outro_that_is_turned_off_reports_as_off_and_resolves_nothing() {
+    let scratch = Scratch::new("outro-off");
+    theme(&scratch, "thing");
+    scratch.write("raba.conf", "[Boot]\nTheme=thing\n\n[Outro]\nEnable=false\n");
+    let output = raba(&scratch, &["--check"]);
+    let text = stdout(&output);
+    assert!(text.contains("Enable        false"), "{text}");
+    assert!(!text.contains("MaxDuration"), "an outro that is off reported its ceiling:\n{text}");
+}
+
+#[test]
+fn an_outro_named_by_hand_is_looked_for_under_the_themes_directory() {
+    let scratch = Scratch::new("outro-named");
+    theme(&scratch, "thing");
+    theme(&scratch, "thing-goodbye");
+    scratch
+        .write("raba.conf", "[Boot]\nTheme=thing\n\n[Outro]\nEnable=true\nTheme=thing-goodbye\n");
+    let output = raba(&scratch, &["--check"]);
+    assert!(stdout(&output).contains("thing-goodbye.raba"), "{}", stdout(&output));
+}
+
+#[test]
+fn an_auto_outro_with_no_boot_theme_to_sit_beside_resolves_to_nothing() {
+    // `auto` means "the boot theme's name with -outro": with no boot theme
+    // there is no name to append to, and the answer is nothing rather than a
+    // guess.
+    let scratch = Scratch::new("outro-auto-nothing");
+    scratch.write("raba.conf", "[Boot]\nTheme=absent\n\n[Outro]\nEnable=true\n");
+    let output = raba(&scratch, &["--check"]);
+    assert!(stdout(&output).contains("nothing"), "{}", stdout(&output));
+}
+
+#[test]
+fn a_theme_given_as_a_path_is_reported_as_that_path() {
+    let scratch = Scratch::new("theme-path");
+    theme(&scratch, "thing");
+    let path = scratch.path("themes/thing.raba");
+    scratch.write("raba.conf", &format!("[Boot]\nTheme={}\n", path.display()));
+    let output = raba(&scratch, &["--check"]);
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(stdout(&output).contains(&path.display().to_string()), "{}", stdout(&output));
+}
+
+#[test]
+fn a_configuration_file_too_large_to_be_one_is_refused_by_size() {
+    let scratch = Scratch::new("huge-config");
+    theme(&scratch, "thing");
+    let huge = format!("[Boot]\nTheme=thing\n{}", "# padding\n".repeat(8000));
+    scratch.write("raba.conf", &huge);
+    let output = raba(&scratch, &["--check"]);
+    let text = stdout(&output);
+    assert!(text.contains("past the"), "a 80 KB configuration was read:\n{text}");
+}
