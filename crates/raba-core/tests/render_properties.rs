@@ -14,13 +14,11 @@
     clippy::cast_possible_truncation
 )]
 
-mod terminal;
-
 use proptest::prelude::*;
 use raba_core::glyph::{is_safe, safety, Safety};
 use raba_core::render::to_ansi;
+use raba_core::testing::Terminal;
 use raba_core::{Cell, Grid, Palette};
-use terminal::Terminal;
 
 /// Glyphs a theme plausibly uses: ASCII, the CP437 blocks, box drawing, and one
 /// multi-byte character to keep the UTF-8 path honest.

@@ -64,3 +64,25 @@ jobs:
             echo ".binary-size-limit in the same commit, or reduce the binary."
             exit 1
           fi
+
+  vm:
+    name: tier 3a — real kernel in QEMU
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools qemu-system-x86 cpio
+      - name: the harness reports a failure as a failure
+        # Before trusting a run that passes, prove a run that should fail does not.
+        # A test rig that cannot fail reports success for reasons unrelated to the
+        # code, and the first anybody hears of it is when something slips through.
+        run: ./scripts/vm-test.sh --self-test
+        env:
+          RABA_VM_KERNEL: /boot/vmlinuz
+      - name: run the checks
+        run: ./scripts/vm-test.sh
+        env:
+          RABA_VM_KERNEL: /boot/vmlinuz

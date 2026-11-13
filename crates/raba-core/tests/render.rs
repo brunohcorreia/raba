@@ -15,12 +15,10 @@
     clippy::cast_possible_truncation
 )]
 
-mod terminal;
-
 use raba_core::render::{to_ansi, to_ansi_into};
 use raba_core::surface::{BufferSurface, Surface};
+use raba_core::testing::Terminal;
 use raba_core::{Cell, Grid, Palette};
-use terminal::Terminal;
 
 fn grid(columns: u16, lines: u16) -> Grid {
     Grid::new(columns, lines, Palette::Ansi16).unwrap()

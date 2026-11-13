@@ -1,0 +1,24 @@
+[package]
+name = "raba-vmtest"
+description = "Tier 3a: the /init that runs RABA's tests inside a QEMU virtual machine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "raba-vmtest"
+path = "src/main.rs"
+
+# This never ships and is never in an initramfs anybody boots: it *is* the
+# initramfs, for one second, in a virtual machine with no disk. The dependency
+# budget in docs/maintenance.md does not apply to it, and neither does the binary
+# size gate — but it stays small anyway, because every byte is in the image that
+# has to be built before each run.
+[dependencies]
+rustix = { version = "1", features = ["termios", "mount", "system", "process"] }
+
+[lints]
+workspace = true

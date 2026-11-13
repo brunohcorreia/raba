@@ -113,6 +113,22 @@ sequences, redraw minimisation, and the control-character sanitisation from
 What it cannot cover: `VT_OPENQRY`, `KD_SETMODE`, VT switching. Those are real-kernel
 only.
 
+`crates/raba/tests/pty.rs` drives the **real binary** with a pty of a chosen size as its
+stdout, then replays what came back through the same strict terminal model the renderer's
+own tests use. So it covers `TIOCGWINSZ` against a real terminal, the whole play loop, and
+the program's entire output alphabet rather than the parts a test thought to look at.
+
+It earned its place immediately by finding two things the model could not:
+
+- **`ONLCR`.** A pty is not a pipe: the line discipline turns an outbound `\n` into
+  `\r\n`. The one newline the program writes comes back with a carriage return attached.
+  That is now a test, because it is the mechanism behind the rule that the renderer emits
+  no line feeds at all — one mid-frame would silently move the cursor to column 0.
+- **A cursor park one line past the bottom, on every frame.** `best_fit` always returns a
+  grid exactly the size of the screen, so "the line after the art" stopped existing and
+  nothing noticed, because terminals clamp an out-of-range `CUP`. A splash resting on a
+  clamp on consoles it has never run on is not a thing to leave alone.
+
 ### Tier 3a — QEMU, kernel plus initramfs, no disk
 
 The important trick, and the one that makes VT testing practical:
@@ -132,6 +148,41 @@ line, and exits QEMU with a status code through `isa-debug-exit`.
 **This is nearly as fast as a unit test and gives a real kernel, a real VT and real
 ioctls.** It is how the VT layer gets tested on every commit rather than occasionally.
 Most of what we feared needed a slow full-distro VM does not.
+
+```sh
+scripts/vm-test.sh                 # run the checks
+scripts/vm-test.sh --self-test     # assert that a failing run comes back failed
+scripts/vm-test.sh --console       # watch the guest's VGA console too
+```
+
+The guest is `crates/raba-vmtest`, and the whole image is two static binaries and a
+generated `.raba` — about 470 KB. The kernel is the one already installed: the copy
+under `/usr/lib/modules/$(uname -r)/vmlinuz` is tried before `/boot`, because `/boot`
+is often an ESP only root can read while that copy is the same image and world
+readable. `RABA_VM_KERNEL` overrides it.
+
+**`console=ttyS0` with an emulated VGA adapter is the trick that makes this work.**
+Results go out the serial line that `-serial stdio` captures, while the guest still has
+a real virtual terminal on the VGA side to draw on. `tty0` is under test; `ttyS0`
+reports on it. Without that split the tests would quietly be exercising a serial
+console and proving nothing about a VT.
+
+Nothing in the guest asks for `unsafe`. Exiting through `isa-debug-exit` normally needs
+inline assembly to reach an I/O port; writing to `/dev/port` at offset `0xf4` reaches the
+same port through a file, and `o` to `/proc/sysrq-trigger` is the fallback. So the
+harness stays inside the workspace's `unsafe_code = "forbid"` even though the thing it
+exists to test will not.
+
+#### The harness proves itself first
+
+`--self-test` puts `raba.selftest=fail` on the kernel command line, the guest fails one
+check on purpose, and the script asserts the run came back **failed**. CI runs it before
+it runs anything else.
+
+This is not ceremony. A test rig that cannot fail reports success for reasons unrelated
+to the code, and the first anybody hears of it is when something that should have been
+caught was not. For the VT layer — where the failure mode is somebody's machine not
+booting — that is not an acceptable way to find out.
 
 ### Tier 3b — QEMU, full distribution images
 

@@ -13,6 +13,9 @@ pub mod glyph;
 pub mod render;
 pub mod surface;
 
+#[cfg(feature = "testing")]
+pub mod testing;
+
 pub use format::{decode, encode, DecodeError, Frame, Movie, Op, Palette, Scaling};
 pub use glyph::{is_safe, Safety};
 pub use render::{apply, to_ansi, to_ansi_into, Cell, Grid};

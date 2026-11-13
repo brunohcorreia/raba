@@ -5,7 +5,7 @@
 //! which is the whole reason `--preview` is a milestone and not a debug flag.
 
 use raba_core::render::{best_fit, resamples, to_ansi_into};
-use raba_core::surface::Surface;
+use raba_core::surface::{Size, Surface};
 use raba_core::{apply, Grid, Movie};
 use std::io;
 use std::thread::sleep;
@@ -55,10 +55,10 @@ pub fn play<S: Surface>(surface: &mut S, movie: &Movie, loops: u32) -> io::Resul
             apply(&mut current, movie, frame);
             let drawn = best_fit(&current, screen, shading);
             to_ansi_into(&mut buffer, &drawn, Some(&shown));
-            // Park the cursor below the art in the same write, so it does not blink
-            // in the middle of the animation and so nothing has to be restored if
-            // this process is interrupted.
-            park_below(&mut buffer, screen.lines.min(drawn.lines()));
+            // Park the cursor out of the way in the same write, so it does not
+            // blink in the middle of the animation and so nothing has to be
+            // restored if this process is interrupted.
+            park(&mut buffer, screen);
             let _ = surface.present(&buffer);
             shown = drawn;
 
@@ -75,10 +75,17 @@ pub fn play<S: Surface>(surface: &mut S, movie: &Movie, loops: u32) -> io::Resul
     }
 }
 
-/// `ESC [ line ; 1 H` — move to the first column of the line after the art.
-fn park_below(out: &mut Vec<u8>, lines: u16) {
+/// `ESC [ line ; 1 H` — move to the bottom left of the screen.
+///
+/// The bottom left, and not the line after the art: [`best_fit`] always returns a
+/// grid exactly the size of the screen, so there is no line after the art to go to.
+/// An earlier version asked for one anyway and emitted a position one past the last
+/// line on every single frame. Terminals clamp that, so nothing looked wrong — and
+/// a splash that is one character out of range on a console it has never run on is
+/// not a thing to leave resting on a clamp.
+fn park(out: &mut Vec<u8>, screen: Size) {
     out.extend_from_slice(b"\x1b[");
-    out.extend_from_slice(lines.saturating_add(1).to_string().as_bytes());
+    out.extend_from_slice(screen.lines.max(1).to_string().as_bytes());
     out.extend_from_slice(b";1H");
 }
 

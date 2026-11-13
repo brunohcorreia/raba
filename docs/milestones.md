@@ -245,13 +245,48 @@ against its own idea of the format proves nothing.
 The VT layer, where a mistake hangs a boot. **The VM harness is built before a line of
 this is written.**
 
-- Tier 3a harness: QEMU kernel + initramfs, ~1 second per run, `isa-debug-exit`
-- `VT_OPENQRY` to acquire a free terminal — never hardcode tty1
-- Draw, and restore on **every** exit path including panic
-- `TIOCL_SETKMSGREDIRECT` to move kernel messages aside; restore exactly
-- Detect a terminal already in `KD_GRAPHICS` and yield
-- `SIGKILL` mid-frame leaves a usable terminal — the test that matters most
-- Pty tests for the escape encoder
+| # | What | Status |
+|---|---|---|
+| 1 | Tier 3a harness: QEMU kernel + initramfs, ~1 second per run, `isa-debug-exit` | done |
+| 2 | Pty tests for the escape encoder | done |
+| 3 | `VT_OPENQRY` to acquire a free terminal — never hardcode tty1 | |
+| 4 | Draw, and restore on **every** exit path including panic | |
+| 5 | `TIOCL_SETKMSGREDIRECT` to move kernel messages aside; restore exactly | |
+| 6 | Detect a terminal already in `KD_GRAPHICS` and yield | |
+| 7 | `SIGKILL` mid-frame leaves a usable terminal — the test that matters most | |
+
+### The harness, first
+
+`scripts/vm-test.sh` boots the kernel already on the machine with an initramfs of two
+static binaries and one generated `.raba` — about 470 KB, around a second a run. The
+guest is `crates/raba-vmtest`, which mounts what it needs, runs its checks against a
+real console, reports them as TAP on the serial line, and switches the machine off.
+
+Two decisions worth keeping:
+
+**`console=ttyS0` plus an emulated VGA adapter.** Results leave by the serial line while
+the guest still has a real virtual terminal to draw on. `tty0` is under test and `ttyS0`
+reports on it; without that split these tests would be exercising a serial console and
+proving nothing about a VT.
+
+**The harness proves it can fail before anything trusts it that it passed.**
+`--self-test` makes the guest fail one check on purpose and asserts the run comes back
+failed. CI runs that before it runs the real checks. A rig that cannot fail reports
+success for reasons unrelated to the code, and for the VT layer the first sign of that
+would be somebody's machine not booting.
+
+The guest needs no `unsafe`, which keeps the whole workspace inside
+`unsafe_code = "forbid"` until the VT layer genuinely needs it: `/dev/port` reaches
+`isa-debug-exit`'s I/O port through a file, and `/proc/sysrq-trigger` is the fallback.
+
+### Tier 2 found two bugs on its first run
+
+`crates/raba/tests/pty.rs` drives the real binary against a real pseudo-terminal and
+replays the result through the renderer's own strict terminal model. It immediately
+caught what a pure model could not: `ONLCR` rewriting an outbound `\n` as `\r\n` — the
+mechanism behind the rule that the renderer emits no line feeds — and a cursor park one
+line past the bottom of the screen on every single frame, invisible because terminals
+clamp an out-of-range `CUP`. See [development.md](development.md).
 
 ---
 

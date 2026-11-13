@@ -28,9 +28,6 @@ use raba_core::{apply, decode, encode, Grid, Movie};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-#[path = "../../raba-core/tests/terminal/mod.rs"]
-mod terminal;
-
 fn themes_directory() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../themes")
 }
@@ -96,7 +93,7 @@ fn plane(grid: &Grid, pick: fn(&raba_core::render::Cell) -> u8) -> String {
 fn render(movie: &Movie) -> String {
     let mut composed = Grid::new(movie.columns, movie.lines, movie.palette).expect("grid");
     let mut shown = composed.clone();
-    let mut screen = terminal::Terminal::blank(movie.columns, movie.lines, movie.palette);
+    let mut screen = raba_core::testing::Terminal::blank(movie.columns, movie.lines, movie.palette);
 
     let mut out = String::new();
     let _ = writeln!(

@@ -13,7 +13,7 @@
 //! |---|---|---|
 //! | `VtSurface` | `raba` | a real virtual terminal, via ioctls |
 //! | `StdoutSurface` | `raba` | stdout, for `--preview` |
-//! | [`BufferSurface`] | here, behind `testing` | nothing |
+//! | [`BufferSurface`] | `raba-core::testing` | nothing |
 
 use std::io;
 
@@ -54,6 +54,4 @@ pub trait Surface {
 }
 
 #[cfg(feature = "testing")]
-mod buffer;
-#[cfg(feature = "testing")]
-pub use buffer::BufferSurface;
+pub use crate::testing::BufferSurface;

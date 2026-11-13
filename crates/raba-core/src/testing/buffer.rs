@@ -4,7 +4,7 @@
 //! gate would notice, but not depending on the gate to notice is cheaper than
 //! explaining why a boot program contains a test double.
 
-use super::{Size, Surface};
+use crate::surface::{Size, Surface};
 use std::io;
 
 /// Records what was presented, so a test can assert on it.

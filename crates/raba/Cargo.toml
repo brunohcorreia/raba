@@ -20,3 +20,11 @@ raba-term = { path = "../raba-term", version = "0.0.0" }
 
 [lints]
 workspace = true
+
+# Dev-dependencies never reach the boot binary, so the budget above does not apply
+# to them. `rustix/pty` is what opens a real pseudo-terminal for the tier 2 tests;
+# the `testing` feature brings in the strict terminal model that interprets what
+# the binary wrote. See docs/development.md.
+[dev-dependencies]
+raba-core = { path = "../raba-core", version = "0.0.0", features = ["testing"] }
+rustix = { version = "1", features = ["pty", "termios", "process"] }

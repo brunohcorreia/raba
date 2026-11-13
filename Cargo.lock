@@ -297,6 +297,7 @@ version = "0.0.0"
 dependencies = [
  "raba-core",
  "raba-term",
+ "rustix",
 ]
 
 [[package]]
@@ -324,6 +325,13 @@ name = "raba-term"
 version = "0.0.0"
 dependencies = [
  "raba-core",
+ "rustix",
+]
+
+[[package]]
+name = "raba-vmtest"
+version = "0.0.0"
+dependencies = [
  "rustix",
 ]
 

@@ -12,7 +12,8 @@
 //! about the renderer's whole output alphabet and not only about the parts a test
 //! thought to look at.
 //!
-//! Dev-only. It never ships; see `docs/maintenance.md` on dev-dependencies being free.
+//! Behind the `testing` feature, so it never reaches the boot binary; see
+//! `docs/maintenance.md`.
 
 // Panicking is this module's whole output channel: it is an oracle, and an oracle
 // that returned `Result` would let a test quietly ignore it. The boot-path lints do
@@ -27,8 +28,9 @@
     clippy::cast_possible_truncation
 )]
 
-use raba_core::{Cell, Grid, Palette};
+use crate::{Cell, Grid, Palette};
 
+#[derive(Debug, Clone)]
 pub struct Terminal {
     grid: Grid,
     column: u16,
@@ -61,6 +63,16 @@ impl Terminal {
     pub fn blank(columns: u16, lines: u16, palette: Palette) -> Self {
         let grid = Grid::new(columns, lines, palette).expect("dimensions within limits");
         Terminal::showing(&grid)
+    }
+
+    /// Where the cursor was left.
+    ///
+    /// Column, then line, both zero-based. Only interesting at the end of a frame:
+    /// whatever runs after a splash writes where the cursor is, so a renderer that
+    /// leaves it in the middle of the art gets the next thing printed on top of
+    /// the picture.
+    pub fn cursor(&self) -> (u16, u16) {
+        (self.column, self.line)
     }
 
     pub fn screen(&self) -> &Grid {
@@ -108,6 +120,7 @@ impl Terminal {
                     match final_byte {
                         'H' => self.cup(&params),
                         'm' => self.sgr(&params),
+                        'J' => self.ed(&params),
                         other => panic!("unexpected CSI final byte {other:?}"),
                     }
                 }
@@ -117,6 +130,32 @@ impl Terminal {
                 printable => self.put(printable),
             }
         }
+    }
+
+    /// Erase in display.
+    ///
+    /// `to_ansi` never emits this — it draws differences and has nothing to erase
+    /// — but the program around it does, once, to start from a known screen. It is
+    /// modelled rather than excused because "the renderer emits only CUP and SGR"
+    /// and "the binary emits only CUP, SGR and one ED" are different claims, and
+    /// this file is where both are enforced.
+    ///
+    /// Note that erasing does not move the cursor, which is why the clear is
+    /// followed by a home.
+    fn ed(&mut self, params: &[u16]) {
+        let blank = Cell::BLANK;
+        let (columns, lines) = (self.grid.columns(), self.grid.lines());
+        let here = usize::from(self.line) * usize::from(columns) + usize::from(self.column);
+        let count = usize::from(columns) * usize::from(lines);
+        let range = match params.first().copied().unwrap_or(0) {
+            1 => 0..here.saturating_add(1).min(count),
+            2 | 3 => 0..count,
+            _ => here.min(count)..count,
+        };
+        for index in range {
+            self.grid.set_index(index, blank);
+        }
+        self.pending_wrap = false;
     }
 
     fn cup(&mut self, params: &[u16]) {
