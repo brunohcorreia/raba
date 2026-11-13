@@ -771,6 +771,39 @@ not home, and assert that after `raba` exits the display is still there. Switchi
 would have proved nothing, because a normal restore ends there too. It notices in about
 15 ms.
 
+### The animation track, agreed and deferred
+
+Raised by Bruno on 13 Nov 2026, agreed in shape, and deliberately after the MVP: a
+shutdown animation, looping only part of an animation, and playing one backwards.
+
+They look like three features and they are one mechanism, which is why they are worth
+doing together and not one at a time:
+
+| | where it goes |
+|---|---|
+| intro → loop → outro, each optional | slots in `raba.conf`, not a format change |
+| play it backwards | `raba-gen`, as a second file |
+| shutdown | a unit per init system, playing a theme |
+
+**Slots, not a loop range.** The format has a `looping` flag over the whole movie. A
+partial loop could be a `loop_from` field — the header has two reserved bytes — but the
+decoder refuses a non-zero reserved field by design ("strict now so it can be relaxed
+later"), so using them is a version bump, and an older `raba` would turn the file down.
+A second file played once before the looping one costs nothing, needs no new op, and
+keeps rule 2 of [compatibility.md](compatibility.md). `[Outro]` already works exactly
+this way; `Intro` is the same idea pointing the other direction.
+
+**Reversing belongs in the generator.** Inverting a delta-encoded stream at playback
+means reconstructing full grids in the one binary that has a size gate. Writing the
+reversed file at build time is free — `raba-gen build … --reverse` — and has a pleasing
+consequence: the reverse of an intro is exactly the outro you wanted.
+
+**Shutdown needs no new code in `raba`.** It is `raba --theme shutdown.raba` started by
+something at the right moment: `Before=shutdown.target` under systemd, the equivalent
+script elsewhere. The hard part is the one Plymouth does gymnastics for — surviving into
+systemd's shutdown ramfs so the splash lasts all the way to poweroff — and that is a
+separate decision from having a shutdown theme at all.
+
 ---
 
 ## M6 — Breadth

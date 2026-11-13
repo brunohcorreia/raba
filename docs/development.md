@@ -244,9 +244,29 @@ gets a skip.
 Only for what genuinely needs a distribution: real mkinitcpio and dracut runs, real init
 systems, real display manager handoff, Secure Boot and TPM behaviour.
 
-Slow, so it runs nightly rather than per-commit. `qcow2` snapshots of clean installs,
-restored between runs. Images for Arch, Void (runit + dracut), Artix (OpenRC), Chimera
-(dinit), Debian (initramfs-tools), Fedora (dracut + systemd).
+```sh
+scripts/distro-test.sh            # Arch: install the packages, reboot, check
+scripts/distro-test.sh --console  # watch it happen
+scripts/distro-test.sh --keep     # leave the disks behind to poke at
+```
+
+The distribution's own cloud image, cached once in `target/distro/<distro>/base.qcow2`
+and never written to — every run gets a copy-on-write overlay. **Nothing here needs
+root on your machine**: the cloud-init seed is a FAT filesystem built with `mkfs.vfat`
+and `mcopy`, the packages ride in on a second FAT disk, and QEMU runs as you.
+
+Two boots. The first one is a person following `raba.install`: install the packages with
+`pacman -U`, add `raba` to `HOOKS` in the real `/etc/mkinitcpio.conf`, run `mkinitcpio
+-P`, enable the units, reboot. The second one is the test: a `raba-check.service`
+ordered after `multi-user.target` emits TAP on the serial line and powers the machine
+off. Meanwhile the host is taking `screendump`s through QEMU's monitor, so there is
+evidence about what was actually on the screen rather than only what the guest believes.
+
+The screen evidence is deliberately weak and honest: `scripts/screen-colours.py` says
+whether any captured frame had more than a console's worth of black in it. It is not a
+pixel comparison against a reference, because a reference frame would be a font, a
+resolution and a timing all pinned at once — three ways to go red for no reason. See
+`docs/milestones.md` on what would justify a stronger check.
 
 Visual results come from the QEMU monitor:
 

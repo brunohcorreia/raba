@@ -13,7 +13,7 @@ pkgrel=1
 arch=('x86_64' 'aarch64')
 url="https://github.com/brunohcorreia/raba"
 license=('GPL-3.0-or-later')
-makedepends=('cargo' 'scdoc')
+makedepends=('cargo' 'scdoc' 'make')
 source=("$pkgbase-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 # Replaced with the real digest when the tag exists; `updpkgsums` writes it.
 sha256sums=('SKIP')
@@ -28,19 +28,9 @@ build() {
     cd "$pkgbase-$pkgver"
     export RUSTUP_TOOLCHAIN=stable
     export CARGO_TARGET_DIR=target
-    cargo build --frozen --release
-
-    # The art. Themes are generated from their recipes rather than committed,
-    # so that a format change cannot leave a stale .raba behind.
-    local recipe
-    for recipe in themes/*.toml; do
-        ./target/release/raba-gen build "$recipe"
-    done
-
-    local page
-    for page in man/*.scd; do
-        scdoc < "$page" > "${page%.scd}"
-    done
+    # The Makefile, so that this recipe and a `make install` on a distribution
+    # with no package of its own cannot disagree about where anything goes.
+    make all CARGO_FLAGS="--frozen --release"
 }
 
 check() {
@@ -62,59 +52,7 @@ package_raba() {
     install=raba.install
 
     cd "$pkgbase-$pkgver"
-
-    install -Dm755 target/release/raba       "$pkgdir/usr/bin/raba"
-    install -Dm755 target/release/raba-ctl   "$pkgdir/usr/bin/raba-ctl"
-    install -Dm755 target/release/raba-setup "$pkgdir/usr/bin/raba-setup"
-
-    # Configuration: the package's opinion and the user's, kept apart.
-    install -Dm644 packaging/raba.defaults "$pkgdir/usr/share/raba/raba.defaults"
-    install -Dm644 packaging/raba.conf     "$pkgdir/etc/raba/raba.conf"
-
-    # The one theme the program itself owns: no logo, no trademark, and the
-    # thing `Theme=auto` falls back to when a machine's ID= matches nothing.
-    # Without it, `pacman -S raba` would install a splash that draws nothing.
-    install -Dm644 themes/generic.raba "$pkgdir/usr/share/raba/themes/generic.raba"
-
-    # A pacman hook that says when the image stopped matching the art.
-    install -Dm644 packaging/90-raba.hook "$pkgdir/usr/share/libalpm/hooks/90-raba.hook"
-
-    # mkinitcpio. One hook name for both kinds of image; the install hook
-    # decides whether it is building a systemd initramfs or a busybox one.
-    install -Dm644 integration/mkinitcpio/install/raba "$pkgdir/usr/lib/initcpio/install/raba"
-    install -Dm644 integration/mkinitcpio/hooks/raba   "$pkgdir/usr/lib/initcpio/hooks/raba"
-
-    # dracut, for the Arch users who have replaced mkinitcpio with it.
-    install -Dm755 integration/dracut/50raba/module-setup.sh \
-        "$pkgdir/usr/lib/dracut/modules.d/50raba/module-setup.sh"
-    install -Dm755 integration/dracut/50raba/raba-start.sh \
-        "$pkgdir/usr/lib/dracut/modules.d/50raba/raba-start.sh"
-
-    # systemd. Installed, not enabled: see raba.install.
-    local unit
-    for unit in integration/systemd/*.service; do
-        install -Dm644 "$unit" "$pkgdir/usr/lib/systemd/system/$(basename "$unit")"
-    done
-
-    # The other four init systems. Reference copies, because where they go and
-    # how they are enabled is the init system's business, not ours.
-    install -Dm755 integration/init/openrc-raba "$pkgdir/usr/share/raba/init/openrc-raba"
-    install -Dm755 integration/init/runit/raba/run    "$pkgdir/usr/share/raba/init/runit/run"
-    install -Dm755 integration/init/runit/raba/finish "$pkgdir/usr/share/raba/init/runit/finish"
-    install -Dm755 integration/init/s6/raba/run       "$pkgdir/usr/share/raba/init/s6/run"
-    install -Dm644 integration/init/dinit-raba        "$pkgdir/usr/share/raba/init/dinit-raba"
-
-    install -Dm644 man/raba.8        "$pkgdir/usr/share/man/man8/raba.8"
-    install -Dm644 man/raba-setup.8  "$pkgdir/usr/share/man/man8/raba-setup.8"
-    install -Dm644 man/raba-ctl.1    "$pkgdir/usr/share/man/man1/raba-ctl.1"
-    install -Dm644 man/raba.conf.5   "$pkgdir/usr/share/man/man5/raba.conf.5"
-
-    install -Dm644 LICENSE   "$pkgdir/usr/share/licenses/raba/LICENSE"
-    install -Dm644 README.md "$pkgdir/usr/share/doc/raba/README.md"
-    local doc
-    for doc in docs/integration.md docs/luks.md docs/secure-boot.md docs/security.md; do
-        install -Dm644 "$doc" "$pkgdir/usr/share/doc/raba/$(basename "$doc")"
-    done
+    make install-raba install-pacman-hook DESTDIR="$pkgdir"
 }
 
 package_raba-themes() {
@@ -122,19 +60,10 @@ package_raba-themes() {
     arch=('any')
     optdepends=('raba: the splash that plays them')
 
+    # Art adapted from fastfetch (MIT). Distribution logos are trademarks of
+    # their respective projects; themes/README.md ships with them and says so.
     cd "$pkgbase-$pkgver"
-
-    # Art is adapted from fastfetch (MIT). Distribution logos are trademarks of
-    # their respective projects; see themes/README.md, which ships with them.
-    local theme
-    for theme in themes/*.raba; do
-        # generic.raba belongs to the `raba` package: it is the fallback, and
-        # the splash must not stop working if this package is removed.
-        [ "$(basename "$theme")" = generic.raba ] && continue
-        install -Dm644 "$theme" "$pkgdir/usr/share/raba/themes/$(basename "$theme")"
-    done
-
-    install -Dm644 themes/README.md "$pkgdir/usr/share/doc/raba-themes/README.md"
+    make install-themes DESTDIR="$pkgdir"
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/raba-themes/LICENSE"
 }
 
@@ -144,9 +73,6 @@ package_raba-gen() {
     optdepends=('raba: the splash that plays what this builds')
 
     cd "$pkgbase-$pkgver"
-
-    install -Dm755 target/release/raba-gen "$pkgdir/usr/bin/raba-gen"
-    install -Dm644 man/raba-gen.1   "$pkgdir/usr/share/man/man1/raba-gen.1"
-    install -Dm644 man/raba-theme.5 "$pkgdir/usr/share/man/man5/raba-theme.5"
+    make install-gen DESTDIR="$pkgdir"
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/raba-gen/LICENSE"
 }
