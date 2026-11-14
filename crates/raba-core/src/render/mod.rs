@@ -83,22 +83,19 @@ impl Grid {
 
     /// A blank grid the size of a console.
     ///
-    /// Not [`Grid::new`], and the difference is the point. `new` refuses an axis
-    /// past [`limits::MAX_COLUMNS`] because a *canvas* that wide could not be
-    /// written to a `.raba` file. A console is not written anywhere: it is the
-    /// panel divided by the font, and a kernel is entitled to report 1920
-    /// columns. Refusing one used to mean `Player::new` returned `None` and the
-    /// splash silently did not appear — on the machines with the largest
-    /// screens, which are the ones most likely to be looked at.
+    /// [`Grid::new`] applies the format's canvas limits. A console is not subject
+    /// to them: its size is the panel divided by the loaded font, which may exceed
+    /// 1024 in either axis, and nothing about a screen is written to a file. The
+    /// allocation is bounded by total cells instead — [`limits::MAX_SCREEN_CELLS`],
+    /// which is the area of the largest canvas the format allows — so any shape
+    /// within that total is accepted.
     ///
-    /// So this never fails. It gives back the largest grid it can for the size
-    /// asked for, which is the size itself unless the console holds more cells
-    /// than [`limits::MAX_SCREEN_CELLS`] — a million characters, about twice
-    /// what an 8K panel with the smallest console font would come to — in which
-    /// case the axes are clamped and the art is drawn in the corner it can
-    /// reach. **Callers must read the size back off the grid** rather than
-    /// assume they got what they asked for: centring against a size that was
-    /// not used puts the art off the side of the screen.
+    /// Cannot fail: every console size must yield something to draw on. Past the
+    /// cell bound each axis is clamped to the canvas limit; an axis of zero is
+    /// taken as 1. See `docs/console-size.md`.
+    ///
+    /// Callers must read the size back off the returned grid. Centring against the
+    /// requested size would place art outside a grid that was clamped.
     #[must_use]
     pub fn screen(size: Size, palette: Palette) -> Grid {
         let (columns, lines) = (size.columns.max(1), size.lines.max(1));

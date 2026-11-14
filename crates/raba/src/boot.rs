@@ -531,19 +531,18 @@ impl<'a, C: Console> Session<'a, C> {
         let size = vt.size();
         if self.screen != Some(size) {
             self.screen = Some(size);
-            // No size can fail here, and that is deliberate: a console the
-            // kernel reports as enormous gets as much of itself as a grid can
-            // hold rather than no splash at all. See `Grid::screen`.
+            // Infallible by design: a console past the cell bound is clamped
+            // rather than refused, so there is no size to give up on. See
+            // `Grid::screen`.
             if let Some(player) = self.player.as_mut() {
                 player.resize(movie, size);
             }
         }
 
         if self.player.is_none() {
-            // The console cannot fail this — see `Grid::screen` — so what is
-            // left is a canvas no grid can be made at, which `decode` refuses
-            // before this code ever sees the movie. Kept as a second line of
-            // defence, and worded for the only thing it can now be about.
+            // Only the canvas can fail this — see `Grid::screen` for the
+            // console — and `decode` refuses such a canvas before this code
+            // sees the movie. Kept as a second line of defence.
             let Some(mut player) = Player::new(movie, size) else {
                 let why = format!(
                     "the theme's canvas is {}x{}, which is not a size art can be drawn at",

@@ -864,12 +864,9 @@ fn a_console_that_changes_size_is_redrawn_in_full_without_restarting_the_animati
     running.finish();
 }
 
-/// A console larger than a `Grid` may be used to end the run with
-/// `Outcome::CannotDraw`: `Player::new` returned `None` and the splash never
-/// appeared. It was the wrong answer — the machines that report the largest
-/// consoles are the ones with the best screens to put a splash on — and
-/// `Grid::screen` is the fix: as much of the console as a million cells will
-/// cover, and the art drawn in it.
+/// A console past the screen grid's cell bound is clamped, not refused: the art
+/// is drawn in the region a grid can cover. Until `Grid::screen` existed this
+/// ended the run with `Outcome::CannotDraw` and no splash appeared at all.
 #[test]
 fn a_console_too_large_for_a_grid_is_drawn_on_anyway() {
     let scratch = Scratch::new("enormous-console");
@@ -886,12 +883,11 @@ fn a_console_too_large_for_a_grid_is_drawn_on_anyway() {
     assert_eq!(console.log().restored, 1, "the terminal still goes back");
 }
 
-/// The size that is actually reachable: a 4K panel with a small font is 480
-/// columns, and a wider one is only a smaller font away. Nothing is clamped at
-/// 2000x60 — that is 120 000 cells, well inside what a screen grid may hold —
-/// so the art must be centred on the whole width rather than on the first 1024
-/// columns of it. Asserted by comparison, because the only number that means
-/// anything here is where the same theme lands on a narrower console.
+/// The reachable case: a 4K panel with a small font is 480 columns, and wider
+/// ones follow from smaller fonts. 2000x60 is 120 000 cells, well inside the
+/// bound, so nothing is clamped and the art must be centred on the full width.
+/// Asserted by comparison with a 1024-column console, since where the art lands
+/// is what distinguishes a full-width layout from a clamped one.
 #[test]
 fn a_console_wider_than_a_canvas_may_be_is_used_to_its_full_width() {
     let centre_of = |name: &str, columns: u16| -> u32 {

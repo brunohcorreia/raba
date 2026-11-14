@@ -59,9 +59,9 @@ pub struct Player {
 }
 
 impl Player {
-    /// Start a movie. `None` only if the *movie's* canvas is not one a grid can
-    /// be made at, which a decoded movie's never is — `decode` applies the same
-    /// bound. The console cannot fail this: see [`Grid::screen`].
+    /// Start a movie. `None` only if the movie's canvas exceeds the format's
+    /// limits, which `decode` already refuses; no console size can fail this, see
+    /// [`Grid::screen`].
     #[must_use]
     pub fn new(movie: &Movie, screen: Size) -> Option<Player> {
         // Art is authored at one size and played at whatever this machine has.
@@ -71,10 +71,9 @@ impl Player {
         // scrolled, which is the one thing a splash must not do.
         let current = Grid::new(movie.columns, movie.lines, movie.palette)?;
         let shown = Grid::screen(screen, movie.palette);
-        // The size the art is laid out against is the one that was actually
-        // allocated, not the one the console reported: they differ only on a
-        // console of more than a million cells, and centring against a size
-        // nothing was drawn at would put the art off the side of the screen.
+        // Lay the art out against the size that was allocated rather than the
+        // one the console reported. The two differ only past the cell bound,
+        // where centring on the reported size would place art off-screen.
         let screen = Size { columns: shown.columns(), lines: shown.lines() };
         Some(Player {
             screen,

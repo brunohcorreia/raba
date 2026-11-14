@@ -120,10 +120,9 @@ without saying so.
 Ceilings, enforced before any allocation: 16 MiB per file, 1024 columns, 1024 lines,
 65535 frames. The op count is bounded by the file size rather than separately.
 
-These bound a *canvas*, which is a thing that goes into a file. The screen it is
-drawn on is bounded differently — by total cells, not by either axis — because a
-console's shape is the kernel's business and a 1024-column ceiling on it meant no
-splash at all on a wide one. See [console-size.md](console-size.md).
+These bound a canvas. The screen a canvas is drawn on is bounded by total cells
+rather than per axis, and may exceed 1024 in either direction; see
+[console-size.md](console-size.md).
 
 ### Validation order
 
