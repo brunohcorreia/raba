@@ -13,6 +13,7 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
+use raba_core::decode;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
@@ -853,4 +854,29 @@ fn a_glyph_that_may_not_survive_setfont_is_a_warning_and_not_a_refusal() {
     assert!(output.status.success(), "an accented letter was refused: {}", stderr(&output));
     assert!(scratch.path("art.raba").exists());
     assert!(stderr(&output).contains("setfont"), "{}", stderr(&output));
+}
+
+#[test]
+fn a_recipe_that_chooses_its_own_colours_keeps_them_over_the_logos() {
+    // The other half of the rule above. fastfetch's logos carry the colours
+    // the distribution uses, and taking them is the right default — but a
+    // theme author who wrote `logo.colors` has already decided, and a build
+    // that silently replaced their choice with the upstream one would be a
+    // theme that changes appearance when the vendored logos are refreshed.
+    let scratch = Scratch::new("fastfetch-own-colours");
+    let recipe =
+        scratch.write("arch.toml", "[logo]\nsource = \"fastfetch:arch\"\ncolors = [5, 3]\n");
+    let output = gen(&["build", utf8(&recipe), "--allow-unsafe-glyphs"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        !stderr(&output).contains("logo.colors"),
+        "{}: nothing was inherited, so there is nothing to report",
+        stderr(&output)
+    );
+
+    let movie = decode(&std::fs::read(scratch.path("arch.raba")).expect("the built theme"))
+        .expect("a readable theme");
+    let used: std::collections::BTreeSet<u8> = movie.ops.iter().map(|op| op.fg).collect();
+    assert!(used.contains(&5), "{used:?}: the author's first colour is missing");
+    assert!(!used.contains(&14), "{used:?}: that is the logo's own colour, which was overridden");
 }

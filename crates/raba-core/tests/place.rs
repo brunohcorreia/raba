@@ -246,3 +246,21 @@ fn a_screen_too_small_for_any_grid_leaves_the_art_as_it_was() {
     let impossible = fit(&art, Size { columns: 20_000, lines: 20_000 });
     assert_eq!((impossible.columns(), impossible.lines()), (4, 2));
 }
+
+#[test]
+fn a_screen_bigger_than_the_format_leaves_the_art_as_it_was() {
+    // A terminal that reports an impossible size — an emulator mid-resize, a
+    // serial console answering 65535x65535 — must not take the splash with
+    // it. There is no grid to resample into at that size, so the honest
+    // answer is the art unchanged: drawn at its own size on a screen that is
+    // certainly big enough for it.
+    let source = filled(10, 4, '#');
+    let huge = resample(&source, Size { columns: u16::MAX, lines: u16::MAX });
+    assert_eq!((huge.columns(), huge.lines()), (10, 4), "it tried to make that grid");
+    assert_eq!(row(&huge, 0), row(&source, 0));
+
+    // Zero is the other end of the same story, and that one has an answer:
+    // the smallest grid there is.
+    let nothing = resample(&source, Size { columns: 0, lines: 0 });
+    assert_eq!((nothing.columns(), nothing.lines()), (1, 1));
+}

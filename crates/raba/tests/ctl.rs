@@ -352,3 +352,37 @@ fn socket_with_no_path_after_it_is_a_usage_error_and_not_a_command() {
     assert!(said.contains("--socket"), "{said:?}");
     assert!(said.contains("path"), "{said:?}");
 }
+
+#[test]
+fn quit_with_wait_stops_waiting_when_the_socket_goes_wrong_rather_than_hanging() {
+    // `quit --wait` is in an `ExecStartPre=` ahead of a display manager, so
+    // what it must never do is block the boot. It waits for end of file —
+    // but a socket can also go wrong, and bytes that are not UTF-8 are the
+    // reachable version of that: a different program on the path, or a reply
+    // cut mid-character. Either way the answer is the same as end of file:
+    // stop waiting, exit 0, let the greeter start.
+    let scratch = Scratch::new("quit-wait-garbage");
+    let path = scratch.socket();
+    let (ready, is_ready) = mpsc::channel();
+    let server = {
+        let path = path.clone();
+        std::thread::spawn(move || {
+            let listener = std::os::unix::net::UnixListener::bind(&path).expect("binding");
+            ready.send(()).expect("announcing");
+            if let Ok((mut stream, _)) = listener.accept() {
+                use std::io::{BufRead as _, BufReader, Write as _};
+                let mut request = String::new();
+                let mut reader = BufReader::new(stream.try_clone().expect("a second handle"));
+                let _ = reader.read_line(&mut request);
+                let _ = stream.write_all(b"+OK\n");
+                let _ = stream.write_all(&[0xff, 0xfe, 0xff, b'\n']);
+                let _ = stream.flush();
+            }
+        })
+    };
+    is_ready.recv_timeout(Duration::from_secs(5)).expect("server came up");
+
+    let output = ctl(&path, &["quit", "--wait"]);
+    let _ = server.join();
+    assert_eq!(code(&output), 0, "{}", String::from_utf8_lossy(&output.stderr));
+}

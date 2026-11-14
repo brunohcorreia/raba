@@ -205,20 +205,36 @@ and each arm of an `if` or a `match` is its own region. A conditional taken only
 way shows up as a missed region on the arm nobody ran, which is the question worth
 asking.
 
-Measured 13 November 2026, after the audit that this section is the result of:
+Measured 13 November 2026, after the audit that this section is the result of, with
+`scripts/vm-test.sh --coverage` run first so that the guest's own counters are in the
+merge:
 
 | what is counted | regions | lines |
 |---|---|---|
-| everything in `crates/` | 62% | 61% |
-| …without `raba-vmtest`, which only ever runs inside a VM | 74% | 78% |
-| …and without `vt/` and `boot.rs`, same reason | **81%** | **86%** |
+| everything in `crates/`, less the tests, the oracle and `raba-vmtest` | **96.1%** | **97.2%** |
+| `crates/raba/src/vt/mod.rs`, the half that needs a real console | 81.9% | 86.7% |
 
-The third row is the honest one, and the first row is the one a badge would show. The
-difference between them is the whole architecture: the parts that cannot be unit tested
-were pushed into thin shells on purpose (§1), and those shells are tested by tiers 3a,
-3b and 3c — a real kernel, three real distributions, five power cuts and seven sabotage
-cases — none of which writes a coverage profile. `vt/mod.rs` reads 0% here and is the
-most heavily exercised file in the project.
+The exclusions are listed with a reason each at the foot of `scripts/coverage.sh`; the
+short version is that the suite, the renderer's test oracle and the VM harness are
+instruments, not product, and counting them inflates the one number anybody reads.
+
+It did not start there. The first measurement was 62% / 61% overall and 81% / 86% after
+excluding `vt/` and `boot.rs` as unmeasurable, and both of those numbers were wrong for
+the same reason: **nothing that ran inside the virtual machine was being counted.** Two
+separate faults, found by disbelieving the number rather than by any test failing:
+
+- `crates/raba-vmtest` was never built with instrumentation, and it leaves through an
+  `isa-debug-exit` port write, which runs no `atexit` handler — so the guest wrote no
+  profile at all. Seventeen `vt_checks` were passing and measuring as untested.
+  `--coverage` now builds the harness instrumented too, the checks run in a child
+  process that exits normally, and the profile comes back over the serial line.
+- The staleness guard that decides whether the VM profile may be merged counted the
+  `#[cfg(test)]` sibling `tests.rs` files as guest sources. They cannot change a byte
+  of the guest binary's coverage map, so every host-side test edit was silently
+  throwing the VM profile away.
+
+Both are worth remembering as a shape: a coverage number that is too low is not a
+reason to write tests, it is a reason to ask what is not being counted.
 
 So the number is a search tool, not a score. Three things it found that nothing else
 had:
@@ -235,16 +251,26 @@ had:
   A splash that silently restarted at frame 0 could not say why.
 - **`write::replace_durably` had never been executed.** The variant with the `fsync`,
   which is the one that writes `/etc/raba/raba.conf`.
+- **Four shipped defects in the push from 87% to 96%**, each found by writing the test
+  for a line nothing reached: `Outro.Theme` was parsed and never loaded, `raba-gen
+  generate`'s size options silently substituted defaults, `raba --check` reported the
+  file's `MaxDuration` rather than the effective one, and a missing art file was
+  reported without naming the recipe that asked for it — which, in a `make` over a
+  directory of recipes, is a message you cannot act on. Six dead functions went the
+  other way and were deleted.
 
-What remains uncovered and is meant to:
+What remains uncovered, and why. The counts are missed *lines*, and they add up to
+the 155 the report prints:
 
-| | why |
-|---|---|
-| `crates/raba-vmtest` | it is the guest program; tier 3a *is* its test |
-| `raba/src/vt/`, `boot.rs` | a terminal and a boot; tiers 3a and 3b |
-| `report.rs`'s `/dev/kmsg` write | needs a kernel log; asserted in the VM instead |
-| `signals.rs`'s `sigaction` failures | the kernel would have to refuse a valid call |
-| the write-failed arm of `write::replace` | needs a disk to fill mid-call |
+| | lines | why |
+|---|---|---|
+| `vt/mod.rs`, `vt/ioctl.rs`, `signals.rs` | 35 | the error arm of an ioctl or a `sigaction` that the kernel would have to refuse one line after accepting the same call |
+| `boot.rs` | 20 | "cannot happen immediately after the thing that makes it impossible": the stall watchdog, the resume guards |
+| `raba-setup`'s `ThisMachine` and its prompt | 16 | the lines that delegate to the real machine, and the question put to a real stdin before rebuilding an initramfs on a TPM-sealed disk |
+| `if let Some(…)` and `let … else` guards that cannot fail | 47 | second lines of defence in `ansi.rs`, `life.rs`, `fire.rs`, `build.rs`, `compose.rs`, `place.rs`, `render/`, `play.rs`: a grid index bounded by the loop that produced it, a `.first()` on a `const` array |
+| root- or kernel-only runtime paths | 16 | a peer `uid` that is not ours, a `/dev/kmsg` write, a disk filling mid-`write`, a socket failing mid-reply, a terminal reporting a size of zero |
+| command-line arms with no reachable caller | 13 | a `--check` field combination the parser already excludes, a frame rate the parser already bounds |
+| `std`'s `thread_local` shim | 8 | not ours; it is inlined into our object and the ignore list cannot see it |
 
 A row leaving that table is a gap. A row joining it needs a reason written beside it.
 

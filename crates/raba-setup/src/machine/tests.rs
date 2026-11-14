@@ -439,3 +439,22 @@ fn a_boot_directory_that_cannot_be_read_is_an_error_that_names_it() {
     let why = images(&Root::new(path)).expect_err("a missing /boot is an error");
     assert!(why.contains("boot"), "{why}");
 }
+
+#[test]
+fn the_one_shipped_runner_tells_the_three_outcomes_apart() {
+    // Every decision in this module is made from a `Ran`, and every test here
+    // makes one up. That is the right way round — a machine with a sealed TPM
+    // cannot be arranged in a test suite — but it leaves the function that
+    // produces real ones unchecked, and the distinction it draws is load
+    // bearing: `Refused` means the program answered "no" and `Missing` means
+    // it was never there, and `raba-setup` reports those as different things.
+    // These three programs exist on every system this runs on.
+    assert_eq!(super::really_run("true", &[]), Ran::Said(String::new()));
+    assert_eq!(super::really_run("echo", &["hello"]), Ran::Said("hello\n".to_owned()));
+    assert_eq!(super::really_run("false", &[]), Ran::Refused);
+    assert_eq!(
+        super::really_run("raba-no-such-program-exists", &[]),
+        Ran::Missing,
+        "a program that is not installed is not a program that said no"
+    );
+}

@@ -284,3 +284,29 @@ fn the_three_that_crop_would_otherwise_have_been_resampled() {
         );
     }
 }
+
+#[test]
+fn colormix_in_256_colours_walks_the_cube_rather_than_the_sixteen_shades() {
+    // Every other generator is console-palette only, and the console is where
+    // they run. `colormix` is the one a person would point at a 256-colour
+    // terminal recording, so the Xterm256 path exists — and it is a different
+    // ramp, not the same one with more steps. If it ever fell back to the
+    // 16-colour code the only sign would be a gradient that bands.
+    let spec = Spec { palette: Palette::Xterm256, ..Spec::default() };
+    let movie = generate(Kind::Colormix, &spec);
+    assert_eq!(movie.palette, Palette::Xterm256);
+
+    let used: std::collections::BTreeSet<u8> =
+        grids(&movie).iter().flat_map(|g| g.cells().iter().map(|c| c.fg)).collect();
+    assert!(used.len() > 16, "a 256-colour ramp with {} colours in it", used.len());
+    assert!(
+        used.iter().all(|index| *index >= 16),
+        "{used:?}: these are cube indices, not the sixteen console colours"
+    );
+
+    // And the console palette still gets the console's colours.
+    let console = generate(Kind::Colormix, &Spec::default());
+    let used: std::collections::BTreeSet<u8> =
+        grids(&console).iter().flat_map(|g| g.cells().iter().map(|c| c.fg)).collect();
+    assert!(used.iter().all(|index| *index < 16), "{used:?}");
+}

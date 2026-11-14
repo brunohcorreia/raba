@@ -193,3 +193,32 @@ $1                `+oooo:";
     assert!(parsed.cells().iter().filter(|cell| cell.ch != ' ').all(|cell| cell.slot == 1));
     assert_eq!(parsed.slots_used(), vec![0, 1]);
 }
+
+#[test]
+fn art_past_the_formats_limits_says_how_big_it_was_and_what_fits() {
+    // 1024 cells in each direction. Reached by anybody converting a terminal
+    // recording or a wide log, and the message has to carry both the size
+    // that was offered and the one that would have worked.
+    let wide = format!("{}\n", "#".repeat(2000));
+    let outcome = parse(&wide);
+    assert!(matches!(outcome, Err(ArtError::TooLarge { columns: 2000, lines: 1 })), "{outcome:?}");
+
+    let tall = "#\n".repeat(2000);
+    let outcome = parse(&tall);
+    assert!(matches!(outcome, Err(ArtError::TooLarge { columns: 1, lines: 2000 })), "{outcome:?}");
+}
+
+#[test]
+fn a_line_longer_than_a_canvas_can_count_is_still_reported_in_full() {
+    // The canvas limits are u16s and so is every size in the format, so a line
+    // of more than 65 535 characters is refused by a different path from the
+    // one above — before the number can be narrowed. It has to come back out
+    // at its real size: "65535 columns" about a line of 70 000 would send the
+    // author looking for a limit they are nowhere near.
+    let enormous = format!("{}\n", "#".repeat(70_000));
+    let outcome = parse(&enormous);
+    assert!(
+        matches!(outcome, Err(ArtError::TooLarge { columns: 70_000, lines: 1 })),
+        "{outcome:?}"
+    );
+}

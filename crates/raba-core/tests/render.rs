@@ -280,3 +280,19 @@ fn a_cell_outside_the_canvas_is_nothing_rather_than_a_panic_or_a_wrap() {
     grid.set(0, 2, Cell { ch: '#', fg: 1, bg: 0 });
     assert_eq!(grid, before, "a write outside the canvas changed something inside it");
 }
+
+#[test]
+fn writing_outside_the_grid_says_no_rather_than_panicking() {
+    // This runs during boot. A frame that addresses a cell the canvas does not
+    // have is a decoder bug or a hand-built grid, and either way the splash
+    // dropping one character beats the machine stopping — but the caller is
+    // told, so the day it is a decoder bug there is something to assert on.
+    let mut grid = Grid::new(4, 2, Palette::Ansi16).unwrap();
+    let mark = Cell { ch: 'x', fg: 7, bg: 0 };
+    assert!(grid.set(3, 1, mark), "the last cell is inside");
+    assert!(!grid.set(4, 1, mark), "one column past the end");
+    assert!(!grid.set(0, 2, mark), "one line past the end");
+    assert!(!grid.set_index(8, mark), "and by flat index too");
+    assert_eq!(grid.cells().len(), 8, "nothing grew to make room");
+    assert_eq!(grid.cells().iter().filter(|cell| cell.ch == 'x').count(), 1);
+}

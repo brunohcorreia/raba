@@ -307,3 +307,130 @@ fn a_short_colour_row_is_padded_but_an_ambiguous_map_is_refused() {
     let text = error.to_string();
     assert!(text.contains('4') && text.contains('2'), "{text}");
 }
+
+/// A `.dur` whose header fields are set one at a time, for the tests that are
+/// about a header the builder above cannot express.
+fn header(fields: serde_json::Value) -> String {
+    let mut movie = serde_json::json!({
+        "formatVersion": 8,
+        "colorFormat": "256",
+        "encoding": "utf-8",
+        "name": "test",
+        "artist": "tests",
+        "framerate": 10.0,
+        "columns": 1,
+        "lines": 1,
+        "frames": [{
+            "frameNumber": 1,
+            "delay": 0.1,
+            "contents": ["a"],
+            "colorMap": straight(1, 1, [7, 0]),
+        }],
+    });
+    let (Some(movie), Some(fields)) = (movie.as_object_mut(), fields.as_object()) else {
+        panic!("both are objects");
+    };
+    for (key, value) in fields {
+        movie.insert(key.clone(), value.clone());
+    }
+    serde_json::json!({ "DurMovie": movie }).to_string()
+}
+
+#[test]
+fn a_framerate_or_a_delay_that_is_not_a_duration_falls_back_to_a_sane_pace() {
+    // Durdraw stores both as floating point, and a file that has been through
+    // another tool can carry a denormal, a huge number, or a rate so small that
+    // one frame lasts longer than the heat death. None of those may become a
+    // frame delay: `delay_ms` is a u16 of milliseconds and a nonsense value
+    // there is a splash that either flickers or stops.
+    let absurd = header(serde_json::json!({ "framerate": 5e-324 }));
+    let imported = dur::parse(gzip(&absurd).as_slice()).expect("convert");
+    assert_eq!(imported.movie.frames[0].delay_ms, 100, "1000/5e-324 is infinity");
+
+    // The frame's own delay overrides the rate, so it gets the same treatment.
+    let huge = header(serde_json::json!({
+        "framerate": 10.0,
+        "frames": [{
+            "frameNumber": 1,
+            "delay": 1e308,
+            "contents": ["a"],
+            "colorMap": straight(1, 1, [7, 0]),
+        }],
+    }));
+    let imported = dur::parse(gzip(&huge).as_slice()).expect("convert");
+    assert_eq!(
+        imported.movie.frames[0].delay_ms, 100,
+        "an overflowing delay falls back to the file's own rate"
+    );
+}
+
+#[test]
+fn a_file_in_an_encoding_that_is_not_utf_8_is_refused_by_name() {
+    // Durdraw can write CP437, and the contents of such a file are not the
+    // characters this importer would read out of them. Guessing would produce
+    // art full of the wrong glyphs; saying so lets a person re-export.
+    let text = header(serde_json::json!({ "encoding": "cp437" }));
+    assert_eq!(
+        dur::parse(gzip(&text).as_slice()).err(),
+        Some(DurError::UnsupportedEncoding("cp437".to_owned()))
+    );
+    // Spelt either way, the usual one is accepted.
+    for spelling in ["UTF-8", "utf8", "UTF8"] {
+        let text = header(serde_json::json!({ "encoding": spelling }));
+        assert!(dur::parse(gzip(&text).as_slice()).is_ok(), "{spelling} should be accepted");
+    }
+}
+
+#[test]
+fn a_canvas_of_no_size_is_refused_rather_than_imported_as_nothing() {
+    for (columns, lines) in [(0, 1), (1, 0), (0, 0)] {
+        let text = header(serde_json::json!({ "columns": columns, "lines": lines }));
+        assert_eq!(
+            dur::parse(gzip(&text).as_slice()).err(),
+            Some(DurError::EmptyCanvas),
+            "{columns}x{lines}"
+        );
+    }
+}
+
+#[test]
+fn a_canvas_past_the_formats_limit_says_how_big_it_was() {
+    // The reader allocates columns × lines cells per frame, so this is the
+    // bound that keeps a hostile file from being a memory bomb. The numbers go
+    // in the message because the person holding the file can see the drawing
+    // and not the limit.
+    let text = header(serde_json::json!({ "columns": 2000, "lines": 4 }));
+    assert_eq!(
+        dur::parse(gzip(&text).as_slice()).err(),
+        Some(DurError::CanvasTooLarge { columns: 2000, lines: 4 })
+    );
+    let text = header(serde_json::json!({ "columns": 4, "lines": 2000 }));
+    assert_eq!(
+        dur::parse(gzip(&text).as_slice()).err(),
+        Some(DurError::CanvasTooLarge { columns: 4, lines: 2000 })
+    );
+}
+
+#[test]
+fn more_frames_than_the_format_holds_is_refused_with_the_count() {
+    // 65 535 is what the frame index in a `.raba` file can address. A file
+    // over it must be refused here, where the number can still be reported,
+    // rather than silently truncated into art that stops halfway.
+    let too_many: Vec<serde_json::Value> = (0..=65_536)
+        .map(|index| {
+            serde_json::json!({
+                "frameNumber": index + 1,
+                "delay": 0.1,
+                "contents": ["a"],
+                "colorMap": straight(1, 1, [7, 0]),
+            })
+        })
+        .collect();
+    let count = too_many.len();
+    let text = header(serde_json::json!({ "frames": too_many }));
+    assert_eq!(
+        dur::parse(gzip(&text).as_slice()).err(),
+        Some(DurError::TooManyFrames(count)),
+        "the message has to carry the count: the file does not say it anywhere"
+    );
+}

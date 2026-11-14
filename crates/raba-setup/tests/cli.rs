@@ -702,3 +702,35 @@ fn a_configuration_problem_goes_to_stderr_and_does_not_stop_the_report() {
     assert!(output.status.success(), "a stray key failed the whole report");
     assert!(stdout(&output).contains("initramfs:"), "{}", stdout(&output));
 }
+
+#[test]
+fn a_configuration_problem_goes_to_stderr_and_does_not_stop_the_freeze() {
+    // This runs inside somebody's `mkinitcpio -P`. A configuration that is
+    // wrong in places must produce an image with a splash *and* a warning, not
+    // a failed kernel update — so the complaint goes to stderr, where a hook's
+    // output goes, and the frozen configuration still goes to stdout.
+    let scratch = Scratch::new("freeze-complains");
+    scratch.theme("arch");
+    scratch.config("[Boot]\nTheme=arch\nTty=sixty-four\nWhatever=1\n");
+    let output = setup(&scratch, &["--freeze"]);
+
+    assert!(output.status.success(), "a half-broken file failed the freeze: {}", stderr(&output));
+    assert!(stdout(&output).contains("[Boot]"), "nothing was frozen");
+    assert!(stdout(&output).contains("Theme="), "the theme did not reach the image");
+    let said = stderr(&output);
+    assert!(said.contains("Tty"), "{said:?}: the bad key is not named");
+    assert!(said.contains("sixty-four"), "{said:?}: the bad value is not quoted");
+    assert!(said.contains("Whatever"), "{said:?}: the unknown key is not mentioned");
+}
+
+#[test]
+fn print_files_complains_the_same_way_and_still_prints_the_art() {
+    let scratch = Scratch::new("print-files-complains");
+    scratch.theme("arch");
+    scratch.config("[Boot]\nTheme=arch\nShowDelay=soon\n");
+    let output = setup(&scratch, &["--print-files"]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(stdout(&output).contains("arch.raba"), "{}", stdout(&output));
+    assert!(stderr(&output).contains("ShowDelay"), "{}", stderr(&output));
+}

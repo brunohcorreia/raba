@@ -731,3 +731,39 @@ fn the_real_host_reports_what_actually_happened() {
     assert!(looked.generators.is_empty());
     assert!(matches!(looked.tpm, machine::Tpm::Unknown(_)), "{:?}", looked.tpm);
 }
+
+#[test]
+fn a_configuration_file_that_cannot_be_read_stops_set_theme_before_it_writes() {
+    // Not "there is no file" — that is allowed, and `set_theme` creates one.
+    // This is a file that exists and will not open, which on a running system
+    // means permissions and here means a directory sitting where `raba.conf`
+    // should be. Either way, writing over it blind is how a half-readable
+    // /etc becomes an unreadable one.
+    let scratch = Scratch::new("unreadable-config").theme("arch");
+    std::fs::create_dir_all(scratch.at("raba.conf")).expect("something in the way");
+    let mut host = Machine::new().into_host();
+    let why = setup(&scratch, &mut host, &["--set-theme", "arch", "--yes"])
+        .expect_err("an unreadable configuration is a failure");
+    assert!(why.contains("raba.conf"), "{why}");
+    assert!(host.wrote().is_none(), "it wrote over a file it could not read");
+    assert!(host.ran().is_empty(), "it rebuilt an image for a theme it never set");
+}
+
+#[test]
+fn an_answer_that_is_not_text_is_not_a_yes() {
+    // The prompt is read from whatever stdin is, and in a hook that can be a
+    // pipe carrying anything. `read_line` fails on bytes that are not UTF-8,
+    // and a failed read must come out as "no": the question being answered is
+    // whether to rebuild an initramfs that will then ask for a passphrase at
+    // every boot, and the one answer that must never be inferred is yes.
+    assert!(!super::answered_yes(&mut &b"\xff\xfe not text\n"[..]));
+    // End of file — `raba-setup </dev/null` — is the same answer.
+    assert!(!super::answered_yes(&mut &b""[..]));
+    // And the ones that are a yes still are.
+    for yes in ["y\n", "Y\n", "yes\n", "YES\n", " yes \n"] {
+        assert!(super::answered_yes(&mut yes.as_bytes()), "{yes:?}");
+    }
+    for no in ["n\n", "\n", "no\n", "yeah\n", "sure\n"] {
+        assert!(!super::answered_yes(&mut no.as_bytes()), "{no:?}");
+    }
+}

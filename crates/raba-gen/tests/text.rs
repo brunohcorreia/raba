@@ -95,3 +95,35 @@ fn text_is_never_resampled() {
     let imported = text::parse(b"hello", &Options::default()).expect("should import");
     assert!(!raba_core::render::resamples(&imported.movie));
 }
+
+#[test]
+fn text_too_large_for_a_canvas_says_which_axis_and_what_the_limit_is() {
+    // 1024 in each direction, from the format. A `convert` of a log file or a
+    // minified blob is how this is reached in practice, and the answer has to
+    // be a sentence rather than a silently cropped theme.
+    let wide = format!("{}\n", "x".repeat(2000));
+    match text::parse(wide.as_bytes(), &Options::default()) {
+        Err(TextError::TooWide { columns }) => assert_eq!(columns, 2000),
+        other => panic!("{other:?}"),
+    }
+
+    let tall = "x\n".repeat(2000);
+    match text::parse(tall.as_bytes(), &Options::default()) {
+        Err(TextError::TooTall { lines }) => assert_eq!(lines, 2000),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn a_file_of_nothing_but_blank_lines_is_empty_and_not_a_canvas_of_spaces() {
+    // Trailing blanks are stripped, so this reaches the "no rows" refusal; a
+    // file whose only line is empty reaches the "no columns" one. Both are
+    // `Empty`, and both have to be refusals rather than a 0x0 theme that
+    // encodes fine and draws nothing.
+    for nothing in ["", "\n", "\n\n\n", "   \n", "\r\n\r\n"] {
+        match text::parse(nothing.as_bytes(), &Options::default()) {
+            Err(TextError::Empty) => {}
+            other => panic!("{nothing:?} gave {other:?}"),
+        }
+    }
+}

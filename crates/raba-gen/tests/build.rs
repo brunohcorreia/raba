@@ -266,3 +266,54 @@ fn the_art_source_uses_no_colours_the_console_lacks() {
     // brightness. See docs/format.md.
     assert!(built.movie.ops.iter().all(|op| op.bg <= 7));
 }
+
+#[test]
+fn a_spinner_with_no_frames_is_refused_rather_than_built_as_a_still_picture() {
+    // `spinner.style = "custom"` with an empty `spinner.frames` reaches here.
+    // Building it would give a theme that animates nothing and looks like a
+    // hung splash.
+    let recipe = Recipe {
+        spinner: Some(SpinnerSpec {
+            frames: Vec::new(),
+            fg: 7,
+            position: Position::Below,
+            gap: 0,
+            period: None,
+        }),
+        ..Recipe::default()
+    };
+    let why = build("##\n##\n", &recipe).expect_err("an empty spinner is refused");
+    assert!(why.to_string().contains("spinner"), "{why}");
+}
+
+#[test]
+fn a_period_equal_to_the_number_of_steps_is_the_spinner_already_written() {
+    // `period = 4` on a four-step spinner asks for one frame per step, which
+    // is what the spinner already is. The holding code must notice and leave
+    // it alone: repeating each step once is not a no-op if it is done by
+    // rebuilding the list, and a bug there shows up as a spinner that runs at
+    // half speed in every theme that states its period.
+    let steps = ["|", "/", "-", "\\"];
+    let spelt_out = Recipe {
+        spinner: Some(SpinnerSpec {
+            frames: steps.iter().map(|s| (*s).to_owned()).collect(),
+            fg: 7,
+            position: Position::Overlay,
+            gap: 0,
+            period: Some(steps.len()),
+        }),
+        ..Recipe::default()
+    };
+    let left_alone = Recipe {
+        spinner: Some(SpinnerSpec { period: None, ..spelt_out.spinner.clone().unwrap() }),
+        ..Recipe::default()
+    };
+    let with_period = build("$1#", &spelt_out).unwrap();
+    let without = build("$1#", &left_alone).unwrap();
+    assert_eq!(with_period.movie.frames.len(), steps.len());
+    assert_eq!(
+        encode(&with_period.movie),
+        encode(&without.movie),
+        "stating the period it already has changed the file"
+    );
+}

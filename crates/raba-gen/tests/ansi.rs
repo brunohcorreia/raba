@@ -442,3 +442,54 @@ fn a_file_that_is_only_blank_lines_is_empty_rather_than_a_canvas_of_spaces() {
 fn blank_rows_at_the_end_are_dropped_and_blank_rows_in_the_middle_are_not() {
     assert_eq!(screen(b"top\n\n\nbottom\n\n\n\n"), vec!["top", "", "", "bottom"]);
 }
+
+#[test]
+fn a_sauce_record_that_says_eighty_columns_says_nothing_new() {
+    // The notes are what a person has to read before trusting the import, so
+    // every line in there has to be worth reading. Eighty is the width this
+    // importer already assumes; printing "SAUCE says the art is 80 columns
+    // wide" trains people to skip the list that also says "blinking was
+    // dropped".
+    let mut bytes = b"art\x1a".to_vec();
+    let mut sauce = vec![0u8; 128];
+    sauce[0..7].copy_from_slice(b"SAUCE00");
+    sauce[96] = 80; // TInfo1: the default width, stated outright
+    bytes.extend_from_slice(&sauce);
+
+    let imported = ansi::parse(&bytes, &Options::default()).expect("should import");
+    assert_eq!(imported.movie.columns, 80);
+    assert!(
+        !imported.notes.iter().any(|note| note.contains("columns wide")),
+        "{:?}: the default width is not news",
+        imported.notes
+    );
+}
+
+#[test]
+fn a_sauce_record_that_claims_a_comment_block_that_is_not_there_keeps_the_art() {
+    // The comment block is found by counting back from the SAUCE record, so a
+    // file whose comment count is wrong — truncated, or written by a tool that
+    // miscounted — points that search into the middle of the drawing. Nothing
+    // may be stripped unless the "COMNT" marker is actually at the spot.
+    let mut bytes = b"the art itself, sixty-four characters of it or thereabouts".to_vec();
+    bytes.resize(80, b'#');
+    bytes.push(0x1a);
+    let mut sauce = vec![0u8; 128];
+    sauce[0..7].copy_from_slice(b"SAUCE00");
+    sauce[104] = 1; // one comment line, which this file does not actually have
+    bytes.extend_from_slice(&sauce);
+
+    let imported = ansi::parse(&bytes, &Options::default()).expect("should import");
+    assert!(rows(&imported)[0].starts_with("the art itself"), "{:?}", rows(&imported));
+    assert!(rows(&imported)[0].ends_with('#'), "{:?}: art was eaten", rows(&imported));
+}
+
+#[test]
+fn an_sgr_with_no_parameters_is_a_reset() {
+    // `ESC[m` is how most art turns colour off, and it is the same as
+    // `ESC[0m`. Reading it as "no parameters, nothing to do" leaves the rest
+    // of the drawing in whatever colour the last sequence set.
+    let imported = parsed(b"\x1b[31;44mred\x1b[mplain");
+    assert_eq!(colour_at(&imported, 0, 0), (1, 4), "the colour it did ask for");
+    assert_eq!(colour_at(&imported, 3, 0), (7, 0), "and back to the default");
+}

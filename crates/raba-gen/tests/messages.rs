@@ -73,7 +73,14 @@ fn composition_refusals_name_the_overlay_and_the_step_that_does_not_fit() {
 fn recipe_refusals_say_which_key_was_wrong_and_what_it_accepts() {
     says(&RecipeError::Toml("expected a value at line 4".to_owned()), &["line 4"]);
     says(&RecipeError::BadSource { got: "carrier-pigeon:arch".to_owned() }, &["carrier-pigeon"]);
-    says(&RecipeError::ArtMismatch { source: "inline".to_owned() }, &["inline"]);
+    // Both halves: "inline with no art" and "art with a source that is not
+    // inline" are opposite mistakes and the same variant, and the message has
+    // to say which one was made — one of them means the art is being ignored.
+    says(&RecipeError::ArtMismatch { source: "inline".to_owned() }, &["inline", "empty"]);
+    says(
+        &RecipeError::ArtMismatch { source: "fastfetch:arch".to_owned() },
+        &["fastfetch:arch", "ignored"],
+    );
     says(&RecipeError::BadPalette { got: 64 }, &["64"]);
     // The known list, because a typo in a spinner name is otherwise a guessing
     // game against a set the recipe format never shows anywhere.
@@ -84,7 +91,10 @@ fn recipe_refusals_say_which_key_was_wrong_and_what_it_accepts() {
         },
         &["whirl", "dots", "line"],
     );
-    says(&RecipeError::FramesMismatch { style: "dots".to_owned() }, &["dots"]);
+    // Likewise: frames with the wrong style, and the custom style with no
+    // frames. The fix is different each way round.
+    says(&RecipeError::FramesMismatch { style: "dots".to_owned() }, &["dots", "custom"]);
+    says(&RecipeError::FramesMismatch { style: "custom".to_owned() }, &["custom", "empty"]);
     says(
         &RecipeError::BadPosition { field: "logo.x", got: "middle".to_owned() },
         &["logo.x", "middle"],

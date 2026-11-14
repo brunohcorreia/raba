@@ -23,7 +23,7 @@ use raba_core::render::{best_fit, resamples};
 use raba_core::surface::{Size, Surface};
 use raba_core::testing::Terminal;
 use raba_core::{apply, Cell, Frame, Grid, Movie, Op, Palette, Scaling};
-use raba_term::play::Player;
+use raba_term::play::{play, Player};
 use std::io;
 
 /// Collects what was presented, one `Vec` per frame, and lies about its size on
@@ -149,4 +149,17 @@ fn a_resize_does_not_restart_the_animation() {
 
     player.resize(&movie, Size { columns: 100, lines: 30 }).unwrap();
     assert_eq!((player.frame(), player.round()), (frame, round));
+}
+
+#[test]
+fn a_console_wider_than_the_format_can_describe_draws_nothing_at_all() {
+    // `limits::MAX_COLUMNS` is 1024 and a `Grid` cannot be made past it, so a
+    // surface that reports more than that has no screen buffer to compose
+    // into. The contract is that `play` gives up quietly — a splash that does
+    // not appear, not a boot that stops — and this is the test that says so,
+    // because the alternative shape (an `Err`, or a panic in `unwrap`) would
+    // be the same bug at a worse time.
+    let mut recorder = Recorder { size: Size { columns: 2000, lines: 25 }, frames: Vec::new() };
+    play(&mut recorder, &movie(), 1).expect("giving up is not a failure");
+    assert!(recorder.frames.is_empty(), "it drew into a grid it could not have");
 }

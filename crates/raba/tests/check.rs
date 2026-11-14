@@ -707,3 +707,39 @@ fn previewing_a_file_that_is_not_there_or_is_not_a_theme_names_it() {
     assert!(!refused.status.success());
     assert!(String::from_utf8_lossy(&refused.stderr).contains("junk.raba"), "{refused:?}");
 }
+
+#[test]
+fn leaving_out_the_path_overrides_is_the_same_as_naming_the_documented_defaults() {
+    // Every other test here points `--socket` and `--state` inside its own
+    // scratch directory so that nothing touches the machine, which leaves the
+    // configuration an actual boot uses — neither flag, because the initramfs
+    // passes neither — as the one no test covers. `--check` reads and prints;
+    // it binds nothing and writes nothing, so it is where the two can be
+    // compared. If a default ever drifts from `/run/raba.sock`, the control
+    // socket moves and `raba-ctl` talks to nothing.
+    let scratch = Scratch::new("default-paths");
+    scratch.write("raba.conf", "[Boot]\nTheme=nothing-here\n");
+    let common = |extra: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_raba"))
+            .arg("--config")
+            .arg(scratch.path("raba.conf"))
+            .arg("--defaults")
+            .arg(scratch.path("raba.defaults"))
+            .arg("--themes")
+            .arg(scratch.path("themes"))
+            .arg("--cmdline")
+            .arg(scratch.path("cmdline"))
+            .arg("--os-release")
+            .arg(scratch.path("os-release"))
+            .arg("--check")
+            .args(extra)
+            .output()
+            .expect("running raba")
+    };
+    let silent = common(&[]);
+    let spelt_out = common(&["--socket", "/run/raba.sock", "--state", "/run/raba.state"]);
+
+    assert_eq!(stdout(&silent), stdout(&spelt_out));
+    assert_eq!(silent.status.code(), spelt_out.status.code());
+    assert!(!scratch.path("raba.sock").exists(), "--check bound a socket");
+}

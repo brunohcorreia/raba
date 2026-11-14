@@ -799,3 +799,91 @@ fn a_key_that_belongs_to_another_section_is_refused_where_it_does_not_belong() {
     assert!(said.contains("Theme"), "{said:?}");
     assert!(said.contains("Progress"), "{said:?}");
 }
+
+#[test]
+fn every_setting_with_a_fixed_set_of_values_prints_back_the_spelling_it_accepts() {
+    // `Display` here is what `raba --check` prints and what `--freeze` writes
+    // into the initramfs, which `raba` then reads back. So a `Display` that
+    // disagreed with `parse` would be a configuration this program wrote and
+    // cannot read — and the generated copy is the one that runs at boot.
+    let cases: Vec<(String, &str)> = vec![
+        (Style::Pulse.to_string(), "Progress.Style"),
+        (Style::Bar.to_string(), "Progress.Style"),
+        (Style::Percent.to_string(), "Progress.Style"),
+        (Source::Ctl.to_string(), "Progress.Source"),
+        (Source::Time.to_string(), "Progress.Source"),
+        (Source::None.to_string(), "Progress.Source"),
+        (Position::Above.to_string(), "Progress.Position"),
+        (Position::Below.to_string(), "Progress.Position"),
+        (Mode::Retain.to_string(), "Handoff.Mode"),
+        (Mode::Clear.to_string(), "Handoff.Mode"),
+        (Level::Error.to_string(), "Log.Level"),
+        (Level::Warn.to_string(), "Log.Level"),
+        (Level::Info.to_string(), "Log.Level"),
+        (Level::Debug.to_string(), "Log.Level"),
+    ];
+    for (spelled, key) in cases {
+        assert!(!spelled.is_empty(), "{key} printed nothing");
+        let (section, name) = key.split_once('.').expect("a dotted key");
+        let text = format!("[{section}]\n{name} = {spelled}\n");
+        let (_, problems) = parse(&text);
+        assert!(problems.is_empty(), "{key} = {spelled} was written and not read: {problems:?}");
+    }
+}
+
+#[test]
+fn a_configuration_path_that_cannot_be_opened_is_reported_rather_than_skipped() {
+    // Absent is normal and silent. Present-but-unreadable is neither: the file
+    // says something, we cannot see what, and booting on the defaults while
+    // saying nothing means a person who edited `raba.conf` watches their
+    // change have no effect with no clue why. A regular file where a directory
+    // should be is the reproducible version of it — `ENOTDIR` rather than a
+    // permission bit, so the test says the same thing when the suite runs as
+    // root, which it does inside the VM harness.
+    let scratch = Scratch::new("unreadable");
+    scratch.write("in-the-way", "not a directory\n");
+    let mut places = scratch.places();
+    places.config = scratch.path("in-the-way").join("raba.conf");
+
+    let startup = config::start(&places);
+    let problems = &startup.problems;
+    let [problem] = problems.as_slice() else { panic!("exactly one problem: {problems:?}") };
+    assert_eq!(problem.file, places.config);
+    assert_eq!(problem.line, 0, "there is no line to blame: the file never opened");
+    assert!(!problem.text.is_empty(), "the operating system's reason is the whole message");
+    // And it still booted, on the defaults.
+    assert_eq!(startup.config.boot.theme, Theme::Auto);
+}
+
+#[test]
+fn junk_between_the_settings_does_not_move_where_a_setting_is() {
+    // `placement` is what `raba-setup --set-theme` uses to rewrite the line
+    // that sets a theme, in a file it did not write. Anything that is not a
+    // header and not a pair — a stray word, an unterminated bracket, a
+    // comment, a blank — has to be stepped over while still being counted, or
+    // the rewrite lands on the wrong line and the edit eats somebody's
+    // configuration.
+    let text = concat!(
+        "# a comment\n",          // 1
+        "stray words\n",          // 2
+        "[Unterminated\n",        // 3
+        "Theme = not-this-one\n", // 4  (inside the unknown section)
+        "[Boot]\n",               // 5
+        "   \n",                  // 6
+        "= no key\n",             // 7
+        "Theme = first\n",        // 8
+        "nonsense again\n",       // 9
+        "Theme = second\n",       // 10
+    );
+    let found = config::placement(text, "Boot", "Theme");
+    assert_eq!(found.header, Some(5));
+    assert_eq!(found.lines, vec![8, 10], "both settings, in file order");
+    assert_eq!(found.effective(), Some(10), "the last one is the one that counts");
+
+    // A file that is nothing but junk has nowhere to put a setting, and says so
+    // rather than offering line 1.
+    let nothing = config::placement("stray\n\n# words\n", "Boot", "Theme");
+    assert_eq!(nothing.header, None);
+    assert!(nothing.lines.is_empty());
+    assert_eq!(nothing.effective(), None);
+}

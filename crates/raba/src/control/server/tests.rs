@@ -190,3 +190,30 @@ fn a_bind_that_cannot_be_moved_into_place_leaves_nothing_of_ours_behind() {
         .collect();
     assert!(left.is_empty(), "a staging socket was left behind: {left:?}");
 }
+
+/// The same flood, newline-terminated — which is what a script writing to the
+/// socket with `echo` actually sends. The draining loop stops at that newline
+/// rather than reading on to its byte limit, and the point of draining at all
+/// is this assertion: the client gets the `-ERR too long` the protocol
+/// promises, not the `ECONNRESET` that closing a socket with unread bytes in
+/// it would produce.
+#[test]
+fn an_oversized_request_that_ends_in_a_newline_still_gets_its_answer() {
+    let scratch = Scratch::new("toolong-newline");
+    let listener = Listener::bind(scratch.socket()).expect("binding");
+    let path = listener.path().to_path_buf();
+    let client = std::thread::spawn(move || {
+        let flood = "message ".to_owned() + &"A".repeat(MAX_REQUEST * 2) + "\n";
+        send(&path, &flood)
+    });
+    let mut connection = loop {
+        if let Some(connection) = listener.accept() {
+            break connection;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    };
+    assert_eq!(connection.request().expect("reading"), Err(Rejection::TooLong));
+    connection.reply(&Reply::Failed(Rejection::TooLong)).expect("replying");
+    drop(connection);
+    assert_eq!(client.join().expect("client"), "-ERR too long\n");
+}
