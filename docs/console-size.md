@@ -133,7 +133,7 @@ It would solve a real problem. [glyphs.md](glyphs.md) exists entirely because RA
 cannot know what font is loaded, so it restricts itself to the intersection of the
 kernel's built-in CP437 and the fonts distributions load over it — a few hundred
 characters. A font RABA loaded itself would be a font RABA knew, and the whole
-safe/unreliable/unsafe distinction would collapse into "whatever we shipped".
+safe/unreliable/unsafe distinction would collapse into "whatever the package ships".
 
 It would also make the canvas a choice rather than a discovery: art could state the
 grid it wants and get it.

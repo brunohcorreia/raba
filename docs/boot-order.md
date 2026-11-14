@@ -17,7 +17,7 @@ duplicate parameters.
 
 This is the only ordering rule in the kernel command line that affects a splash.
 
-### How much `quiet` do we actually want
+### How much of `quiet` a splash needs
 
 printk severity levels, lowest number is most severe:
 
@@ -61,11 +61,11 @@ So while RABA draws, kernel messages go to a scratch terminal instead of over th
 
 The setter returns the previous target, so restoring is exact rather than assumed.
 
-This is strictly better than the `printk` sysctl approach for our purposes, and it is
+This is strictly better than the `printk` sysctl approach here, and it is
 what the implementation should use. Lowering the log level stays as a fallback for a
 console where the ioctl is unavailable.
 
-> **Tradeoff to be honest about:** redirection moves *everything*, including a genuine
+> **Tradeoff:** redirection moves *everything*, including a genuine
 > emergency. A kernel panic takes the console regardless, so the true catastrophes still
 > surface. For everything between, the escape valve is `Boot.Timeout`, which reveals the
 > console rather than exiting — see [coexistence.md](coexistence.md).
@@ -82,7 +82,7 @@ root=UUID=… rw cryptdevice=UUID=…:root quiet systemd.show_status=false vt.gl
 | `loglevel=3` | stricter: hides errors too. Optional |
 | `systemd.show_status=false` | suppress systemd's unit status lines |
 | `vt.global_cursor_default=0` | hide the blinking cursor |
-| `raba.enable=0` | our kill switch |
+| `raba.enable=0` | the kill switch |
 
 `raba.enable=0` follows the `plymouth.enable=0` convention. The kernel does not
 recognise it, so it is passed through to userspace; RABA reads `/proc/cmdline` directly.
@@ -168,7 +168,7 @@ needed, nothing to get wrong. Costs you the splash during the prompt.
 | hook | why |
 |---|---|
 | `kms` | the DRM driver, so the console is at final resolution |
-| `consolefont` | a larger font must be loaded before we measure the terminal |
+| `consolefont` | a larger font must be loaded before the terminal is measured |
 | `keyboard`, `keymap` | needed by `encrypt`; harmless but conventional to keep together |
 
 `consolefont` is the one people miss. It is also the fix for the tiny-logo-on-4K problem
@@ -237,7 +237,7 @@ wrong size.
 **The firmware logo.** UEFI publishes the OEM logo through the BGRT ACPI table, and
 `CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER` keeps it on screen until something writes
 to the console. The first thing RABA draws destroys it. Plymouth has
-`UseFirmwareBackground` for people who care; in text mode we cannot preserve it. Documented
+`UseFirmwareBackground` for people who care; in text mode it cannot be preserved. Documented
 so a future "my vendor logo disappears" report is not investigated from scratch.
 
 ### Covering the gap before us

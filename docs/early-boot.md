@@ -31,7 +31,8 @@ root mounted, switch_root
 display manager
 ```
 
-So the earliest practical point is "as soon as our hook runs". Getting there means:
+The earliest practical point is therefore "as soon as the RABA hook runs". Getting
+there means:
 
 - being in the initramfs, as early in the hook order as possible
 - a framebuffer console that exists before the real GPU driver loads — on UEFI,
@@ -42,7 +43,7 @@ So the earliest practical point is "as soon as our hook runs". Getting there mea
 Below that floor you would need either a kernel patch — the in-kernel bootsplash series
 was proposed and not merged — or the bootloader. Which leads to:
 
-### The bootloader can cover the gap before us
+### The bootloader can cover the gap before that
 
 GRUB can display a background image, and other bootloaders have equivalents. Setting that
 image to the **first frame** of the animation means the screen shows the right thing from
@@ -54,10 +55,10 @@ this purpose.
 
 Entirely optional, and it degrades to "splash starts slightly later" if unused.
 
-## What runs before us: PID 1
+## What runs before RABA: PID 1
 
-The question "can we run before PID 1" has a clean answer: **no, and nothing can.** PID 1
-is by definition the first userspace process. Everything before it is kernel or firmware.
+"Can a splash run before PID 1" has a clean answer: **no, and nothing can.** PID 1 is by
+definition the first userspace process. Everything before it is kernel or firmware.
 
 A normal boot has **two** PID 1s:
 
@@ -80,7 +81,7 @@ as PID 1. Our hook is a function *inside* that script, so RABA is spawned direct
 So RABA is always a child of PID 1, in both halves of the boot. There is no earlier
 userspace position to occupy.
 
-### The inits we have to work with
+### The init systems in scope
 
 | PID 1 | used by |
 |---|---|
@@ -93,8 +94,8 @@ userspace position to occupy.
 | busybox init | Alpine, embedded |
 | GNU Shepherd | Guix |
 
-What they share is the only thing we need: they start processes. RABA's design
-deliberately requires nothing beyond that — no dependency ordering, no socket activation,
+What they share is the only capability RABA needs: they start processes. The design
+requires nothing beyond that — no dependency ordering, no socket activation,
 no cgroup semantics — which is what makes the list above a documentation problem rather
 than an engineering one.
 
@@ -116,7 +117,7 @@ dedicated `plymouth-switch-root.service` that re-roots the daemon onto `/sysroot
 it is systemd-specific, and it has a known upstream bug where `/dev` is not yet bind
 mounted under `/sysroot` at that moment.
 
-Copying that gives us a systemd-only solution to an agnostic requirement.
+Copying it would give a systemd-only solution to an init-agnostic requirement.
 
 ### What a survivor's `/run` actually is
 
@@ -147,7 +148,7 @@ Nothing to fix in the program: a process cannot climb out of a root directory it
 been left holding. What this changes is the diagnosis, and `docs/troubleshooting.md`
 should not send anybody to the state file to answer "is it alive".
 
-## Instead: be resumable, and stop caring whether we died
+## The alternative: be resumable, and treat being killed as routine
 
 The state RABA needs to continue is tiny:
 
@@ -168,13 +169,14 @@ start
 
 Now survival is an optimisation rather than a requirement:
 
-- **If we survive the switch** — nothing happens, the loop continues. Best case, free.
-- **If we are killed** — the next instance resumes on the same VT at the same frame. The
-  screen holds the last frame in the meantime, because nothing cleared it. Visually this
-  is a brief pause, not a flash of black.
+- **The process survives the switch** — nothing happens and the loop continues. Best
+  case, and free.
+- **The process is killed** — the next instance resumes on the same VT at the same
+  frame. The screen holds the last frame in the meantime, because nothing cleared it:
+  visually a brief pause, not a flash of black.
 
-The same mechanism absorbs every other way the process can die: an OOM kill, a crash, a
-`SIGKILL` from an init system we did not anticipate. **Being killed stops being an
+The same mechanism absorbs every other way the process can die — an OOM kill, a crash, a
+`SIGKILL` from an init system nobody anticipated. **Being killed stops being an
 event.** For a program whose first requirement is never breaking a boot, that is worth
 more than the clean survival path.
 
@@ -215,7 +217,7 @@ RABA still does not collect the passphrase. It only needs to **get out of the wa
 
 Both are strictly "hide and resume". Neither puts RABA in the key path.
 
-The honest fix is upstream: mkinitcpio's `encrypt` hook probes for a binary literally
+The real fix is upstream: mkinitcpio's `encrypt` hook probes for a binary literally
 named `plymouth`. A generic splash interface there would help every future splash. Worth
 proposing; not worth waiting for.
 

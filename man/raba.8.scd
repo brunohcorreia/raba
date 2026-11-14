@@ -103,8 +103,8 @@ kernel parameters:
 
 *raba.debug=1*
 	Write the report *--check* prints to *Log.File* — _/run/raba.log_ by default
-	— and draw nothing. What to ask for when somebody says the splash did not
-	appear and there is no way to run a command on the machine while it boots.
+	— and draw nothing. This is what to ask a reporter for when the splash did
+	not appear and no command can be run on the machine while it boots.
 
 *raba.tty=*_n_
 	Draw on _/dev/ttyn_, overriding *Boot.Tty*.

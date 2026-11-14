@@ -1,6 +1,7 @@
 # Maintenance policy
 
-> How this stays maintainable, and how it survives things we do not control breaking.
+> How this stays maintainable, and how it survives breakage in projects it does not
+> control.
 
 This program runs in an environment where you cannot attach a debugger, there is no
 shell, and the bug report you receive is "my computer doesn't boot". Normal code quality
@@ -47,12 +48,13 @@ VT layer remains in doubt.
 ## 2. Dependency budget
 
 Every crate is a liability in a program that must never break. API churn, MSRV bumps,
-advisories, and transitive growth all become our problem at the worst possible time.
+advisories, and transitive growth all become this project's problem at the worst
+possible time.
 
 **Budget: 10 direct dependencies, and a written justification for each.**
 
 `DEPENDENCIES.md` records, per crate: what it does, why the standard library is not
-enough, what breaks if it is removed, and whether we could vendor it.
+enough, what breaks if it is removed, and whether it could be vendored.
 
 ### Split the budget in two
 
@@ -81,7 +83,7 @@ This split is the single biggest reason to own the runtime format.
 - Pin a MSRV and test it. AUR users are always on the newest `rustc`; distributions
   packaging this later will not be.
 
-### And a size gate, because a budget nobody measures is a wish
+### The size gate
 
 `.binary-size-limit` holds one number: the largest `raba` may be, as a static musl
 build, before CI fails. The release profile is already as small as cargo can make it —
@@ -91,24 +93,27 @@ measuring the code, not the settings.
 | | |
 |---|---|
 | limit | 552960 (540 KiB) |
-| `raba`, measured in CI, 13 November 2026 | 524976 |
-| headroom | 27984 bytes, a little over 5% |
+| `raba`, static musl, 13 November 2026 | 537264 |
+| headroom | 15696 bytes, 2.8% |
 
-The headroom is deliberate at that width. A bug fix should never trip this; a new
-dependency almost always will, because almost nothing worth linking is under 28 KiB.
-That is the line the gate is drawn on.
+The gate is sized so that a bug fix does not trip it and a new dependency does: almost
+nothing worth linking is under 16 KiB. At the current headroom the next dependency is a
+decision rather than an accident, which is the intent — but 2.8% also means a few more
+diagnostics will reach it, and the next commit that does must either justify a new limit
+in the same commit or reduce the binary.
 
-It has moved once. The original 524288 (512 KiB) was a round number picked before there
-was anything to measure, and the binary crossed it in `7bfe037c`, the commit that made a
-splash which cannot draw say so instead of exiting quietly. Everything since — the one
-safe writer, durability for `/etc`, a sentence for each way a boot can be sabotaged — is
-the same work, and it is work this document asks for in §6. The honest response was to
-move the gate and say why, not to argue the feature away.
+The limit has moved once. The original 524288 (512 KiB) was a round number chosen before
+there was anything to measure; the binary crossed it in `7bfe037c`, the commit that made
+a splash which cannot draw say so rather than exit quietly. The diagnostics added since —
+the single durable writer for `/etc`, a message for each way a boot can be sabotaged — are
+what §7 of this document asks for. Moving the gate and recording the measurement was the
+correct response; dropping the diagnostics to stay under a number nobody had derived was
+not.
 
-**A red gate is a red build, and a red build is nobody's background noise.** This one
-stayed red for fourteen commits, the 0.1.0 release among them, because the person
-pushing never looked at the badge he had just put in the README. The gate worked. The
-reading of it did not.
+**A gate is only worth having if its result is read.** This one stayed red for fourteen
+commits, the 0.1.0 release among them, with the CI badge in the README reporting it the
+whole time. The gate worked; nothing was looking at it. CI failures are therefore to be
+treated as blocking, including on a release tag.
 
 ---
 
@@ -192,7 +197,7 @@ list.** A row with no test is an untested claim.
 
 ---
 
-## 4b. Coverage, and what the number is not
+## 5. Coverage, and what the number is not
 
 `scripts/coverage.sh` builds the workspace with rustc's own instrumentation and reads
 the counters with the LLVM tools already on the machine. No new dependency, nothing to
@@ -269,13 +274,13 @@ Counts are missed lines and total the 158 the report prints.
 | `if let Some(…)` and `let … else` guards that cannot fail | 47 | second lines of defence in `ansi.rs`, `life.rs`, `fire.rs`, `build.rs`, `compose.rs`, `place.rs`, `render/`, `play.rs`: a grid index bounded by the loop that produced it, a `.first()` on a `const` array |
 | root- or kernel-only runtime paths | 16 | a peer `uid` that is not ours, a `/dev/kmsg` write, a disk filling mid-`write`, a socket failing mid-reply, a terminal reporting a size of zero |
 | command-line arms with no reachable caller | 13 | a `--check` field combination the parser already excludes, a frame rate the parser already bounds |
-| `std`'s `thread_local` shim | 8 | not ours; inlined into our object, where the ignore list cannot reach it |
+| `std`'s `thread_local` shim | 8 | not RABA's code; inlined into its object, where the ignore list cannot reach it |
 
 A row leaving that table is a gap. A row joining it needs a reason written beside it.
 
 ---
 
-## 5. Written-down contracts
+## 6. Written-down contracts
 
 These are public API. Breaking them silently is how a maintainable project stops being
 one. Each belongs in a document and in a test.
@@ -293,7 +298,7 @@ Semantic versioning applies to all of them, not just the library.
 
 ---
 
-## 6. Observability for an undebuggable environment
+## 7. Observability for an undebuggable environment
 
 You get one shot at collecting information, from a user who is frustrated and possibly
 reading this on a phone.
@@ -330,9 +335,9 @@ files one.
 
 ---
 
-## 7. Upstream watch
+## 8. Upstream watch
 
-Breakage will come from projects we do not control. Make it arrive as a CI failure
+Breakage will come from projects outside this one. Make it arrive as a CI failure
 rather than a user report.
 
 | upstream | what breaks | detection |
@@ -349,7 +354,7 @@ build-time converters, a red job is never an unbootable machine.
 
 ---
 
-## 8. What good looks like
+## 9. What good looks like
 
 A new contributor should be able to:
 

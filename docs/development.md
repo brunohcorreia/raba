@@ -31,7 +31,7 @@ Roughly 500 lines. It freezes the format, produces the first real artifact, buil
 `Surface` abstraction that everything later plugs into, and — the point — answers whether
 the premise holds.
 
-If the art looks bad at this size, we find out for the price of a weekend, and the
+If the art looks bad at this size, that is known for the price of a weekend, and the
 remaining design docs become a record of a decision not to proceed. That is a good
 outcome for a weekend.
 
@@ -57,7 +57,7 @@ means fuzzing it from the beginning rather than retrofitting.
 `--preview`; theme contributions depend on art iteration. The parser is the bottom of that
 stack.
 
-**5. It depends on no decision we have not made.** The VT layer still has open questions
+**5. It depends on no decision still open.** The VT layer has unanswered questions
 — which terminal, how to detect conflicts, exactly how `VT_PROCESS` behaves under each
 init. The parser has none.
 
@@ -125,7 +125,7 @@ It earned its place immediately by finding two things the model could not:
 - **A cursor park one line past the bottom, on every frame.** `best_fit` always returns a
   grid exactly the size of the screen, so "the line after the art" stopped existing and
   nothing noticed, because terminals clamp an out-of-range `CUP`. A splash resting on a
-  clamp on consoles it has never run on is not a thing to leave alone.
+  clamp on consoles it has never run on is not something to leave in place.
 
 ### Tier 3a — QEMU, kernel plus initramfs, no disk
 
@@ -145,7 +145,7 @@ line, and exits QEMU with a status code through `isa-debug-exit`.
 
 **This is nearly as fast as a unit test and gives a real kernel, a real VT and real
 ioctls.** It is how the VT layer gets tested on every commit rather than occasionally.
-Most of what we feared needed a slow full-distro VM does not.
+Most of what looked as though it needed a slow full-distro VM does not.
 
 ```sh
 scripts/vm-test.sh                 # run the checks

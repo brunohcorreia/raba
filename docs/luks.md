@@ -196,7 +196,7 @@ during a prompt.
 Level 1 is where this should stop. It gets the splash covering the whole boot, including
 the moment of the prompt, without RABA ever touching a key.
 
-If Level 2 is ever revisited, the honest path is upstream: propose a generic splash
+If Level 2 is ever revisited, the route is upstream: propose a generic splash
 interface for mkinitcpio's `encrypt` hook rather than shipping a binary named `plymouth`.
 The hook probing for one specific implementation by name is the actual bug, and fixing it
 helps every future splash, not just this one.

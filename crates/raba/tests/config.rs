@@ -9,7 +9,7 @@
 //! for a later version still boots an earlier one.
 //!
 //! The defaults are asserted against `man 5 raba.conf` by hand, because the man
-//! page is the contract — see `docs/maintenance.md` §5 — and a default that
+//! page is the contract — see `docs/maintenance.md` §6 — and a default that
 //! drifts from its documentation is a lie nobody notices.
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]

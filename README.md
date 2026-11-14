@@ -143,8 +143,8 @@ It is built around three constraints:
 
 ## Why not Plymouth
 
-Plymouth is a capable graphical splash and RABA is not trying to replace it for
-people who want graphics. The honest tradeoff:
+Plymouth is a capable graphical splash, and RABA does not replace it for anyone who
+wants graphics. The tradeoff:
 
 | | Plymouth | RABA |
 |---|---|---|
@@ -153,8 +153,8 @@ people who want graphics. The honest tradeoff:
 | Needs GPU driver early | yes — a slow `amdgpu` can mean no splash at all | no |
 | Graphics capability | full | ASCII art |
 
-A note on honesty: Plymouth's reputation for slowing boot is partly a measurement
-artifact. `plymouth-quit-wait.service` shows up large in `systemd-analyze blame`, but
+On the benchmark: Plymouth's reputation for slowing boot is partly a measurement
+artefact. `plymouth-quit-wait.service` shows up large in `systemd-analyze blame`, but
 it keeps running *after* your login screen is already up. Fedora maintainers measured
 ~3.5s real cost against the 8.3s the tool reported. RABA's advantage is initramfs size
 and not depending on a GPU driver — not "Plymouth is slow".
@@ -276,36 +276,21 @@ Full reference: `man 5 raba.conf`.
 
 ## Themes
 
-A theme is a `.dur` file. You can draw one in Durdraw, or generate one from a recipe:
+A theme is a `.raba` file. `raba-gen build` produces one from a TOML recipe, and
+`raba-gen convert` from art drawn elsewhere; `themes/` holds the recipes for the
+fifty distribution themes and the generic fallback. The schema is `man 5 raba-theme`, and
+[themes/README.md](themes/README.md) covers choosing and adding one.
 
-```toml
-# themes/arch.toml
-[logo]
-source = "fastfetch:arch"
-colors = [6, 4]
+Every glyph is validated at build time against what the Linux console can display.
+The console holds 256 or 512 glyphs, so Braille, arrows and emoji arrive as blanks or
+question marks; `raba-gen` fails the build and names the characters rather than
+leaving them to be discovered during a boot. `--allow-unsafe-glyphs` downgrades that
+to a warning. See [docs/glyphs.md](docs/glyphs.md).
 
-[spinner]
-style = "ascii"      # | / - \
-position = "below"
-
-[canvas]
-framerate = 10
-```
-
-```sh
-raba-gen themes/arch.toml -o arch.dur
-raba --preview arch.dur          # render in the current terminal, no VT involved
-```
-
-`raba-gen` validates every glyph against what the Linux console can actually display.
-The console is capped at 256–512 glyphs, so Braille, arrows and emoji render as blanks
-or question marks. The generator fails the build and tells you which characters are a
-problem, rather than letting you find out during a boot.
-
-Logo art is sourced from [fastfetch](https://github.com/fastfetch-cli/fastfetch) (MIT),
-vendored at a pinned commit in `vendor/fastfetch-logos`. 545 logos; `--list-logos` says
-which of them a console can draw, since 30 are braille or sextants and need a terminal
-font.
+Logo art comes from [fastfetch](https://github.com/fastfetch-cli/fastfetch) (MIT),
+vendored at a pinned commit in `vendor/fastfetch-logos`: 545 logos, of which
+`--list-logos` marks the 30 that need a terminal font because they are drawn in
+Braille or sextants.
 
 ## Documentation
 
@@ -332,7 +317,7 @@ font.
 | [docs/boot-order.md](docs/boot-order.md) | kernel parameters and hook placement |
 | [docs/coexistence.md](docs/coexistence.md) | Plymouth, getty, and when not to draw |
 | [docs/secure-boot.md](docs/secure-boot.md) | Secure Boot, TPM measurements, lockdown |
-| [docs/packaging.md](docs/packaging.md) | packaging conventions, and what we refuse to do |
+| [docs/packaging.md](docs/packaging.md) | packaging conventions, and the practices RABA refuses |
 | [docs/compatibility.md](docs/compatibility.md) | what an upgrade may never break |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | adding themes, testing in VMs |
 | [docs/development.md](docs/development.md) | implementation order, test environment and suite |

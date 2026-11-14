@@ -7,7 +7,7 @@
 rotating 3D relief in a terminal, donut.c style. The technique is well documented in its
 README, and the question is whether RABA could do the same during boot.
 
-## It fits, on one condition
+## Feasibility: a generator feature, not a runtime one
 
 The answer follows from a rule the project already has:
 
@@ -66,7 +66,7 @@ and safe, the quadrants right beside them in Unicode are not.
 
 The ASCII ramp is the one that matters, and it is also the original donut.c look.
 
-## The cost nobody would guess
+## The cost: delta encoding stops paying
 
 **Delta encoding stops working.** A 3D rotation changes nearly every cell every frame, so
 the format's main size optimisation — a spinner over a static logo costing a few cells per
@@ -92,7 +92,7 @@ order, 6 bytes each for codepoint, fg and bg — would nearly halve the above.
 That is a `.raba` version 2 feature, and the condition for adding it is "3D logos turn out
 to be something people actually want", not "it might be useful".
 
-## Is it right for a boot splash?
+## Whether it suits a boot splash
 
 A separate question from whether it is possible, and worth asking before building it.
 
@@ -109,7 +109,7 @@ whole reason `--preview` is the first milestone.
 attribution. The better path is implementing from the described algorithm, which is
 standard graphics work, and crediting the inspiration either way.
 
-## The part that applies today
+## What applies today
 
 One line from their README is useful immediately rather than eventually:
 

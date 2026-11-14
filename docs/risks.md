@@ -25,8 +25,8 @@ Plymouth survives it, and the machinery is not small:
 - and a known upstream bug where `/dev` is not yet bind-mounted on `/sysroot/dev` when
   the re-root happens
 
-Every one of those is systemd-specific. None of it exists for runit, OpenRC, s6 or dinit,
-where we would have to invent an equivalent.
+Every one of those is systemd-specific. None of it exists for runit, OpenRC, s6 or
+dinit, where an equivalent would have to be invented.
 
 ### Consequence: v1 should not run in the initramfs at all
 
@@ -61,10 +61,10 @@ This also means the LUKS question resolves itself in v1: RABA is not running whe
 
 ---
 
-## 2. Things outside our control that can break us
+## 2. Upstream changes that can break RABA
 
-This is the risk class that kills long-lived small projects. Each entry is an upstream we
-do not control, with evidence it actually churns.
+This is the risk class that kills long-lived small projects. Each entry is an upstream
+outside the project's control, with evidence that it churns.
 
 ### `.dur` as a runtime format — **resolved by removing it**
 
@@ -92,12 +92,12 @@ equivalent.
 ### The `plymouth-quit-wait.service` name — **subtle, silent failure**
 
 Some display manager units carry `After=... plymouth-quit-wait.service ...`. It is
-tempting to name our unit similarly and get ordering for free.
+tempting to name RABA's unit similarly and get the ordering for free.
 
 Do not. If that line disappears, handoff breaks with no error — just a flicker nobody can
 reproduce.
 
-> Mitigation: ship our own explicit ordering. Treat the coincidence as a convenience,
+> Mitigation: ship explicit ordering of RABA's own. Treat the coincidence as a convenience,
 > never as the mechanism. `Boot.Timeout` is the backstop that makes a missed handoff
 > survivable rather than fatal.
 

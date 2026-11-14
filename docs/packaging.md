@@ -1,9 +1,9 @@
 # Packaging and community conventions
 
-> What we will and will not do, and why. Several of these are things the Linux community
-> reacts badly to, for good reasons.
+> What RABA will and will not do as a package, and why. Several of these are practices
+> the Linux community reacts badly to, for good reasons.
 
-## Things we deliberately will not do
+## What RABA will not do
 
 ### Impersonate another project to capture its integration
 
@@ -13,9 +13,9 @@ mkinitcpio's `encrypt` hook probes for a binary named `plymouth`:
 if command -v plymouth >/dev/null 2>&1 && plymouth --ping 2>/dev/null; then
 ```
 
-Shipping something called `plymouth` would hand us that integration for free. It would
-also break systems where real Plymouth is installed, and it is the kind of thing that gets
-a package pulled from a repository. We will not.
+Shipping a binary called `plymouth` would capture that integration for free. It would
+also break systems where real Plymouth is installed, and it is the kind of thing that
+gets a package pulled from a repository. RABA does not do it.
 
 The legitimate route is proposing a generic splash interface upstream.
 
@@ -25,12 +25,13 @@ Plymouth once shipped `plymouth-encrypt` and `sd-plymouth`, replacements for the
 hooks. **Both are now deprecated**, with upstream telling users to go back to plain
 `encrypt` and `plymouth`.
 
-A forked copy of someone else's hook diverges and then breaks on their schedule. The
-experiment has been run; we do not need to repeat it.
+A forked copy of another project's hook diverges and then breaks on that project's
+schedule. The experiment has been run; there is nothing to learn by repeating it.
 
 ### Edit configuration owned by other packages
 
-`/etc/default/grub`, `/etc/mkinitcpio.conf`, `/etc/ly/config.lua` — none of these are ours.
+`/etc/default/grub`, `/etc/mkinitcpio.conf`, `/etc/ly/config.lua` — none of these belong
+to RABA.
 A `post_install` that rewrites files belonging to another package bypasses pacman's
 `.pacnew` handling, which is exactly the complaint behind the `postfix` bug report
 (FS#48324).
@@ -61,21 +62,21 @@ and built `--offline --frozen`, per the Arch Rust packaging convention.
 
 ---
 
-## Things we will do
+## What RABA does do
 
 | | |
 |---|---|
 | `backup=()` | for `/etc/raba/raba.conf`, so pacman handles it properly |
-| defaults split | `/usr/share/raba/raba.defaults` is ours to replace; `/etc` is the user's |
+| defaults split | `/usr/share/raba/raba.defaults` belongs to the package; `/etc` belongs to the user |
 | FHS paths | no `/usr/local`, no `/opt` |
 | `.install` message | states the required manual steps plainly |
 | credit | fastfetch for logo art, Plymouth for the integration model, psplash for VT handling |
 | reproducible builds | worth having; cheap in Rust |
-| honest README | cosmetic software with a privileged runtime, stated as such |
+| plain README | cosmetic software with a privileged runtime, stated as such |
 
 ---
 
-## The criticism we should expect, and the honest answer
+## Expected criticism, and the answer to each
 
 **"Another boot splash?"** — Fair. The README's comparison table says what is actually
 different (initramfs size, no GPU driver dependency) and explicitly refuses the easy claim
@@ -129,7 +130,7 @@ and users who want only the program are not carrying 534 logos.
 | `raba` package | 401 KiB |
 | `raba-gen` package | 560 KiB |
 
-So the honest reason for three packages is the trademark one and the tidiness one, not
+The reason for three packages is therefore the trademark one and the tidiness one, not
 bytes. Even all 534 fastfetch logos would be about 800 KiB installed. Anybody arguing
 the split on size is arguing from a number nobody measured.
 
@@ -210,7 +211,7 @@ git push origin master
   works otherwise.
 - **Sources that are not fixed.** A tag can be moved; the digest is what makes the
   tarball the one that was tested. `SKIP` is for VCS packages and nothing else.
-- **Dropping a package that other packages depend on.** Not our problem yet, and worth
+- **Dropping a package that other packages depend on.** Not a problem RABA has yet, and worth
   remembering before `raba-themes` is ever renamed.
 
 A boot-critical package has one more obligation, and it is not written in any AUR rule:

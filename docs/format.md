@@ -18,19 +18,18 @@ RABA has its own animation format and depends on no external program at runtime.
 | parser | JSON + inflate (a dependency) | ~150 lines, no dependencies |
 | stability | changed between v7 and v8 | ours |
 
-The decisive one is the third. A corrupt or hostile `.dur` can decompress to gigabytes.
-Early in boot, as root, with no swap, that is an unbootable machine. With a format whose
-total size is stated in a fixed header and validated before a single allocation, that
-entire bug class cannot exist.
+The hostile-input row is the decisive one. A corrupt or hostile `.dur` can decompress
+to gigabytes; early in boot, as root, with no swap, that is an unbootable machine. A
+format whose total size is stated in a fixed header and validated before the first
+allocation cannot express that failure.
 
-The second-most decisive is the last. Being pinned between Durdraw's format version and
-whatever a display manager happens to accept is a maintenance tax we have no reason to
-pay.
+Stability is the second. Tracking both Durdraw's format version and whatever a display
+manager accepts is a maintenance cost with no return at run time.
 
-## Durdraw is still welcome — at authoring time
+## Durdraw at authoring time
 
-Nothing here stops anyone using Durdraw. It is a good ASCII animation editor and that is
-exactly what someone making a theme needs.
+None of this rules out Durdraw. It is an ASCII animation editor, which is what a theme
+author needs.
 
 ```sh
 raba-gen convert art.dur   -o art.raba
@@ -157,9 +156,6 @@ a constant, so index 200 is malformed in one movie and ordinary in the next.
 Frame 0 carries a full canvas. Later frames carry only changed cells. `raba-gen` emits a
 periodic keyframe so a renderer can start mid-stream.
 
-Sizes are capped in the header's own validation: `columns * lines` and `frame_count` both
-have hard ceilings, checked before anything is allocated.
-
 ### Why a full byte per colour
 
 The Linux console gives 16 foreground colours and 8 usable background colours — the high
@@ -186,6 +182,6 @@ in a capable terminal.
   `raba --preview` closes the loop.
 - One more thing to document and version.
 
-The converters are the honest cost. They are also the cheapest code in the project: pure
-functions, fully testable, and a failure there is a build error rather than a boot
+The converters are the real cost, and also the cheapest code in the project: pure
+functions, fully testable, and a failure in one is a build error rather than a boot
 failure.

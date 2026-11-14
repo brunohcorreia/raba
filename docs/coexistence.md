@@ -11,27 +11,27 @@ if one of them leaves a terminal in `KD_GRAPHICS`, a later `VT_ACTIVATE` fails s
 and `VT_WAITACTIVE` **hangs**. That is a stalled boot, caused by cosmetics, which is the
 exact outcome this project exists to avoid.
 
-Plymouth has caused this. We can cause it for Plymouth just as easily.
+Plymouth has caused this, and RABA can cause it for Plymouth just as easily.
 
 ### The generic check: is the terminal already in graphics mode
 
 Before any list of known programs, there is a check that catches everything — including
 splashes nobody has written yet.
 
-If the terminal RABA would use is already in `KD_GRAPHICS`, **something owns it.** We do
-not need to know what. Yield.
+If the terminal RABA would use is already in `KD_GRAPHICS`, **something owns it**. What
+that something is does not matter. Yield.
 
 This is the primary check because a blocklist of competitors is always out of date, and
-because the specific failure we fear — a hung `VT_WAITACTIVE` against a terminal stuck in
-graphics mode — is exactly what this detects.
+because the failure that matters — a hung `VT_WAITACTIVE` against a terminal stuck in
+graphics mode — is exactly what it detects.
 
 Named checks (`/run/plymouth.pid`, a live `plymouthd`) exist on top, purely to produce a
 better message than "the terminal is busy".
 
 ### Two checks, at two different times
 
-**At initramfs build time — fail loudly.** If our hook sees `plymouth` in the same `HOOKS`
-array, or a Plymouth dracut module enabled alongside ours, it refuses and explains. A
+**At initramfs build time — fail loudly.** If the RABA hook sees `plymouth` in the same
+`HOOKS` array, or a Plymouth dracut module enabled alongside it, it refuses and explains. A
 build-time error the user reads at their keyboard is infinitely better than a boot-time
 hang they meet at a black screen.
 
@@ -63,13 +63,13 @@ Covered in [packaging.md](packaging.md), repeated because it is tempting: the pa
 share no files and conflict only when both are *enabled*. Forcing removal of a working
 splash to install ours is rude and technically wrong. Detect, refuse, explain.
 
-### What if we start first and Plymouth starts after?
+### RABA first, Plymouth second
 
-Plymouth does not check for us. It will draw over RABA.
+Plymouth does not check for RABA. It will draw over it.
 
-Mitigation is cheap: take the terminal with `VT_PROCESS` so we are signalled on a VT
-switch away, and treat losing the terminal as a reason to stop drawing rather than to
-fight for it. **Whoever is second wins, and RABA yields.** A splash is not worth
+Mitigation is cheap: take the terminal with `VT_PROCESS`, which signals RABA on a switch
+away, and treat losing the terminal as a reason to stop drawing rather than to fight for
+it. **Whoever is second wins, and RABA yields.** A splash is not worth
 contending over.
 
 ### Older splashes
@@ -84,30 +84,30 @@ treatment: detect, yield, exit 0.
 What should happen when someone runs `systemctl enable raba.service` on a machine where
 Plymouth is set up.
 
-### What we cannot do
+### What cannot be done
 
 There is no hook on `systemctl enable`. It creates a symlink; nothing gets to intervene.
 Any design that depends on intercepting it does not work.
 
-### What we will not do
+### What RABA will not do
 
 **Disable the other program.** Running `systemctl disable plymouth-start.service` on
-someone's behalf is hostile, and it is the kind of thing that earns a package a
-reputation. Their splash works today. We are the newcomer.
+someone's behalf is hostile, and the kind of thing that earns a package a reputation.
+Their splash works today; RABA is the newcomer.
 
 **Disable ourselves.** A unit that runs `systemctl disable` on itself is surprising
 behaviour that leaves the user with a disabled service they explicitly enabled and no
 clear reason why. It also fights the user if they genuinely intend to remove Plymouth
 next.
 
-### What we do
+### What RABA does
 
 | moment | behaviour |
 |---|---|
 | package install | the `.install` message states the conflict if Plymouth is present |
 | `raba-setup` | detects it, refuses to proceed, prints what to disable |
-| initramfs build | our hook sees `plymouth` in `HOOKS` and fails the hook loudly |
-| `systemctl enable` | succeeds — we cannot intercept it |
+| initramfs build | the RABA hook sees `plymouth` in `HOOKS` and fails loudly |
+| `systemctl enable` | succeeds; it cannot be intercepted |
 | boot | the condition is skipped; `raba` itself detects and exits 0 |
 | `systemctl status raba` | shows the condition failure, which is the diagnosis |
 
@@ -142,7 +142,7 @@ which is better.
 
 ---
 
-## Something else wants our terminal
+## Something else wants RABA's terminal
 
 ### getty
 
@@ -155,10 +155,10 @@ be contended.
 ### kmscon
 
 kmscon replaces the kernel console with a userspace terminal on a given VT. If it owns the
-VT we picked, our escape codes go somewhere unexpected. `VT_OPENQRY` avoids this too, for
+VT RABA picked, its escape codes go somewhere unexpected. `VT_OPENQRY` avoids this too, for
 the same reason.
 
-### A display manager or X starting on our VT
+### A display manager or X starting on RABA's VT
 
 Same category, same answer: yield. `raba-ctl deactivate` exists precisely so whatever comes
 next can say "I want the screen now" before taking it.

@@ -18,7 +18,7 @@ raba --preview themes/arch.raba --loops 0
 ## The one that is not a logo
 
 `themes/generic.toml` is the theme `Theme=auto` falls back to when a machine's `ID=`
-and `ID_LIKE=` match nothing we ship. It is a framed prompt and a spinner: no logo, no
+and `ID_LIKE=` match no shipped theme. It is a framed prompt and a spinner: no logo, no
 trademark, nothing claiming to be a distribution it is not. Its art is inline in the
 recipe, so the theme is one file, and it ships in the `raba` package rather than in
 `raba-themes` — a splash whose fallback can be uninstalled is a splash that draws

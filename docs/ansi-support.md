@@ -30,7 +30,7 @@ What is honoured: `SGR` (colour, bold, reverse, reset), `CUU` `CUD` `CUF` `CUB`
 `CNL` `CPL` `CHA` `CUP` `HVP` (movement), `ED` `EL` (erase), `SCP` `RCP` (save and
 restore the cursor). Anything else is stepped over.
 
-## Three things that are easy to get wrong
+## Three common mistakes
 
 **It is CP437, not UTF-8.** Byte `0xDB` is `█`. Decoded as UTF-8 it is not a
 character at all, and the box drawing that every piece of ANSI art is made of

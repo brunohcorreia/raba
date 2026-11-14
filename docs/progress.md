@@ -23,7 +23,7 @@ raba-ctl progress --advance 0.1
 RABA draws what it is told and measures nothing. Whoever knows something — an initramfs
 hook, a systemd unit, a user script — reports it.
 
-Honest, trivial to implement, and init-agnostic: a runit script can call it as easily as
+Truthful, trivial to implement, and init-agnostic: a runit script can call it as easily as
 a systemd unit. It also fits the project's stated philosophy, since measuring boot
 progress is emphatically not "one thing".
 

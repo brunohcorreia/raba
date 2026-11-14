@@ -8,10 +8,10 @@ yours.
 
 `raba-gen --check` is the only place this can be caught.
 
-## The question is not "what is in the console font"
+## Why the loaded font cannot be assumed
 
-That is the usual framing and it is the wrong one for RABA, because **RABA draws before
-anyone knows what the console font is.**
+"What is in the console font" is the usual framing and the wrong one here, because
+**RABA draws before anyone knows which font the console will end up with.**
 
 The splash starts in the initramfs. `systemd-vconsole-setup`, or the distribution's
 equivalent, runs `setfont` later — possibly while the animation is already playing, which
@@ -37,7 +37,7 @@ font that drops them. A boolean would have to call that either safe, which is a 
 unsafe, which would reject half the logos that render perfectly well. The author decides;
 the validator reports.
 
-### The ones that surprise people
+### Characters that look safe and are not
 
 **Braille.** The obvious choice for a smooth spinner, and the reason that idea died here:
 at 256 codepoints a braille set would consume half the console's entire glyph budget,
@@ -90,7 +90,7 @@ machine.
 
 ---
 
-## The way out, and what it costs
+## Loading a font instead, and what that costs
 
 All of the above follows from RABA not knowing which font is loaded. It could load
 one itself — that is all `setfont`(8) does — and then it would know. The catch is

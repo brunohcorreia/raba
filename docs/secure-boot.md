@@ -29,7 +29,7 @@ zone.** This is worth being clear about rather than glossing over:
   an attacker who can modify it does not need RABA to be there — they can add their own
   hook.
 - RABA does *widen* the surface slightly. It is one more root-privileged binary running
-  early, with a parser and a socket. That is the honest cost, and it is why
+  early, with a parser and a socket. That is the cost, and it is why
   [security.md](security.md) treats the parser and socket as seriously as it does.
 - Signing the theme ourselves would be theatre. An attacker who can replace the theme can
   replace the binary that checks it.
@@ -40,11 +40,11 @@ A UKI is a single PE binary containing the EFI stub, kernel, initramfs and comma
 signed as one unit. The initramfs is inside the signature, so tampering breaks it.
 
 **With a UKI, RABA is covered by the existing signature chain.** Nothing extra to do, no
-scheme to invent. This is the configuration we should recommend to anyone who cares.
+scheme to invent, and the configuration to recommend to anyone who cares.
 
 ---
 
-## 2. Measured boot: which PCRs we disturb
+## 2. Measured boot: which PCRs RABA disturbs
 
 Separate from verification, the TPM *measures* boot components into Platform
 Configuration Registers. Those measurements can seal a LUKS key, which is how automatic
@@ -159,7 +159,7 @@ scope has grown over time and a DRM backend would touch more of it than a text o
 
 **IMA / EVM** — measures or appraises files against a policy. In an appraisal
 configuration, executables need a signature in an extended attribute. This is enterprise
-territory; if a distribution ships such a policy, our package needs to follow its
+territory; if a distribution ships such a policy, the RABA package must follow its
 convention the same way any other package does. Nothing RABA-specific.
 
 **dm-verity** — verifies a read-only root filesystem. It does not cover the initramfs, so
@@ -182,5 +182,5 @@ problem as §3, for the same reason, with the same fix.
 Two things to carry into the code:
 
 1. Recommend UKI to anyone who cares about Secure Boot. It is the configuration where
-   RABA is covered for free and where we add no verification gap.
+   RABA is covered for free and adds no verification gap.
 2. `raba-setup` checks for a TPM2 token and warns before touching the initramfs.

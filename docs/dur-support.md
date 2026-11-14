@@ -136,13 +136,14 @@ files to be generated from one source rather than kept in step by hand.
 It writes **version 7** by default — `colorMap[column][line]`, `sizeX`/`sizeY` —
 and `--dur-version 8` writes the other orientation and the `columns`/`lines`
 spelling. Only one spelling goes in either way: the two mean the same thing, and a
-reader that accepts both (ours does, because real files mix them) sees a duplicate
-key and refuses the file.
+reader that accepts both — RABA's does, because real files mix them — would see a
+duplicate key and refuse the file.
 
 Seven is the default on evidence rather than on principle. Both `.dur` files on a
 machine running Ly 1.4.1 are version 7 — Ly's own `example.dur`, and the one a user
 had configured — and the point of writing `.dur` at all is to be read by something
-else. What we write has the same key set as `example.dur` minus `preferredFont` and
+else. What `raba-gen` writes has the same key set as `example.dur` minus `preferredFont`
+and
 `extra`, which that user's file also lacks and which Ly plays regardless, so both
 look optional.
 

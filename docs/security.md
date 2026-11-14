@@ -83,7 +83,7 @@ on — including one with an active session.
 If `/run/raba.log` is pre-created as a symlink, RABA writes through it as root.
 
 > **Mitigation:** `O_NOFOLLOW` everywhere, `O_CREAT|O_EXCL` where the file should be new,
-> and never follow a path we did not create. Exposure is small because `/run` is
+> and never follow a path RABA did not create. Exposure is small because `/run` is
 > root-owned this early, which is a reason to be careful rather than a reason to skip it.
 
 **Where it is enforced:** `raba::write::replace`, which is the only code in the project
@@ -111,9 +111,9 @@ is a machine whose next image has no theme in it.
 
 ### 5. Malformed or hostile animation file · **medium, structurally mitigated**
 
-We parse a file as root with no supervision.
+A file is parsed as root, unsupervised.
 
-> **Mitigation:** this is why the format is ours. `.raba` states its total size in a fixed
+> **Mitigation:** this is why the format is RABA's own. `.raba` states its total size in a fixed
 > header, validated before a single allocation, with hard ceilings on canvas dimensions
 > and frame count. The gzip-bomb class of failure cannot be expressed. Every offset is
 > bounds-checked once at load; the renderer then indexes without further checks.
@@ -141,7 +141,7 @@ Cheap measures that suit a program with a small, fixed set of syscalls.
 **`PR_SET_NO_NEW_PRIVS`** — free. We never `exec`, so setting it costs nothing and closes
 escalation through any future accidental exec.
 
-**Drop capabilities.** After acquiring the terminal we need very little. Keeping
+**Drop capabilities.** Very little is needed after the terminal is acquired. Keeping
 `CAP_SYS_TTY_CONFIG` and dropping the rest is straightforward. Dropping to an unprivileged
 *user* is not realistic in an initramfs, which usually has only root.
 
@@ -166,11 +166,12 @@ With a Unified Kernel Image, the initramfs — binary and theme included — is 
 signature. Integrity comes from the existing chain, for free.
 
 In a classic shim + GRUB setup the initramfs is **not** verified at all; GRUB checks the
-kernel's signature and not the initrd's. We do not create that gap, but we do add one more
-root-privileged binary to the unverified zone, which is the honest cost of existing there.
+kernel's signature and not the initrd's. RABA does not create that gap, but it does add
+one more root-privileged binary to the unverified zone, which is the cost of existing
+there.
 A signature check by a program the attacker can replace proves nothing.
 
-Full detail, including which TPM measurements we disturb: [secure-boot.md](secure-boot.md).
+Full detail, including which TPM measurements are disturbed: [secure-boot.md](secure-boot.md).
 
 ---
 

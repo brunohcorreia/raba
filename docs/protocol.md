@@ -1,12 +1,10 @@
 # The control socket protocol
 
-`raba`(8) listens on `/run/raba.sock`. `raba-ctl`(1) connects to it. This document is
-the contract between them. It was written before either end existed, so that the
-protocol is something both were built against rather than something the first client
-happened to do; both ends have been implemented against it since, and where they differ
-from this page, this page is the bug.
+`raba`(8) listens on `/run/raba.sock`; `raba-ctl`(1) connects to it. This document is
+the contract between them and is authoritative: where an implementation differs from
+what is written here, the implementation is the defect.
 
-It is listed in [maintenance.md](maintenance.md#5-written-down-contracts) as public API:
+It is listed in [maintenance.md](maintenance.md#6-written-down-contracts) as public API:
 semantic versioning applies to it the same way it applies to the config file keys.
 
 ---
@@ -16,10 +14,10 @@ semantic versioning applies to it the same way it applies to the config file key
 A Unix domain `SOCK_STREAM` socket. **One command per connection**: connect, send one
 line, read the reply, the server closes.
 
-That is not the most efficient design available and it is the right one here. There is
-no session to get out of sync, no state on the server per client, no framing bugs, and
-the whole thing is legible with `socat`. The client is a boot-time one-shot that runs
-three or four times per boot; it does not need a session.
+Not the most efficient arrangement available, and the right one for this client: no
+session to fall out of sync, no per-client state on the server, no framing, and the
+whole exchange is legible with `socat`. `raba-ctl` is a boot-time one-shot that runs
+three or four times per boot.
 
 ```
 $ socat - UNIX-CONNECT:/run/raba.sock
@@ -134,7 +132,7 @@ suite caught exactly that. The socket is therefore bound at `raba.sock.new`, chm
 and `rename`d into place, which is atomic, keeps the same inode the listener is attached
 to, and replaces a socket left behind by a dead instance in the same step.
 
-### Why this matters more than it looks
+### Why the access check matters
 
 `message` puts caller-chosen text on a console, as root, in the one program on the
 system whose job is drawing over the console. A fake `login:` prompt on a terminal the

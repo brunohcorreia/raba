@@ -150,7 +150,8 @@ knows how far along it is. Read _docs/progress.md_ before enabling this.
 	Where the value comes from.
 
 	*ctl* takes it from *raba-ctl progress*. Nothing calls that by default, so the
-	bar stays at zero until something is wired up. Honest and init-agnostic.
+	bar stays at zero until something is wired up. It reports only what it was
+	told, and it depends on no particular init system.
 
 	*time* interpolates against the duration of the previous boot. This is Plymouth's
 	approach, and it inherits Plymouth's failure modes: the cache is unavailable when
