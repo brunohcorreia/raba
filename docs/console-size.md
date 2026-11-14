@@ -101,9 +101,10 @@ exactly what the largest canvas does. Within that total the axes are unconstrain
 | over it | each axis is clamped to 1024 and the art is drawn in that region |
 | zero in either axis | the axis is taken as 1 |
 
-The second row is outside what hardware produces — an 8K panel with the smallest
-font in the table above gives 960x540, or 518 400 cells — and is defined rather
-than refused so that no console size can leave the draw path without a grid.
+The second row is outside what hardware produces — an 8K panel with the smallest font
+in the table above gives 960x720, or 691 200 cells, two thirds of the bound — and is
+defined rather than refused so that no console size can leave the draw path without a
+grid.
 
 ## Does the font have to change?
 
