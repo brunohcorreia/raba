@@ -5,6 +5,19 @@ versioning](https://semver.org/), with the reservation that the `.raba` format a
 control protocol have version numbers of their own — see
 [docs/format.md](docs/format.md) and [docs/protocol.md](docs/protocol.md).
 
+## Unreleased
+
+### Fixed
+
+- **A console wider than 1024 columns now gets a splash.** The format's canvas
+  ceiling was being applied to the screen as well, so `Player::new` returned `None`
+  and `play` gave up without drawing — on a 4K panel with a small font, or any
+  console past 1024 cells in an axis. A screen is now bounded by its total cells
+  (`limits::MAX_SCREEN_CELLS`, the same 1024×1024 worth of memory as before) and may
+  be any shape inside that; past it, the axes clamp and the art is drawn in the part
+  of the console it can reach. `boot.rs` no longer has a "the console became NxM,
+  which is not a size art can be laid out at" path: there is no longer such a size.
+
 ## 0.1.0 — 13 November 2026
 
 The first release. A boot splash that plays an ASCII animation from inside the

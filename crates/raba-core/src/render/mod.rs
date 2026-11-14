@@ -13,6 +13,7 @@ pub use place::{
 };
 
 use crate::format::{limits, Frame, Movie, Palette};
+use crate::surface::Size;
 
 /// Draw one frame's ops onto a grid.
 ///
@@ -78,6 +79,39 @@ impl Grid {
         }
         let count = usize::from(columns).checked_mul(usize::from(lines))?;
         Some(Grid { columns, lines, palette, cells: vec![Cell::BLANK; count] })
+    }
+
+    /// A blank grid the size of a console.
+    ///
+    /// Not [`Grid::new`], and the difference is the point. `new` refuses an axis
+    /// past [`limits::MAX_COLUMNS`] because a *canvas* that wide could not be
+    /// written to a `.raba` file. A console is not written anywhere: it is the
+    /// panel divided by the font, and a kernel is entitled to report 1920
+    /// columns. Refusing one used to mean `Player::new` returned `None` and the
+    /// splash silently did not appear — on the machines with the largest
+    /// screens, which are the ones most likely to be looked at.
+    ///
+    /// So this never fails. It gives back the largest grid it can for the size
+    /// asked for, which is the size itself unless the console holds more cells
+    /// than [`limits::MAX_SCREEN_CELLS`] — a million characters, about twice
+    /// what an 8K panel with the smallest console font would come to — in which
+    /// case the axes are clamped and the art is drawn in the corner it can
+    /// reach. **Callers must read the size back off the grid** rather than
+    /// assume they got what they asked for: centring against a size that was
+    /// not used puts the art off the side of the screen.
+    #[must_use]
+    pub fn screen(size: Size, palette: Palette) -> Grid {
+        let (columns, lines) = (size.columns.max(1), size.lines.max(1));
+        let fits = usize::from(columns)
+            .checked_mul(usize::from(lines))
+            .is_some_and(|cells| cells <= limits::MAX_SCREEN_CELLS);
+        let (columns, lines) = if fits {
+            (columns, lines)
+        } else {
+            (columns.min(limits::MAX_COLUMNS), lines.min(limits::MAX_LINES))
+        };
+        let count = usize::from(columns).saturating_mul(usize::from(lines));
+        Grid { columns, lines, palette, cells: vec![Cell::BLANK; count] }
     }
 
     #[must_use]

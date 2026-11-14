@@ -81,6 +81,33 @@ So the rule from the earlier version of this file — *the bigger the art, the m
 it assumes* — is still true, but it is not about size. It is about whether the
 art's alphabet carries intensity.
 
+## How big a console can be
+
+Two different ceilings, and conflating them was a bug.
+
+A **canvas** — the picture in a `.raba` file — is bounded at 1024 columns by 1024
+lines, because those are the numbers the header and the decoder enforce before
+anything is allocated. See [format.md](format.md).
+
+A **console** is not a file, and the kernel is entitled to report whatever the panel
+divided by the font comes to. The table at the top of this page tops out at 240
+columns on a 1080p screen, but a 4K panel with `drdos8x6` is 480, and an 8K one is
+960; a narrower font, or a display wider than 8192 pixels, passes 1024. Until
+November 2026 such a console got **no splash at all**: `Grid::new` refused the
+screen-sized grid, `Player::new` returned `None`, and `play` gave up quietly. The
+machines with the largest screens were the ones that saw nothing.
+
+The bound that actually matters for a screen is memory, not either axis, so that is
+what is capped now: `limits::MAX_SCREEN_CELLS`, which is 1024×1024 = 1 048 576 cells
+— exactly the largest canvas the format allows, so the worst case allocates no more
+than it did before. Any shape fits inside it: 2000x60, 4000x200, 240x4000.
+
+Past even that, `Grid::screen` clamps each axis to 1024 and the art is drawn in the
+part of the console it can reach. A million character cells is about twice what
+an 8K panel with `drdos8x6` would come to (960x540 = 518 400), so this is not a
+case anything has reported — and a splash in the corner of such a console is
+still better than the alternative, which is the bug above.
+
 ## Does the font have to change?
 
 **No.** The font decides the grid, and nothing scales it — the framebuffer console

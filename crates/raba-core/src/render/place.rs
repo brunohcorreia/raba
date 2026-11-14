@@ -43,16 +43,18 @@ impl Placement {
 /// fit and padded with blanks where it does not reach.
 ///
 /// The returned grid always has `size`, so a caller can hand it straight to the
-/// encoder without checking anything.
+/// encoder without checking anything. The one exception is a console with more
+/// cells in it than [`Grid::screen`] will allocate, where the grid comes back
+/// smaller — which is why the bounds below are read off the grid rather than
+/// taken from the argument.
 #[must_use]
 pub fn fit(source: &Grid, size: Size) -> Grid {
     let canvas = Size { columns: source.columns(), lines: source.lines() };
     if canvas == size {
         return source.clone();
     }
-    let Some(mut screen) = Grid::new(size.columns, size.lines, source.palette()) else {
-        return source.clone();
-    };
+    let mut screen = Grid::screen(size, source.palette());
+    let size = Size { columns: screen.columns(), lines: screen.lines() };
     let at = Placement::centred(canvas, size);
 
     for line in 0..source.lines() {
@@ -152,9 +154,7 @@ pub fn scaled_size(source: Size, target: Size) -> Size {
 /// happily produce nonsense, which is why [`best_fit`] is the entry point.
 #[must_use]
 pub fn resample(source: &Grid, size: Size) -> Grid {
-    let Some(mut out) = Grid::new(size.columns.max(1), size.lines.max(1), source.palette()) else {
-        return source.clone();
-    };
+    let mut out = Grid::screen(size, source.palette());
     let (sc, sl) = (u32::from(source.columns()), u32::from(source.lines()));
     let (tc, tl) = (u32::from(out.columns()), u32::from(out.lines()));
     if sc == 0 || sl == 0 {

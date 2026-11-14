@@ -864,36 +864,73 @@ fn a_console_that_changes_size_is_redrawn_in_full_without_restarting_the_animati
     running.finish();
 }
 
-/// `raba_core::format::limits::MAX_COLUMNS` is 1024, and a console larger than
-/// a grid may be is the condition [`Outcome::CannotDraw`] documents first.
+/// A console larger than a `Grid` may be used to end the run with
+/// `Outcome::CannotDraw`: `Player::new` returned `None` and the splash never
+/// appeared. It was the wrong answer — the machines that report the largest
+/// consoles are the ones with the best screens to put a splash on — and
+/// `Grid::screen` is the fix: as much of the console as a million cells will
+/// cover, and the art drawn in it.
 #[test]
-fn a_console_with_no_usable_size_stops_with_a_reason_and_gives_the_terminal_back() {
-    let scratch = Scratch::new("impossible-size");
+fn a_console_too_large_for_a_grid_is_drawn_on_anyway() {
+    let scratch = Scratch::new("enormous-console");
     let settings = scratch.settings();
     let console = Fake::new();
     console.resize(2000, 2000);
 
-    // Run it here rather than on a thread: this one ends before a client could
-    // connect, and waiting for a socket that is already closed is not a test.
-    let outcome = run_on(&settings, console.clone());
+    let running = Running::start(settings, console.clone());
+    until("a frame on an enormous console", || console.log().frames.len() > 2);
 
-    match outcome {
-        Outcome::CannotDraw(why) => assert!(
-            why.contains("cannot be laid out"),
-            "the reason should say what could not be done: {why}"
-        ),
-        other => panic!("{other:?}"),
-    }
-    assert_eq!(
-        console.log().restored,
-        1,
-        "a splash that stops drawing still gives the console back"
+    running.ask("quit");
+    let outcome = running.finish();
+    assert!(!matches!(outcome, Outcome::CannotDraw(_)), "{outcome:?}");
+    assert_eq!(console.log().restored, 1, "the terminal still goes back");
+}
+
+/// The size that is actually reachable: a 4K panel with a small font is 480
+/// columns, and a wider one is only a smaller font away. Nothing is clamped at
+/// 2000x60 — that is 120 000 cells, well inside what a screen grid may hold —
+/// so the art must be centred on the whole width rather than on the first 1024
+/// columns of it. Asserted by comparison, because the only number that means
+/// anything here is where the same theme lands on a narrower console.
+#[test]
+fn a_console_wider_than_a_canvas_may_be_is_used_to_its_full_width() {
+    let centre_of = |name: &str, columns: u16| -> u32 {
+        let scratch = Scratch::new(name);
+        let settings = scratch.settings();
+        let console = Fake::new();
+        console.resize(columns, 60);
+        let running = Running::start(settings, console.clone());
+        until("a frame", || console.log().frames.len() > 2);
+        running.ask("quit");
+        running.finish();
+
+        // Every cursor move in a frame is `ESC [ line ; column H`. The art is
+        // centred, so the rightmost column it addresses tracks the width of
+        // the screen it was laid out on.
+        let frames = console.log().frames.clone();
+        let drawn: String =
+            frames.iter().map(|f| String::from_utf8_lossy(f).into_owned()).collect();
+        drawn
+            .split("\x1b[")
+            .filter_map(|tail| tail.split_once(';'))
+            .filter_map(|(_, rest)| rest.split_once('H'))
+            .filter_map(|(column, _)| column.parse::<u32>().ok())
+            .max()
+            .expect("the art addressed a column")
+    };
+
+    let narrow = centre_of("narrow-console", 1024);
+    let wide = centre_of("wide-console", 2000);
+    assert!(
+        wide > narrow.saturating_add(400),
+        "the art landed at column {wide} on a 2000-column console and {narrow} on a \
+         1024-column one; it was laid out on a clamped screen"
     );
 }
 
 #[test]
-fn a_console_that_becomes_an_impossible_size_stops_rather_than_holding_a_frozen_screen() {
-    let scratch = Scratch::new("impossible-resize");
+fn a_console_that_becomes_enormous_keeps_drawing_rather_than_giving_up() {
+    let scratch = Scratch::new("enormous-resize");
     let settings = scratch.settings();
     let console = Fake::new();
     let running = Running::start(settings, console.clone());
@@ -901,14 +938,11 @@ fn a_console_that_becomes_an_impossible_size_stops_rather_than_holding_a_frozen_
     until("a frame", || !console.log().frames.is_empty());
     console.resize(2000, 2000);
 
+    let writes = console.log().frames.len();
+    until("frames at the new size", || console.log().frames.len() > writes + 4);
+    running.ask("quit");
     let outcome = running.finish();
-    match outcome {
-        Outcome::CannotDraw(why) => assert!(
-            why.contains("which is not a size art can be laid out at"),
-            "the reason should name the size: {why}"
-        ),
-        other => panic!("{other:?}"),
-    }
+    assert!(!matches!(outcome, Outcome::CannotDraw(_)), "{outcome:?}");
     assert_eq!(console.log().restored, 1);
 }
 

@@ -104,7 +104,7 @@ fn the_frame_after_a_resize_arrives_complete() {
 
     // The console is replaced: bigger, and showing nothing.
     surface.size = large;
-    player.resize(&movie, large).unwrap();
+    player.resize(&movie, large);
     player.step(&mut surface, &movie, 0).unwrap();
 
     let after = surface.frames.last().unwrap();
@@ -147,19 +147,26 @@ fn a_resize_does_not_restart_the_animation() {
     player.step(&mut surface, &movie, 0).unwrap(); // wraps: round 1, frame 1
     let (frame, round) = (player.frame(), player.round());
 
-    player.resize(&movie, Size { columns: 100, lines: 30 }).unwrap();
+    player.resize(&movie, Size { columns: 100, lines: 30 });
     assert_eq!((player.frame(), player.round()), (frame, round));
 }
 
 #[test]
-fn a_console_wider_than_the_format_can_describe_draws_nothing_at_all() {
-    // `limits::MAX_COLUMNS` is 1024 and a `Grid` cannot be made past it, so a
-    // surface that reports more than that has no screen buffer to compose
-    // into. The contract is that `play` gives up quietly — a splash that does
-    // not appear, not a boot that stops — and this is the test that says so,
-    // because the alternative shape (an `Err`, or a panic in `unwrap`) would
-    // be the same bug at a worse time.
+fn a_console_wider_than_a_canvas_may_be_is_still_drawn_on() {
+    // `limits::MAX_COLUMNS` is 1024 because that is the widest canvas a `.raba`
+    // file can hold. A console is not a file: the kernel divides the panel by
+    // the font and reports whatever comes out. This used to make `Player::new`
+    // return `None`, so the splash quietly did not appear — on the machine with
+    // the biggest screen in the room. `Grid::screen` is the bound that applies
+    // to a console, and it is on cells rather than on either axis.
     let mut recorder = Recorder { size: Size { columns: 2000, lines: 25 }, frames: Vec::new() };
-    play(&mut recorder, &movie(), 1).expect("giving up is not a failure");
-    assert!(recorder.frames.is_empty(), "it drew into a grid it could not have");
+    play(&mut recorder, &movie(), 1).expect("playing");
+    assert!(!recorder.frames.is_empty(), "nothing was drawn on a 2000-column console");
+
+    // Past the cell bound it clamps rather than failing: 4000x4000 is sixteen
+    // million cells, a console nothing has reported, and a splash in the corner
+    // of one beats no splash at all.
+    let mut recorder = Recorder { size: Size { columns: 4000, lines: 4000 }, frames: Vec::new() };
+    play(&mut recorder, &movie(), 1).expect("playing");
+    assert!(!recorder.frames.is_empty(), "nothing was drawn on an impossible console");
 }

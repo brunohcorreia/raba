@@ -80,6 +80,17 @@ pub mod limits {
     pub const MAX_COLUMNS: u16 = 1024;
     /// Likewise.
     pub const MAX_LINES: u16 = 1024;
+    /// What a *screen* may hold, which is not the same bound.
+    ///
+    /// The two above are about a file: a canvas past them could not be written
+    /// to a `.raba`, so [`Grid::new`](crate::Grid::new) refuses one. A console
+    /// is not a file. Its size is whatever the kernel says it is — screen
+    /// pixels divided by the loaded font's cell, see `docs/console-size.md` —
+    /// and a 1024-column ceiling on *that* would mean no splash at all on a
+    /// console that reports more. Which axis the cells are arranged in costs
+    /// nothing; the memory does, so that is what is capped, at exactly the
+    /// largest canvas the format allows.
+    pub const MAX_SCREEN_CELLS: usize = MAX_COLUMNS as usize * MAX_LINES as usize;
     /// At 10 fps this is nearly two hours of animation.
     pub const MAX_FRAMES: u32 = 65_535;
 }

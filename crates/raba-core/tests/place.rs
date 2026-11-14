@@ -238,29 +238,28 @@ fn resampling_art_with_no_cells_in_it_gives_back_a_blank_screen_rather_than_noth
 }
 
 #[test]
-fn a_screen_too_small_for_any_grid_leaves_the_art_as_it_was() {
-    // `Grid::new` refuses anything past the format's limits, and `fit` cannot
-    // return nothing — so it returns what it was given and the caller's own
-    // size check is what refuses the console. See `Outcome::CannotDraw`.
-    let art = filled(4, 2, '#');
-    let impossible = fit(&art, Size { columns: 20_000, lines: 20_000 });
-    assert_eq!((impossible.columns(), impossible.lines()), (4, 2));
-}
-
-#[test]
-fn a_screen_bigger_than_the_format_leaves_the_art_as_it_was() {
-    // A terminal that reports an impossible size — an emulator mid-resize, a
-    // serial console answering 65535x65535 — must not take the splash with
-    // it. There is no grid to resample into at that size, so the honest
-    // answer is the art unchanged: drawn at its own size on a screen that is
-    // certainly big enough for it.
+fn a_screen_wider_than_a_canvas_may_be_is_resampled_onto_in_full() {
+    // `resample` and `fit` both produce a *screen*, not a canvas, so they are
+    // bounded by cells and not by either axis — otherwise a console wider than
+    // 1024 columns would be handed back art of the wrong size, which the
+    // encoder would then write with cursor moves for a screen that is not
+    // there.
     let source = filled(10, 4, '#');
-    let huge = resample(&source, Size { columns: u16::MAX, lines: u16::MAX });
-    assert_eq!((huge.columns(), huge.lines()), (10, 4), "it tried to make that grid");
-    assert_eq!(row(&huge, 0), row(&source, 0));
+    let wide = resample(&source, Size { columns: 2000, lines: 50 });
+    assert_eq!((wide.columns(), wide.lines()), (2000, 50));
+    let placed = fit(&source, Size { columns: 2000, lines: 50 });
+    assert_eq!((placed.columns(), placed.lines()), (2000, 50));
+    assert_eq!(
+        placed.get(995, 23).map(|cell| cell.ch),
+        Some('#'),
+        "the art was centred on 1024 columns rather than on 2000"
+    );
 
-    // Zero is the other end of the same story, and that one has an answer:
-    // the smallest grid there is.
+    // Past the cell bound both clamp, and still come back as a usable screen.
+    let huge = fit(&source, Size { columns: u16::MAX, lines: u16::MAX });
+    assert_eq!((huge.columns(), huge.lines()), (1024, 1024));
+
+    // Zero is the other end of the same story: the smallest grid there is.
     let nothing = resample(&source, Size { columns: 0, lines: 0 });
     assert_eq!((nothing.columns(), nothing.lines()), (1, 1));
 }

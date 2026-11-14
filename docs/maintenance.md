@@ -260,12 +260,12 @@ had:
   other way and were deleted.
 
 What remains uncovered, and why. The counts are missed *lines*, and they add up to
-the 155 the report prints:
+the 158 the report prints:
 
 | | lines | why |
 |---|---|---|
 | `vt/mod.rs`, `vt/ioctl.rs`, `signals.rs` | 35 | the error arm of an ioctl or a `sigaction` that the kernel would have to refuse one line after accepting the same call |
-| `boot.rs` | 20 | "cannot happen immediately after the thing that makes it impossible": the stall watchdog, the resume guards |
+| `boot.rs` | 23 | "cannot happen immediately after the thing that makes it impossible": the stall watchdog, the resume guards, and the refusal for a theme whose canvas no grid can be made at — which `decode` has already refused |
 | `raba-setup`'s `ThisMachine` and its prompt | 16 | the lines that delegate to the real machine, and the question put to a real stdin before rebuilding an initramfs on a TPM-sealed disk |
 | `if let Some(…)` and `let … else` guards that cannot fail | 47 | second lines of defence in `ansi.rs`, `life.rs`, `fire.rs`, `build.rs`, `compose.rs`, `place.rs`, `render/`, `play.rs`: a grid index bounded by the loop that produced it, a `.first()` on a `const` array |
 | root- or kernel-only runtime paths | 16 | a peer `uid` that is not ours, a `/dev/kmsg` write, a disk filling mid-`write`, a socket failing mid-reply, a terminal reporting a size of zero |

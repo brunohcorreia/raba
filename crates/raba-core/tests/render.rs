@@ -16,7 +16,7 @@
 )]
 
 use raba_core::render::{to_ansi, to_ansi_into};
-use raba_core::surface::{BufferSurface, Surface};
+use raba_core::surface::{BufferSurface, Size, Surface};
 use raba_core::testing::Terminal;
 use raba_core::{Cell, Grid, Palette};
 
@@ -295,4 +295,28 @@ fn writing_outside_the_grid_says_no_rather_than_panicking() {
     assert!(!grid.set_index(8, mark), "and by flat index too");
     assert_eq!(grid.cells().len(), 8, "nothing grew to make room");
     assert_eq!(grid.cells().iter().filter(|cell| cell.ch == 'x').count(), 1);
+}
+
+#[test]
+fn a_screen_grid_is_bounded_by_cells_and_a_canvas_by_its_axes() {
+    // Two different bounds for two different things, and the whole reason
+    // `Grid::screen` exists. A canvas is going into a file whose header has a
+    // u16 per axis and a reader that refuses anything over 1024; a console is
+    // going nowhere, and its shape is the kernel's business.
+    assert!(Grid::new(2000, 50, Palette::Ansi16).is_none(), "that canvas cannot be written");
+
+    let wide = Grid::screen(Size { columns: 2000, lines: 50 }, Palette::Ansi16);
+    assert_eq!((wide.columns(), wide.lines()), (2000, 50));
+    assert_eq!(wide.cells().len(), 100_000);
+
+    // The bound that does apply is memory, and it is the largest canvas the
+    // format allows: beyond it each axis is clamped and drawing still happens.
+    let absurd = Grid::screen(Size { columns: u16::MAX, lines: u16::MAX }, Palette::Ansi16);
+    assert_eq!((absurd.columns(), absurd.lines()), (1024, 1024));
+    assert_eq!(absurd.cells().len(), raba_core::format::limits::MAX_SCREEN_CELLS);
+
+    // A console that reports nothing in an axis still gets a grid: `None` is
+    // not a thing this returns, because every caller of it is drawing.
+    let nothing = Grid::screen(Size { columns: 0, lines: 0 }, Palette::Ansi16);
+    assert_eq!((nothing.columns(), nothing.lines()), (1, 1));
 }
